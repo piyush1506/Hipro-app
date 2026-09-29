@@ -5,24 +5,131 @@ import {
   Lock, CreditCard, ChevronDown, Check, Building, Wrench, Compass,
   Layers, Hammer, Droplets, HardHat, FileText, Calculator, PhoneCall,
   X, AlertCircle, LogOut, Info, Settings, Bookmark, Search, Maximize2,
-  UploadCloud, Sparkles, Image as ImageIcon
+  UploadCloud, Sparkles, Plus, Trash2, ArrowRight
 } from 'lucide-react';
 
-// The 12 screens mapped to exact names from the mockup
-const SCREENS = [
-  { id: 'splash', label: '1. Splash' },
-  { id: 'onboarding', label: '2. Onboarding' },
-  { id: 'home', label: '3. Home' },
-  { id: 'services', label: '4. Services' },
-  { id: 'service_detail', label: '5. Detail' },
-  { id: 'slot_picker', label: '6. Date & Patch Upload' },
-  { id: 'summary', label: '7. Estimation Sent' },
-  { id: 'estimation_review', label: '8. Work Estimation' },
-  { id: 'payment', label: '9. Payment' },
-  { id: 'confirmation', label: '10. Confirmed & Work Started' },
-  { id: 'my_bookings', label: '11. Bookings' },
-  { id: 'projects', label: '12. Projects' },
-  { id: 'profile', label: '13. Profile' }
+// The 8 Primary Construction & Maintenance Services
+const ALL_SERVICES = [
+  {
+    id: 's1',
+    title: 'Civil Construction',
+    subtitle: 'Residential, Commercial, Industrial',
+    icon: Building,
+    color: '#1D4ED8',
+    bg: '#EFF6FF',
+    subServices: [
+      'Building Construction & Extension',
+      'Structural Crack & Beam Patch Work',
+      'Plaster Repair & Surface Leveling',
+      'Foundation & Column Strengthening'
+    ],
+    defaultDesc: 'Plaster flaking and hairline settlement crack along the main living room beam.'
+  },
+  {
+    id: 's2',
+    title: 'Waterproofing & Maintenance',
+    subtitle: 'Roof, Bathroom, Seepage & Cracks',
+    icon: Droplets,
+    color: '#0284C7',
+    bg: '#E0F2FE',
+    subServices: [
+      'Stop Roof & Terrace Water Leakage',
+      'Bathroom & Concealed Pipe Seepage',
+      'External Wall Dampness Treatment',
+      'Chemical PU Injection & Grouting'
+    ],
+    defaultDesc: 'Terrace water ponding and ceiling moisture spreading into bedroom wall.'
+  },
+  {
+    id: 's3',
+    title: 'Painting & Wall Repair',
+    subtitle: 'Putty, POP, Exterior Weathercoat',
+    icon: Hammer,
+    color: '#7E22CE',
+    bg: '#F3E8FF',
+    subServices: [
+      'Interior Moisture-Resistant Emulsion',
+      'Exterior Weathercoat & Anti-Algae',
+      'Waterproof Putty & POP Crack Patch',
+      'Wall Efflorescence Salt Cleaning'
+    ],
+    defaultDesc: 'Peeling paint and bubbling damp patches needing scraping and 2 coats weathercoat.'
+  },
+  {
+    id: 's4',
+    title: 'Architecture & Planning',
+    subtitle: 'Design, 2D/3D Drawings & Sanction',
+    icon: Compass,
+    color: '#D97706',
+    bg: '#FEF3C7',
+    subServices: [
+      '2D Floor Plans & Elevation',
+      '3D Architectural Visualization',
+      'Structural Engineering Drawings',
+      'Municipal Approval Consultation'
+    ],
+    defaultDesc: 'Require modern renovation elevation drawing and municipal sanction plan.'
+  },
+  {
+    id: 's5',
+    title: 'Survey & Mapping',
+    subtitle: 'Site Survey, Land Boundary & GPS',
+    icon: Layers,
+    color: '#EA580C',
+    bg: '#FFEDD5',
+    subServices: [
+      'Boundary Demarcation & Topo Survey',
+      'Digital Total Station Mapping',
+      'Drone Aerial Site Scanning',
+      'Soil Testing & Bearing Capacity'
+    ],
+    defaultDesc: 'Boundary survey and level demarcation before foundation work.'
+  },
+  {
+    id: 's6',
+    title: 'Interior & Exterior Design',
+    subtitle: 'Modern & Functional Spaces',
+    icon: Home,
+    color: '#0D9488',
+    bg: '#CCFBF1',
+    subServices: [
+      'Modular Kitchen & Wardrobe Design',
+      'False Ceiling & Ambient Lighting',
+      'Wall Cladding & Designer Louvers',
+      'Balcony Landscaping & Decking'
+    ],
+    defaultDesc: 'Full interior woodwork and modular cabinetry layout makeover.'
+  },
+  {
+    id: 's7',
+    title: 'Structural Analysis',
+    subtitle: 'Safety & Strength Inspection',
+    icon: ShieldCheck,
+    color: '#16A34A',
+    bg: '#DCFCE7',
+    subServices: [
+      'Non-Destructive Rebound Hammer Test',
+      'Load Bearing Capacity Audit',
+      'Earthquake Resistance Verification',
+      'Retrofitting & Jacketing Plan'
+    ],
+    defaultDesc: 'Safety audit of 15-year-old RCC building pillars.'
+  },
+  {
+    id: 's8',
+    title: 'Cost Estimation & BOQ',
+    subtitle: 'Detailed & Accurate Estimation',
+    icon: Calculator,
+    color: '#4F46E5',
+    bg: '#EEF2FF',
+    subServices: [
+      'Itemized Bill of Quantities (BOQ)',
+      'Material Rate Analysis & Procurement',
+      'Milestone Payment Structuring',
+      'Contractor Cost Audit'
+    ],
+    defaultDesc: 'Detailed material and labor estimation for 2nd floor expansion.'
+  }
 ];
 
 export default function App() {
@@ -30,31 +137,109 @@ export default function App() {
   const [fullscreenMode, setFullscreenMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
 
-  // Booking & Patch Work Upload Flow State
-  const [selectedDate, setSelectedDate] = useState(16); // Only date, no time!
-  const [patchDescription, setPatchDescription] = useState('Cracked plaster and seepage dampness across 12x10 ft wall. Need repair and waterproof sealing.');
-  const [uploadedPhotos, setUploadedPhotos] = useState(['/images/patch_damage.svg']);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
-  const [bookingFilter, setBookingFilter] = useState('upcoming');
-  const [projectFilter, setProjectFilter] = useState('all');
+  // Multi-Service Selection State
+  const [selectedServiceIds, setSelectedServiceIds] = useState(['s1', 's2']); // Default 2 services selected for demo
+  const [currentSubformIndex, setCurrentSubformIndex] = useState(0); // Which service subform is active (0 to N-1)
 
-  // Active Estimation Data (generated by the team after reviewing patch photos)
-  const [activeEstimation, setActiveEstimation] = useState({
-    quoteNumber: 'EST-2025-4160',
-    serviceTitle: 'Civil Construction & Patch Repair',
-    estimatedDays: '2 Days Completion',
-    warranty: '2 Years Seepage & Crack Guarantee',
-    items: [
-      { name: 'Surface Chipping & Rebar Anti-Rust Coat', qty: '120 sq. ft.', rate: 25, amount: 3000 },
-      { name: 'Polymer Modified Concrete Plaster Filling', qty: '120 sq. ft.', rate: 45, amount: 5400 },
-      { name: 'Hydrophobic Waterproof Acrylic Sealant', qty: '2 Coats', rate: 1200, amount: 2400 },
-      { name: 'Expert Labor & Debris Cleaning', qty: '1 Job', rate: 1200, amount: 1200 }
-    ],
-    materialCost: 10800,
-    laborCost: 1200,
-    gst: 2160,
-    totalAmount: 14160
+  // Per-Service Subform Data (stored as key-value by serviceId)
+  const [serviceSubformData, setServiceSubformData] = useState({
+    s1: {
+      subServices: ['Structural Crack & Beam Patch Work'],
+      description: 'Plaster flaking and hairline settlement crack along the main living room beam.',
+      photos: ['/images/patch_damage.svg']
+    },
+    s2: {
+      subServices: ['Stop Roof & Terrace Water Leakage'],
+      description: 'Terrace water ponding and ceiling moisture spreading into bedroom wall.',
+      photos: ['/images/patch_damage.svg']
+    }
   });
+
+  // Scheduling State (Date & Desired Time)
+  const [selectedDate, setSelectedDate] = useState(16); // Apr 2025
+  const [desiredTimeWindow, setDesiredTimeWindow] = useState('morning'); // 'morning' | 'afternoon' | 'evening' | 'flexible'
+  const [customDesiredTime, setCustomDesiredTime] = useState('Around 11:30 AM before lunch');
+
+  // Payment State
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
+
+  // Toggle Service Selection (Checkbox in Services list)
+  const toggleServiceSelection = (serviceId) => {
+    setSelectedServiceIds(prev => {
+      const exists = prev.includes(serviceId);
+      let updated;
+      if (exists) {
+        updated = prev.filter(id => id !== serviceId);
+      } else {
+        updated = [...prev, serviceId];
+      }
+
+      // Initialize subform data if not present
+      if (!serviceSubformData[serviceId]) {
+        const found = ALL_SERVICES.find(s => s.id === serviceId);
+        setServiceSubformData(fData => ({
+          ...fData,
+          [serviceId]: {
+            subServices: [found?.subServices[0] || ''],
+            description: found?.defaultDesc || 'Patch repair required.',
+            photos: ['/images/patch_damage.svg']
+          }
+        }));
+      }
+      return updated;
+    });
+  };
+
+  // Start filling subforms one by one
+  const handleStartSubforms = () => {
+    if (selectedServiceIds.length === 0) {
+      alert('Please select at least one service!');
+      return;
+    }
+    setCurrentSubformIndex(0);
+    setCurrentScreen('service_subform');
+  };
+
+  // Proceed from Subform N to N+1 or Date/Time
+  const handleNextSubform = () => {
+    if (currentSubformIndex < selectedServiceIds.length - 1) {
+      setCurrentSubformIndex(currentSubformIndex + 1);
+    } else {
+      // All services filled! Proceed to Date & Desired Time screen
+      setCurrentScreen('schedule_date_time');
+    }
+  };
+
+  // Go back one subform
+  const handlePrevSubform = () => {
+    if (currentSubformIndex > 0) {
+      setCurrentSubformIndex(currentSubformIndex - 1);
+    } else {
+      setCurrentScreen('services');
+    }
+  };
+
+  // Upload image to currently active service subform
+  const handleUploadPhotoForCurrentService = (serviceId, file) => {
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setServiceSubformData(prev => ({
+        ...prev,
+        [serviceId]: {
+          ...prev[serviceId],
+          photos: [...(prev[serviceId]?.photos || []), url]
+        }
+      }));
+    }
+  };
+
+  // Active service in current subform wizard step
+  const activeServiceObj = ALL_SERVICES.find(s => s.id === selectedServiceIds[currentSubformIndex]) || ALL_SERVICES[0];
+  const activeSubform = serviceSubformData[activeServiceObj.id] || {
+    subServices: [activeServiceObj.subServices[0]],
+    description: activeServiceObj.defaultDesc,
+    photos: ['/images/patch_damage.svg']
+  };
 
   // Sync bottom navigation tabs
   const navigateToTab = (tab) => {
@@ -66,24 +251,6 @@ export default function App() {
     if (tab === 'profile') setCurrentScreen('profile');
   };
 
-  const jumpToScreen = (screenId) => {
-    setCurrentScreen(screenId);
-    if (screenId === 'home') setActiveTab('home');
-    if (screenId === 'services') setActiveTab('services');
-    if (screenId === 'my_bookings') setActiveTab('bookings');
-    if (screenId === 'projects') setActiveTab('projects');
-    if (screenId === 'profile') setActiveTab('profile');
-  };
-
-  // Handle local image file upload
-  const handleFileUpload = (e) => {
-    const files = e.target.files;
-    if (files && files[0]) {
-      const url = URL.createObjectURL(files[0]);
-      setUploadedPhotos(prev => [...prev, url]);
-    }
-  };
-
   const showBottomNav = ['home', 'services', 'my_bookings', 'projects', 'profile'].includes(currentScreen);
 
   return (
@@ -92,7 +259,7 @@ export default function App() {
       <div className="top-showcase-bar">
         <div className="showcase-header">
           <div className="brand-label">
-            <span className="gold-text">HP</span> HINDUSTAN PROJECTS <span style={{ opacity: 0.6, fontSize: '11px', fontWeight: '400' }}>(Dynamic Estimation Flow)</span>
+            <span className="gold-text">HP</span> HINDUSTAN PROJECTS <span style={{ opacity: 0.6, fontSize: '11px', fontWeight: '400' }}>(Multi-Service Flow)</span>
           </div>
           <button 
             onClick={() => setFullscreenMode(!fullscreenMode)}
@@ -104,11 +271,27 @@ export default function App() {
 
         {/* Screen Selector Pills */}
         <div className="screen-pills-row">
-          {SCREENS.map((s) => (
+          {[
+            { id: 'home', label: '1. Home' },
+            { id: 'services', label: '2. Select Services (Multi)' },
+            { id: 'service_subform', label: '3. Service Sub-Forms' },
+            { id: 'schedule_date_time', label: '4. Date & Desired Time' },
+            { id: 'estimation_review', label: '5. Work Estimation' },
+            { id: 'payment', label: '6. Payment' },
+            { id: 'confirmation', label: '7. Work Started' },
+            { id: 'my_bookings', label: '8. Bookings' },
+            { id: 'projects', label: '9. Projects' },
+            { id: 'profile', label: '10. Profile' }
+          ].map((s) => (
             <button
               key={s.id}
               className={`screen-pill-btn ${currentScreen === s.id ? 'active' : ''}`}
-              onClick={() => jumpToScreen(s.id)}
+              onClick={() => {
+                setCurrentScreen(s.id);
+                if (['home', 'services', 'my_bookings', 'projects', 'profile'].includes(s.id)) {
+                  setActiveTab(s.id === 'my_bookings' ? 'bookings' : s.id);
+                }
+              }}
             >
               {s.label}
             </button>
@@ -120,7 +303,7 @@ export default function App() {
       <div className={`native-phone-wrapper ${fullscreenMode ? 'full-view' : ''}`}>
         
         {/* Status Bar with Dynamic Island */}
-        <div className={`phone-status-bar ${['splash'].includes(currentScreen) ? 'white-text' : ''}`}>
+        <div className="phone-status-bar">
           <span>9:41</span>
           <div className="dynamic-island" />
           <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
@@ -132,121 +315,9 @@ export default function App() {
         {/* Scrollable Screen Content */}
         <div className={`screen-scroll-viewport ${!showBottomNav ? 'no-bottom-nav' : ''}`}>
 
-          {/* ================= 1. SPLASH SCREEN ================= */}
-          {currentScreen === 'splash' && (
-            <div 
-              className="fade-in-slide"
-              style={{
-                flex: 1,
-                minHeight: '790px',
-                background: 'linear-gradient(180deg, #071930 0%, #0B2545 40%, #0F172A 100%)',
-                color: '#fff',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                padding: '40px 24px 30px 24px',
-                position: 'relative'
-              }}
-            >
-              <div style={{ textAlign: 'center', marginTop: '20px' }}>
-                <div style={{ width: '64px', height: '64px', background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto', boxShadow: '0 8px 24px rgba(245, 158, 11, 0.35)' }}>
-                  <span style={{ fontSize: '26px', fontWeight: '900', color: '#071930', fontFamily: 'Outfit', letterSpacing: '-1px' }}>HP</span>
-                </div>
-                <h1 style={{ fontSize: '20px', fontWeight: '800', letterSpacing: '1px', fontFamily: 'Outfit', textTransform: 'uppercase' }}>
-                  Hindustan Projects
-                </h1>
-                <div style={{ fontSize: '11px', color: '#F59E0B', fontWeight: '600', letterSpacing: '2px', marginTop: '3px', textTransform: 'uppercase' }}>
-                  Build • Design • Execute
-                </div>
-              </div>
-
-              {/* 3D Architectural Building Render (Local file) */}
-              <div style={{ borderRadius: '24px', overflow: 'hidden', height: '360px', position: 'relative', boxShadow: '0 15px 35px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <img 
-                  src="/images/splash_building.jpg" 
-                  alt="Modern Construction"
-                  onError={(e) => { e.target.src = '/images/construction_site.svg'; }}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(7,25,48,0.85) 0%, transparent 55%)' }} />
-              </div>
-
-              <div style={{ textAlign: 'center' }}>
-                <h2 style={{ fontSize: '15px', fontWeight: '700', fontFamily: 'Outfit', lineHeight: '1.4', marginBottom: '14px' }}>
-                  Your Trusted Construction & Engineering Service Partner
-                </h2>
-                
-                <div style={{ width: '120px', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '4px', margin: '0 auto 18px auto', overflow: 'hidden' }}>
-                  <div style={{ width: '70%', height: '100%', background: '#F59E0B', borderRadius: '4px' }} />
-                </div>
-
-                <button 
-                  className="btn-hp-primary"
-                  style={{ background: '#F59E0B', color: '#071930', fontWeight: '800' }}
-                  onClick={() => setCurrentScreen('onboarding')}
-                >
-                  Get Started →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ================= 2. ONBOARDING SCREEN ================= */}
-          {currentScreen === 'onboarding' && (
-            <div className="fade-in-slide" style={{ padding: '16px 20px 24px 20px', display: 'flex', flex: 1, flexDirection: 'column', justifyContent: 'space-between', background: '#fff', minHeight: '790px' }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button 
-                  onClick={() => setCurrentScreen('home')}
-                  style={{ background: 'none', border: 'none', fontSize: '13px', fontWeight: '600', color: '#64748B', cursor: 'pointer' }}
-                >
-                  Skip
-                </button>
-              </div>
-
-              <div>
-                <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit', lineHeight: '1.25', marginBottom: '8px' }}>
-                  Turn Your Vision<br />Into Reality
-                </h1>
-                <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.5' }}>
-                  Complete civil, architectural and engineering services — all in one place.
-                </p>
-              </div>
-
-              {/* 3D Modern White Villa Render (Local file) */}
-              <div style={{ position: 'relative', height: '360px', borderRadius: '24px', overflow: 'hidden', boxShadow: 'var(--shadow-lg)' }}>
-                <img 
-                  src="/images/hero_villa.jpg" 
-                  alt="Modern Luxury Villa"
-                  onError={(e) => { e.target.src = '/images/construction_site.svg'; }}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <div style={{ position: 'absolute', bottom: '16px', right: '16px', background: '#F59E0B', color: '#071930', padding: '10px 14px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', fontSize: '12px', boxShadow: '0 6px 16px rgba(245, 158, 11, 0.4)' }}>
-                  <HardHat size={18} /> Verified Experts
-                </div>
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '20px' }}>
-                  <div style={{ width: '22px', height: '6px', background: '#0B2545', borderRadius: '4px' }} />
-                  <div style={{ width: '6px', height: '6px', background: '#E2E8F0', borderRadius: '50%' }} />
-                  <div style={{ width: '6px', height: '6px', background: '#E2E8F0', borderRadius: '50%' }} />
-                  <div style={{ width: '6px', height: '6px', background: '#E2E8F0', borderRadius: '50%' }} />
-                </div>
-
-                <button 
-                  className="btn-hp-primary"
-                  onClick={() => setCurrentScreen('home')}
-                >
-                  Get Started
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ================= 3. HOME SCREEN ================= */}
+          {/* ================= 1. HOME SCREEN ================= */}
           {currentScreen === 'home' && (
             <div className="fade-in-slide">
-              {/* Location Bar */}
               <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <MapPin size={15} color="#0B2545" />
@@ -258,7 +329,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Brand Header */}
               <div style={{ padding: '14px 18px 8px 18px' }}>
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit', letterSpacing: '0.5px' }}>
                   HINDUSTAN PROJECTS
@@ -282,16 +352,16 @@ export default function App() {
                       Build Better With Expert Services
                     </h2>
                     <button 
-                      onClick={() => setCurrentScreen('service_detail')}
+                      onClick={() => setCurrentScreen('services')}
                       style={{ marginTop: '12px', background: '#F59E0B', color: '#071930', border: 'none', padding: '8px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', width: 'fit-content', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
-                      Book an Appointment →
+                      Select Multiple Services →
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* 4 Circular Action Buttons */}
+              {/* 4 Quick Actions */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', padding: '0 16px 18px 16px' }}>
                 <div onClick={() => setCurrentScreen('services')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#EFF6FF', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' }}>
@@ -307,11 +377,11 @@ export default function App() {
                   <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Recent Projects</span>
                 </div>
 
-                <div onClick={() => setCurrentScreen('slot_picker')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <div onClick={() => setCurrentScreen('services')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' }}>
                     <Calculator size={22} />
                   </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Cost Estimator</span>
+                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Multi-Quote</span>
                 </div>
 
                 <div onClick={() => setCurrentScreen('profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -322,191 +392,318 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Popular Services Section */}
-              <div style={{ padding: '0 16px 8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '14px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>Popular Services</span>
-                <span onClick={() => setCurrentScreen('services')} style={{ fontSize: '12px', fontWeight: '600', color: '#1D4ED8', cursor: 'pointer' }}>View All</span>
-              </div>
-
-              {/* Service Card from Mockup */}
+              {/* Multi-Service Banner */}
               <div style={{ padding: '0 16px 20px 16px' }}>
-                <div 
-                  onClick={() => setCurrentScreen('service_detail')}
-                  style={{ background: '#fff', borderRadius: '16px', padding: '12px', border: '1px solid #E2E8F0', display: 'flex', gap: '12px', alignItems: 'center', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}
-                >
-                  <img 
-                    src="/images/construction_site.svg" 
-                    alt="Civil Construction"
-                    style={{ width: '64px', height: '64px', borderRadius: '12px', objectFit: 'cover' }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0B2545' }}>Civil Construction</h3>
-                    <p style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                      Residential, Commercial & Industrial Construction
-                    </p>
+                <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '16px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#1E40AF' }}>Need Multiple Repairs?</div>
+                    <div style={{ fontSize: '11px', color: '#3B82F6', marginTop: '2px' }}>Select civil, waterproofing, painting together in 1 visit!</div>
                   </div>
-                  <ChevronRight size={18} color="#94A3B8" />
+                  <button 
+                    onClick={() => setCurrentScreen('services')}
+                    style={{ background: '#1D4ED8', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Select →
+                  </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ================= 4. OUR SERVICES SCREEN ================= */}
+          {/* ================= 2. SERVICES LIST (WITH MULTI-SELECT CHECKBOXES) ================= */}
           {currentScreen === 'services' && (
-            <div className="fade-in-slide">
+            <div className="fade-in-slide" style={{ paddingBottom: '70px' }}>
               <div className="subscreen-top-header">
                 <button className="back-btn" onClick={() => setCurrentScreen('home')}>
                   <ArrowLeft size={18} />
                 </button>
-                <div className="subscreen-title">Our Services</div>
+                <div className="subscreen-title">Select Services (Multiple)</div>
                 <div style={{ width: '24px' }} />
               </div>
 
-              <div style={{ padding: '14px 16px 10px 16px', position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '28px', top: '24px', color: '#94A3B8' }} />
-                <input 
-                  type="text" 
-                  placeholder="Search services..."
-                  style={{ width: '100%', background: '#fff', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '10px 14px 10px 38px', fontSize: '13px', outline: 'none' }}
-                />
-              </div>
-
-              <div style={{ padding: '0 16px 20px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {[
-                  { title: 'Civil Construction', subtitle: 'Residential, Commercial, Industrial', icon: Building, color: '#1D4ED8', bg: '#EFF6FF' },
-                  { title: 'Architecture & Planning', subtitle: 'Design, Planning, 2D/3D Drawings', icon: Compass, color: '#7E22CE', bg: '#F3E8FF' },
-                  { title: 'Survey & Mapping', subtitle: 'Site Survey, Land Measurement, Mapping', icon: Layers, color: '#D97706', bg: '#FEF3C7' },
-                  { title: 'Interior & Exterior Design', subtitle: 'Modern & Functional Spaces', icon: Home, color: '#0D9488', bg: '#CCFBF1' },
-                  { title: 'Structural Analysis', subtitle: 'Safety & Strength Analysis', icon: Hammer, color: '#EA580C', bg: '#FFEDD5' },
-                  { title: 'Waterproofing & Maintenance', subtitle: 'Waterproofing, Patchwork, Repair', icon: Droplets, color: '#0284C7', bg: '#E0F2FE' },
-                  { title: 'Project Management Consultancy', subtitle: 'Planning, Execution, Monitoring', icon: FileText, color: '#4F46E5', bg: '#EEF2FF' },
-                  { title: 'Cost Estimation', subtitle: 'Detailed & Accurate Estimation', icon: Calculator, color: '#16A34A', bg: '#DCFCE7' }
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setCurrentScreen('service_detail')}
-                    style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
-                  >
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: item.bg, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <item.icon size={20} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{item.title}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{item.subtitle}</div>
-                    </div>
-                    <ChevronRight size={16} color="#94A3B8" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ================= 5. SERVICE DETAIL SCREEN ================= */}
-          {currentScreen === 'service_detail' && (
-            <div className="fade-in-slide">
-              <div className="subscreen-top-header">
-                <button className="back-btn" onClick={() => setCurrentScreen('services')}>
-                  <ArrowLeft size={18} />
-                </button>
-                <div className="subscreen-title">Service Detail</div>
-                <div style={{ width: '24px' }} />
-              </div>
-
-              {/* Hero Image */}
-              <div style={{ height: '200px', width: '100%', position: 'relative' }}>
-                <img 
-                  src="/images/construction_site.svg" 
-                  alt="Civil Construction"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              </div>
-
-              <div style={{ padding: '16px' }}>
-                <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                  Civil Construction
-                </h1>
-                <p style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                  Residential, Commercial & Industrial Construction
+              {/* Explanatory Header */}
+              <div style={{ padding: '12px 16px 4px 16px' }}>
+                <p style={{ fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
+                  Select all the services you need. For each service selected, a sub-form will open one by one to upload patch photos.
                 </p>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
-                  <Star size={14} color="#F59E0B" fill="#F59E0B" />
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A' }}>4.8</span>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>(124 reviews)</span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', margin: '16px 0' }}>
-                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 4px', textAlign: 'center' }}>
-                    <Clock size={16} color="#0B2545" style={{ margin: '0 auto 4px auto' }} />
-                    <div style={{ fontSize: '10px', fontWeight: '600', color: '#0F172A' }}>Timely Delivery</div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 4px', textAlign: 'center' }}>
-                    <ShieldCheck size={16} color="#0B2545" style={{ margin: '0 auto 4px auto' }} />
-                    <div style={{ fontSize: '10px', fontWeight: '600', color: '#0F172A' }}>Quality Work</div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 4px', textAlign: 'center' }}>
-                    <Users size={16} color="#0B2545" style={{ margin: '0 auto 4px auto' }} />
-                    <div style={{ fontSize: '10px', fontWeight: '600', color: '#0F172A' }}>Expert Team</div>
-                  </div>
-                </div>
-
-                <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>About Service</h3>
-                <p style={{ fontSize: '12px', color: '#475569', lineHeight: '1.5', marginBottom: '14px' }}>
-                  We provide end-to-end civil construction & maintenance services. Simply upload photos of the patch work area and select your preferred inspection date — we will calculate the accurate estimation!
-                </p>
-
-                <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '8px' }}>Key Services</h3>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', color: '#334155', marginBottom: '24px' }}>
-                  <li style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>• Building Construction & Repairs</li>
-                  <li style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>• Structural Crack & Plaster Patch Work</li>
-                  <li style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>• Water Leakage & Dampness Treatment</li>
-                  <li style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>• Renovation, Tiling & Remodeling</li>
-                </ul>
-
-                <button 
-                  className="btn-hp-primary"
-                  onClick={() => setCurrentScreen('slot_picker')}
-                >
-                  Upload Patch Photos & Book Inspection
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ================= 6. DATE SELECTION & PATCH WORK UPLOAD (NO TIME!) ================= */}
-          {currentScreen === 'slot_picker' && (
-            <div className="fade-in-slide">
-              <div className="subscreen-top-header">
-                <button className="back-btn" onClick={() => setCurrentScreen('service_detail')}>
-                  <ArrowLeft size={18} />
-                </button>
-                <div className="subscreen-title">Date & Patch Work Details</div>
-                <div style={{ width: '24px' }} />
               </div>
 
-              <div style={{ padding: '16px' }}>
-                {/* Mini Service Card */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: '#fff', border: '1px solid #E2E8F0', padding: '10px 12px', borderRadius: '14px', marginBottom: '16px' }}>
-                  <img 
-                    src="/images/construction_site.svg" 
-                    alt="Civil Construction"
-                    style={{ width: '48px', height: '48px', borderRadius: '10px', objectFit: 'cover' }}
-                  />
+              {/* Service Cards List with Multi-Select Checkboxes */}
+              <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {ALL_SERVICES.map((item) => {
+                  const isChecked = selectedServiceIds.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => toggleServiceSelection(item.id)}
+                      style={{
+                        background: isChecked ? '#FFFBEB' : '#fff',
+                        border: `1.5px solid ${isChecked ? '#F59E0B' : '#E2E8F0'}`,
+                        borderRadius: '14px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {/* Checkbox Icon */}
+                      <div className={`multi-select-pill ${isChecked ? 'checked' : ''}`} style={{ background: isChecked ? '#0B2545' : '#fff' }}>
+                        {isChecked && <Check size={14} color="#fff" />}
+                      </div>
+
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: item.bg, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <item.icon size={20} />
+                      </div>
+
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{item.title}</div>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{item.subtitle}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Floating Multi-Service Bottom Action Bar */}
+              {selectedServiceIds.length > 0 && (
+                <div className="multi-select-floating-bar">
                   <div>
-                    <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Civil Construction & Repairs</h4>
-                    <p style={{ fontSize: '11px', color: '#64748B' }}>Custom Work Estimation Workflow</p>
+                    <div style={{ fontSize: '13px', fontWeight: '700' }}>
+                      {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'Service' : 'Services'} Selected
+                    </div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                      Configure patch details & photos
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleStartSubforms}
+                    style={{ background: '#F59E0B', color: '#071930', border: 'none', padding: '9px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                  >
+                    Next <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= 3. SUB-FORM FOR EACH SERVICE (OPENED ONE BY ONE!) ================= */}
+          {currentScreen === 'service_subform' && (
+            <div className="fade-in-slide">
+              <div className="subscreen-top-header">
+                <button className="back-btn" onClick={handlePrevSubform}>
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="subscreen-title">
+                  Sub-Form {currentSubformIndex + 1} of {selectedServiceIds.length}
+                </div>
+                <div style={{ width: '24px' }} />
+              </div>
+
+              <div style={{ padding: '16px' }}>
+                {/* Wizard Progress Bar */}
+                <div className="wizard-progress-bar">
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#0B2545' }}>
+                    SERVICE {currentSubformIndex + 1} OF {selectedServiceIds.length}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {selectedServiceIds.map((_, idx) => (
+                      <div 
+                        key={idx} 
+                        style={{
+                          width: idx === currentSubformIndex ? '20px' : '8px',
+                          height: '8px',
+                          borderRadius: '4px',
+                          background: idx <= currentSubformIndex ? '#0B2545' : '#CBD5E1',
+                          transition: 'all 0.2s ease'
+                        }}
+                      />
+                    ))}
                   </div>
                 </div>
 
-                {/* 1. SELECT DATE ONLY (Time removed per user request) */}
+                {/* Current Service Header Badge */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: activeServiceObj.bg, padding: '12px', borderRadius: '14px', marginBottom: '16px' }}>
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#fff', color: activeServiceObj.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {React.createElement(activeServiceObj.icon, { size: 22 })}
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0B2545' }}>{activeServiceObj.title}</h3>
+                    <div style={{ fontSize: '11px', color: '#64748B' }}>Configure patch work details for this service</div>
+                  </div>
+                </div>
+
+                {/* Sub-Service Checkbox Selection */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '8px' }}>
+                    1. Select Specific Issues for {activeServiceObj.title}:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {activeServiceObj.subServices.map((sub, sIdx) => {
+                      const isSubSelected = activeSubform.subServices?.includes(sub);
+                      return (
+                        <div
+                          key={sIdx}
+                          onClick={() => {
+                            const updated = isSubSelected 
+                              ? activeSubform.subServices.filter(item => item !== sub)
+                              : [...(activeSubform.subServices || []), sub];
+                            setServiceSubformData(prev => ({
+                              ...prev,
+                              [activeServiceObj.id]: {
+                                ...activeSubform,
+                                subServices: updated
+                              }
+                            }));
+                          }}
+                          style={{
+                            background: isSubSelected ? '#EFF6FF' : '#fff',
+                            border: `1.5px solid ${isSubSelected ? '#2563EB' : '#E2E8F0'}`,
+                            borderRadius: '10px',
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#0F172A'
+                          }}
+                        >
+                          <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `1.5px solid ${isSubSelected ? '#2563EB' : '#94A3B8'}`, background: isSubSelected ? '#2563EB' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {isSubSelected && <Check size={12} color="#fff" />}
+                          </div>
+                          <span>{sub}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Patch Work Photo Upload for THIS service */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
+                    2. Upload Images of {activeServiceObj.title} Patch Work Area:
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px' }}>
+                    Photos of damaged surface, cracks, seepage or specific repair spots.
+                  </div>
+
+                  <label style={{ display: 'block', border: '2px dashed #93C5FD', background: '#EFF6FF', borderRadius: '12px', padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      onChange={(e) => handleUploadPhotoForCurrentService(activeServiceObj.id, e.target.files?.[0])}
+                      style={{ display: 'none' }} 
+                    />
+                    <UploadCloud size={24} color="#1D4ED8" style={{ margin: '0 auto 4px auto' }} />
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#1D4ED8' }}>
+                      Tap to Take Photo or Upload Image
+                    </div>
+                  </label>
+
+                  {/* Uploaded Photos Preview for this service */}
+                  {activeSubform.photos && activeSubform.photos.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '10px' }}>
+                      {activeSubform.photos.map((pUrl, pIdx) => (
+                        <div key={pIdx} style={{ position: 'relative', height: '65px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #CBD5E1' }}>
+                          <img src={pUrl} alt="Patch" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button 
+                            onClick={() => {
+                              const remaining = activeSubform.photos.filter((_, i) => i !== pIdx);
+                              setServiceSubformData(prev => ({
+                                ...prev,
+                                [activeServiceObj.id]: { ...activeSubform, photos: remaining }
+                              }));
+                            }}
+                            style={{ position: 'absolute', top: '3px', right: '3px', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Description for THIS service */}
+                <div style={{ marginBottom: '22px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
+                    3. Notes / Measurements for {activeServiceObj.title}:
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={activeSubform.description || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setServiceSubformData(prev => ({
+                        ...prev,
+                        [activeServiceObj.id]: { ...activeSubform, description: val }
+                      }));
+                    }}
+                    placeholder="Describe problem details, dimensions or locations..."
+                    style={{ width: '100%', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '8px 10px', fontSize: '12px', outline: 'none' }}
+                  />
+                </div>
+
+                {/* Subform Navigation Buttons */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {currentSubformIndex > 0 && (
+                    <button 
+                      className="btn-hp-secondary"
+                      style={{ flex: 1 }}
+                      onClick={handlePrevSubform}
+                    >
+                      ← Previous
+                    </button>
+                  )}
+                  <button 
+                    className="btn-hp-primary"
+                    style={{ flex: 2 }}
+                    onClick={handleNextSubform}
+                  >
+                    {currentSubformIndex < selectedServiceIds.length - 1 
+                      ? `Next: ${ALL_SERVICES.find(s => s.id === selectedServiceIds[currentSubformIndex + 1])?.title || 'Next Service'} →`
+                      : 'Next: Select Date & Desired Time →'
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= 4. DATE SELECTION & USER DESIRED TIME SUGGESTION ================= */}
+          {currentScreen === 'schedule_date_time' && (
+            <div className="fade-in-slide">
+              <div className="subscreen-top-header">
+                <button className="back-btn" onClick={() => setCurrentScreen('service_subform')}>
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="subscreen-title">Schedule Date & Desired Time</div>
+                <div style={{ width: '24px' }} />
+              </div>
+
+              <div style={{ padding: '16px' }}>
+                {/* Selected Services Summary Pill */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '10px 12px', borderRadius: '12px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>SERVICES CONFIGURED ({selectedServiceIds.length}):</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginTop: '2px' }}>
+                    {selectedServiceIds.map(id => ALL_SERVICES.find(s => s.id === id)?.title).join(' • ')}
+                  </div>
+                </div>
+
+                {/* 1. SELECT DATE */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>1. Select Preferred Date</span>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>1. Preferred Date</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>
                     <span>&lt;</span> Apr 2025 <span>&gt;</span>
                   </div>
                 </div>
 
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px 8px', marginBottom: '16px' }}>
+                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px 8px', marginBottom: '18px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontSize: '10px', color: '#94A3B8', fontWeight: '600', marginBottom: '8px' }}>
                     <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
                   </div>
@@ -535,134 +732,71 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. UPLOAD PATCH WORK IMAGES */}
-                <div style={{ marginBottom: '14px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '6px' }}>
-                    2. Upload Images of Patch Work Area
+                {/* 2. USER SUGGESTS DESIRED TIME (User Requirement) */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
+                    2. Suggest Your Desired Time:
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px' }}>
-                    Upload clear photos of the damaged wall, crack, seepage, or repair area.
+                    Pick your preferred window or suggest an exact time convenient for you.
                   </div>
 
-                  {/* Upload Box */}
-                  <label style={{ display: 'block', border: '2px dashed #93C5FD', background: '#EFF6FF', borderRadius: '14px', padding: '16px', textAlign: 'center', cursor: 'pointer' }}>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      multiple 
-                      onChange={handleFileUpload} 
-                      style={{ display: 'none' }} 
-                    />
-                    <UploadCloud size={26} color="#1D4ED8" style={{ margin: '0 auto 4px auto' }} />
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#1D4ED8' }}>
-                      Tap to Take Photo or Upload Image
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#64748B' }}>
-                      JPG, PNG, Video (Max 5 photos)
-                    </div>
+                  {/* Window Chips */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '10px' }}>
+                    {[
+                      { id: 'morning', label: '🌅 Morning (9 AM - 12 PM)' },
+                      { id: 'afternoon', label: '☀️ Afternoon (1 PM - 4 PM)' },
+                      { id: 'evening', label: '🌆 Evening (4 PM - 7 PM)' },
+                      { id: 'flexible', label: '⚡ Flexible / Any Time' }
+                    ].map(slot => (
+                      <button
+                        key={slot.id}
+                        onClick={() => setDesiredTimeWindow(slot.id)}
+                        style={{
+                          padding: '10px 8px',
+                          borderRadius: '10px',
+                          border: `1.5px solid ${desiredTimeWindow === slot.id ? '#0B2545' : '#E2E8F0'}`,
+                          background: desiredTimeWindow === slot.id ? '#0B2545' : '#fff',
+                          color: desiredTimeWindow === slot.id ? '#fff' : '#0F172A',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        {slot.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom Time Suggestion Input */}
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                    Any specific time preference?
                   </label>
-
-                  {/* Photos Preview Grid */}
-                  {uploadedPhotos.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '10px' }}>
-                      {uploadedPhotos.map((imgUrl, idx) => (
-                        <div key={idx} style={{ position: 'relative', height: '70px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #CBD5E1' }}>
-                          <img src={imgUrl} alt="Patch area" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button 
-                            onClick={() => setUploadedPhotos(prev => prev.filter((_, i) => i !== idx))}
-                            style={{ position: 'absolute', top: '3px', right: '3px', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                          >
-                            <X size={10} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. DESCRIBE WORK */}
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
-                    3. Patch Work Description:
-                  </div>
-                  <textarea
-                    rows={2}
-                    value={patchDescription}
-                    onChange={(e) => setPatchDescription(e.target.value)}
-                    style={{ width: '100%', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '8px 10px', fontSize: '12px', outline: 'none' }}
+                  <input
+                    type="text"
+                    value={customDesiredTime}
+                    onChange={(e) => setCustomDesiredTime(e.target.value)}
+                    placeholder="e.g. Around 11:30 AM before lunch, or after 5 PM"
+                    style={{ width: '100%', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '10px 12px', fontSize: '12px', outline: 'none' }}
                   />
                 </div>
 
                 <button 
                   className="btn-hp-primary"
-                  onClick={() => setCurrentScreen('summary')}
+                  onClick={() => setCurrentScreen('estimation_review')}
                 >
-                  Send for Work Estimation (₹0 Upfront)
+                  Send for Multi-Service Estimation (₹0 Upfront)
                 </button>
               </div>
             </div>
           )}
 
-          {/* ================= 7. SUMMARY: REQUEST SENT FOR ESTIMATION ================= */}
-          {currentScreen === 'summary' && (
-            <div className="fade-in-slide">
-              <div className="subscreen-top-header">
-                <button className="back-btn" onClick={() => setCurrentScreen('slot_picker')}>
-                  <ArrowLeft size={18} />
-                </button>
-                <div className="subscreen-title">Request Sent</div>
-                <div style={{ width: '24px' }} />
-              </div>
-
-              <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
-                  <FileText size={28} />
-                </div>
-
-                <h2 style={{ fontSize: '17px', fontWeight: '800', color: '#0B2545' }}>
-                  Patch Work Photos Submitted!
-                </h2>
-                <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', marginBottom: '18px' }}>
-                  Our technical estimation team is analyzing your photos for <strong>{selectedDate} Apr 2025</strong>. We will send the full estimation shortly.
-                </p>
-
-                {/* Attached Details Box */}
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', textAlign: 'left', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '700' }}>SERVICE & DATE</div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', margin: '2px 0 10px 0' }}>
-                    Civil Construction • {selectedDate} Apr 2025
-                  </div>
-
-                  <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '700' }}>UPLOADED PATCH WORK PHOTOS</div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                    {uploadedPhotos.map((url, i) => (
-                      <img key={i} src={url} alt="Patch" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #CBD5E1' }} />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Instant Simulation Action */}
-                <div style={{ background: '#F0FDF4', border: '1.5px dashed #10B981', padding: '14px', borderRadius: '14px', marginBottom: '14px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#047857', marginBottom: '6px' }}>
-                    ⚡ ESTIMATOR RESPONSE
-                  </div>
-                  <button 
-                    className="btn-hp-primary"
-                    style={{ background: '#10B981' }}
-                    onClick={() => setCurrentScreen('estimation_review')}
-                  >
-                    <CheckCircle2 size={16} /> View Team Estimation
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ================= 8. ESTIMATION OF WORK (REVIEW ESTIMATION) ================= */}
+          {/* ================= 5. MULTI-SERVICE WORK ESTIMATION REVIEW ================= */}
           {currentScreen === 'estimation_review' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
-                <button className="back-btn" onClick={() => setCurrentScreen('summary')}>
+                <button className="back-btn" onClick={() => setCurrentScreen('schedule_date_time')}>
                   <ArrowLeft size={18} />
                 </button>
                 <div className="subscreen-title">Work Estimation</div>
@@ -673,50 +807,59 @@ export default function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <div>
                     <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0B2545' }}>
-                      Estimation #{activeEstimation.quoteNumber}
+                      Combined Estimation #{Math.floor(1000 + Math.random() * 9000)}
                     </h3>
                     <div style={{ fontSize: '11px', color: '#64748B' }}>
-                      Based on your uploaded patch photos
+                      Scheduled: <strong>{selectedDate} Apr 2025</strong> ({customDesiredTime})
                     </div>
                   </div>
                   <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '4px 8px', borderRadius: '6px' }}>
-                    APPROVED QUOTE
+                    MULTI-SERVICE
                   </span>
                 </div>
 
-                {/* Warranty & Timeline Pills */}
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                  <div style={{ flex: 1, background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px', borderRadius: '10px', fontSize: '11px', color: '#1E40AF', fontWeight: '600' }}>
-                    🛡️ {activeEstimation.warranty}
-                  </div>
-                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '8px', borderRadius: '10px', fontSize: '11px', color: '#334155', fontWeight: '600' }}>
-                    ⏱️ {activeEstimation.estimatedDays}
-                  </div>
+                {/* Grouped Estimation Breakdown per selected service */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                  {selectedServiceIds.map((sId) => {
+                    const sObj = ALL_SERVICES.find(s => s.id === sId);
+                    const sfData = serviceSubformData[sId] || {};
+                    const isCivil = sId === 's1';
+                    const sTotal = isCivil ? 7200 : 5400;
+
+                    return (
+                      <div key={sId} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: '800', fontSize: '13px', color: '#0B2545' }}>{sObj?.title}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8' }}>₹{sTotal.toLocaleString()}</span>
+                        </div>
+
+                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '6px' }}>
+                          <strong>Sub-services:</strong> {sfData.subServices?.join(', ') || 'Inspection'}
+                        </div>
+
+                        <div style={{ fontSize: '11px', color: '#475569', background: '#F8FAFC', padding: '6px 8px', borderRadius: '8px' }}>
+                          "{sfData.description || 'Patch work specified.'}"
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {/* Itemized Work Breakdown */}
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '8px' }}>
-                    ESTIMATED SCOPE OF WORK & MATERIALS:
+                {/* Total Summary */}
+                <div style={{ background: '#0B2545', color: '#fff', borderRadius: '16px', padding: '14px', marginBottom: '18px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', opacity: 0.8 }}>Total Services Configured</span>
+                    <span style={{ fontWeight: '700' }}>{selectedServiceIds.length} Services</span>
                   </div>
-
-                  {activeEstimation.items.map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed #E2E8F0', fontSize: '12px' }}>
-                      <div>
-                        <div style={{ fontWeight: '600', color: '#0B2545' }}>{item.name}</div>
-                        <div style={{ fontSize: '10px', color: '#64748B' }}>{item.qty}</div>
-                      </div>
-                      <div style={{ fontWeight: '700', color: '#0F172A' }}>₹{item.amount.toLocaleString()}</div>
-                    </div>
-                  ))}
-
-                  <div style={{ borderTop: '1px solid #E2E8F0', marginTop: '10px', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '8px' }}>
                     <div>
-                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>TOTAL WORK ESTIMATION</div>
-                      <div style={{ fontSize: '10px', color: '#10B981' }}>Includes all materials, labor & GST</div>
+                      <div style={{ fontSize: '11px', opacity: 0.8 }}>TOTAL ESTIMATION</div>
+                      <div style={{ fontSize: '10px', color: '#F59E0B' }}>Includes all materials, labor & GST</div>
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                      ₹{activeEstimation.totalAmount.toLocaleString()}
+                    <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'Outfit', color: '#F59E0B' }}>
+                      ₹12,600
                     </div>
                   </div>
                 </div>
@@ -731,7 +874,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 9. PAYMENT SCREEN ================= */}
+          {/* ================= 6. PAYMENT SCREEN ================= */}
           {currentScreen === 'payment' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
@@ -744,9 +887,9 @@ export default function App() {
 
               <div style={{ padding: '16px' }}>
                 <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '14px', marginBottom: '18px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Total Estimation Amount</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Total Multi-Service Estimation</div>
                   <div style={{ fontSize: '24px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                    ₹{activeEstimation.totalAmount.toLocaleString()}
+                    ₹12,600
                   </div>
                 </div>
 
@@ -760,7 +903,7 @@ export default function App() {
                     { id: 'card', label: 'Card (Visa, MasterCard, RuPay)' },
                     { id: 'wallet', label: 'Wallet (Paytm, PhonePe)' },
                     { id: 'netbanking', label: 'Net Banking' },
-                    { id: 'cod', label: 'Cash / Pay After Work Milestone' }
+                    { id: 'cod', label: 'Milestone / Post-Service Payment' }
                   ].map(method => (
                     <div
                       key={method.id}
@@ -804,7 +947,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 10. CONFIRMATION & WORK STARTED ================= */}
+          {/* ================= 7. CONFIRMATION & WORK STARTED ================= */}
           {currentScreen === 'confirmation' && (
             <div className="fade-in-slide" style={{ padding: '24px 20px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: '#ECFDF5', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
@@ -812,24 +955,22 @@ export default function App() {
               </div>
 
               <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                Estimation Approved & Work Started!
+                All Services Scheduled & Work Started!
               </h1>
               <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', marginBottom: '20px' }}>
-                Your patch work has been scheduled for <strong>{selectedDate} Apr 2025</strong>. Our execution team is assigned!
+                Appointment locked for <strong>{selectedDate} Apr 2025</strong> ({customDesiredTime}). Technical team dispatched!
               </p>
-
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '8px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', color: '#0B2545', width: 'fit-content', margin: '0 auto 18px auto' }}>
-                Booking ID: HP20250416001
-              </div>
 
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '16px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
                 <div>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SCHEDULED DATE</div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{selectedDate} Apr 2025</div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SCHEDULED DATE & DESIRED TIME</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{selectedDate} Apr 2025 • {customDesiredTime}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SERVICE & ESTIMATION</div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Civil Construction & Patch Repair • ₹{activeEstimation.totalAmount.toLocaleString()}</div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SERVICES INCLUDED ({selectedServiceIds.length})</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
+                    {selectedServiceIds.map(id => ALL_SERVICES.find(s => s.id === id)?.title).join(', ')}
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>WARRANTY COVERAGE</div>
@@ -854,7 +995,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 11. MY BOOKINGS SCREEN ================= */}
+          {/* ================= 8. MY BOOKINGS ================= */}
           {currentScreen === 'my_bookings' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
@@ -865,51 +1006,24 @@ export default function App() {
                 <div style={{ width: '24px' }} />
               </div>
 
-              <div style={{ padding: '14px 16px 10px 16px', display: 'flex', gap: '8px' }}>
-                {['upcoming', 'past', 'cancelled'].map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setBookingFilter(tab)}
-                    style={{
-                      flex: 1,
-                      padding: '7px 0',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: bookingFilter === tab ? '#0B2545' : '#F1F5F9',
-                      color: bookingFilter === tab ? '#fff' : '#64748B',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      textTransform: 'capitalize'
-                    }}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ padding: '8px 16px 20px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Active Work Card */}
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <img 
-                        src="/images/construction_site.svg" 
-                        alt="Civil Construction" 
-                        style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover' }}
-                      />
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Civil Construction & Patch Work</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>{selectedDate} Apr 2025 • Work in Progress</div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
+                        Multi-Service Patch Work ({selectedServiceIds.length} Services)
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>
+                        {selectedDate} Apr 2025 • Desired Time: {customDesiredTime}
                       </div>
                     </div>
                     <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '3px 8px', borderRadius: '6px' }}>
-                      Work Active
+                      Active
                     </span>
                   </div>
 
-                  <div style={{ fontSize: '10px', color: '#94A3B8', marginBottom: '10px' }}>
-                    Booking ID: HP20250416001 • Quote #{activeEstimation.quoteNumber}
+                  <div style={{ fontSize: '11px', color: '#334155', background: '#F8FAFC', padding: '8px', borderRadius: '8px', marginBottom: '10px' }}>
+                    {selectedServiceIds.map(id => ALL_SERVICES.find(s => s.id === id)?.title).join(' • ')}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', fontSize: '11px', fontWeight: '600', color: '#0B2545' }}>
@@ -918,42 +1032,11 @@ export default function App() {
                     <span style={{ color: '#EF4444', cursor: 'pointer' }}>Support</span>
                   </div>
                 </div>
-
-                {/* Card 2 */}
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', boxShadow: 'var(--shadow-sm)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <img 
-                        src="/images/hero_villa.jpg" 
-                        alt="Architectural Design" 
-                        onError={(e) => { e.target.src = '/images/construction_site.svg'; }}
-                        style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover' }}
-                      />
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Architectural Design</div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>22 Apr 2025 • Site Inspection</div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '10px', fontWeight: '700', background: '#EFF6FF', color: '#1D4ED8', padding: '3px 8px', borderRadius: '6px' }}>
-                      Upcoming
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: '10px', color: '#94A3B8', marginBottom: '10px' }}>
-                    Booking ID: HP20250422002
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', fontSize: '11px', fontWeight: '600', color: '#0B2545' }}>
-                    <span style={{ cursor: 'pointer' }}>View Details</span>
-                    <span style={{ cursor: 'pointer' }}>Reschedule</span>
-                    <span style={{ color: '#EF4444', cursor: 'pointer' }}>Cancel</span>
-                  </div>
-                </div>
               </div>
             </div>
           )}
 
-          {/* ================= 12. OUR PROJECTS / PORTFOLIO SCREEN ================= */}
+          {/* ================= 9. PROJECTS ================= */}
           {currentScreen === 'projects' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
@@ -964,33 +1047,7 @@ export default function App() {
                 <div style={{ width: '24px' }} />
               </div>
 
-              {/* Filter Chips */}
-              <div style={{ padding: '12px 16px 8px 16px', display: 'flex', gap: '8px', overflowX: 'auto' }}>
-                {['all', 'residential', 'commercial', 'industrial'].map(filter => (
-                  <button
-                    key={filter}
-                    onClick={() => setProjectFilter(filter)}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '20px',
-                      border: 'none',
-                      background: projectFilter === filter ? '#0B2545' : '#F1F5F9',
-                      color: projectFilter === filter ? '#fff' : '#64748B',
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      textTransform: 'capitalize'
-                    }}
-                  >
-                    {filter === 'all' ? 'All' : filter}
-                  </button>
-                ))}
-              </div>
-
-              {/* Project Cards (All Local Images) */}
               <div style={{ padding: '8px 16px 20px 16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {/* Project 1 */}
                 <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                   <div style={{ height: '140px', width: '100%', position: 'relative' }}>
                     <img 
@@ -1009,7 +1066,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Project 2 */}
                 <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                   <div style={{ height: '140px', width: '100%', position: 'relative' }}>
                     <img 
@@ -1026,29 +1082,11 @@ export default function App() {
                     <p style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Bhilwara • 2023</p>
                   </div>
                 </div>
-
-                {/* Project 3 */}
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
-                  <div style={{ height: '140px', width: '100%', position: 'relative' }}>
-                    <img 
-                      src="/images/commercial_glass.svg" 
-                      alt="Commercial Building"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#FEF3C7', color: '#B45309', fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '6px' }}>
-                      Commercial
-                    </span>
-                  </div>
-                  <div style={{ padding: '12px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#0B2545' }}>Commercial Building</h3>
-                    <p style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>Bhilwara • 2024</p>
-                  </div>
-                </div>
               </div>
             </div>
           )}
 
-          {/* ================= 13. PROFILE SCREEN ================= */}
+          {/* ================= 10. PROFILE ================= */}
           {currentScreen === 'profile' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
@@ -1077,8 +1115,6 @@ export default function App() {
                   { label: 'Notifications', icon: Bell },
                   { label: 'Help & Support', icon: PhoneCall },
                   { label: 'About Us', icon: Info },
-                  { label: 'Terms & Conditions', icon: FileText },
-                  { label: 'Privacy Policy', icon: ShieldCheck },
                   { label: 'Log Out', icon: LogOut, color: '#EF4444' }
                 ].map((item, idx) => (
                   <div
