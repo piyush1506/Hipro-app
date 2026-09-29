@@ -5,130 +5,120 @@ import {
   Lock, CreditCard, ChevronDown, Check, Building, Wrench, Compass,
   Layers, Hammer, Droplets, HardHat, FileText, Calculator, PhoneCall,
   X, AlertCircle, LogOut, Info, Settings, Bookmark, Search, Maximize2,
-  UploadCloud, Sparkles, Plus, Trash2, ArrowRight
+  UploadCloud, Sparkles, ArrowRight
 } from 'lucide-react';
 
-// The 8 Primary Construction & Maintenance Services
-const ALL_SERVICES = [
+// The 8 Primary Construction & Maintenance Categories with Subcategories
+const CATEGORIES = [
   {
-    id: 's1',
+    id: 'cat_civil',
     title: 'Civil Construction',
+    shortTitle: 'Civil Work',
     subtitle: 'Residential, Commercial, Industrial',
     icon: Building,
     color: '#1D4ED8',
     bg: '#EFF6FF',
-    subServices: [
-      'Building Construction & Extension',
-      'Structural Crack & Beam Patch Work',
-      'Plaster Repair & Surface Leveling',
-      'Foundation & Column Strengthening'
-    ],
-    defaultDesc: 'Plaster flaking and hairline settlement crack along the main living room beam.'
+    subcategories: [
+      { id: 'sub_c1', name: 'Structural Crack & Beam Patch Work', desc: 'Filling settlement cracks, beam strengthening', defaultNotes: 'Wall plaster cracked along main beam, approx 12x10 ft area.' },
+      { id: 'sub_c2', name: 'Plaster Repair & Surface Leveling', desc: 'Flaking plaster removal, cement re-plastering', defaultNotes: 'Old plaster crumbling near window frame.' },
+      { id: 'sub_c3', name: 'Foundation & Column Strengthening', desc: 'Concrete jacketing, rebar rust treatment', defaultNotes: 'Surface rebar visible on pillar base.' },
+      { id: 'sub_c4', name: 'Building Extension & Room Addition', desc: 'New brickwork, roof slab, boundary wall', defaultNotes: 'Planning to extend balcony area.' }
+    ]
   },
   {
-    id: 's2',
+    id: 'cat_waterproof',
     title: 'Waterproofing & Maintenance',
+    shortTitle: 'Waterproofing',
     subtitle: 'Roof, Bathroom, Seepage & Cracks',
     icon: Droplets,
     color: '#0284C7',
     bg: '#E0F2FE',
-    subServices: [
-      'Stop Roof & Terrace Water Leakage',
-      'Bathroom & Concealed Pipe Seepage',
-      'External Wall Dampness Treatment',
-      'Chemical PU Injection & Grouting'
-    ],
-    defaultDesc: 'Terrace water ponding and ceiling moisture spreading into bedroom wall.'
+    subcategories: [
+      { id: 'sub_w1', name: 'Stop Roof & Terrace Water Leakage', desc: 'Elastomeric chemical coating, ponding test', defaultNotes: 'Water dripping from terrace during rain.' },
+      { id: 'sub_w2', name: 'Bathroom & Concealed Pipe Seepage', desc: 'Non-invasive epoxy grouting, drain seal', defaultNotes: 'Damp moisture spreading into adjoining bedroom.' },
+      { id: 'sub_w3', name: 'External Wall Dampness Treatment', desc: 'Hydrophobic anti-seepage exterior shield', defaultNotes: 'Efflorescence white powder flaking off wall.' },
+      { id: 'sub_w4', name: 'Chemical PU Injection & Grouting', desc: 'High-pressure polyurethane crack injection', defaultNotes: 'Active water seep in basement wall.' }
+    ]
   },
   {
-    id: 's3',
+    id: 'cat_painting',
     title: 'Painting & Wall Repair',
+    shortTitle: 'Painting',
     subtitle: 'Putty, POP, Exterior Weathercoat',
     icon: Hammer,
     color: '#7E22CE',
     bg: '#F3E8FF',
-    subServices: [
-      'Interior Moisture-Resistant Emulsion',
-      'Exterior Weathercoat & Anti-Algae',
-      'Waterproof Putty & POP Crack Patch',
-      'Wall Efflorescence Salt Cleaning'
-    ],
-    defaultDesc: 'Peeling paint and bubbling damp patches needing scraping and 2 coats weathercoat.'
+    subcategories: [
+      { id: 'sub_p1', name: 'Interior Moisture-Resistant Emulsion', desc: 'Washable luxury emulsion double coat', defaultNotes: 'Interior hall repainting with damp primer.' },
+      { id: 'sub_p2', name: 'Exterior Weathercoat & Anti-Algae', desc: 'Rain-proof exterior facade protection', defaultNotes: 'Exterior facade paint peeling off.' },
+      { id: 'sub_p3', name: 'Waterproof Putty & POP Crack Patch', desc: 'Acrylic damp-proof putty leveling', defaultNotes: 'POP cornice crack repair.' }
+    ]
   },
   {
-    id: 's4',
+    id: 'cat_arch',
     title: 'Architecture & Planning',
+    shortTitle: 'Architecture',
     subtitle: 'Design, 2D/3D Drawings & Sanction',
     icon: Compass,
     color: '#D97706',
     bg: '#FEF3C7',
-    subServices: [
-      '2D Floor Plans & Elevation',
-      '3D Architectural Visualization',
-      'Structural Engineering Drawings',
-      'Municipal Approval Consultation'
-    ],
-    defaultDesc: 'Require modern renovation elevation drawing and municipal sanction plan.'
+    subcategories: [
+      { id: 'sub_a1', name: '2D Floor Plans & Elevation', desc: 'Vastu compliant layout & section drawings', defaultNotes: 'Need 2D layout for ground floor renovation.' },
+      { id: 'sub_a2', name: '3D Architectural Visualization', desc: 'Photorealistic exterior and interior renders', defaultNotes: 'Modern facade 3D render.' },
+      { id: 'sub_a3', name: 'Municipal Approval Consultation', desc: 'Building plan sanction paperwork', defaultNotes: 'Bhilwara municipal clearance drawing.' }
+    ]
   },
   {
-    id: 's5',
+    id: 'cat_survey',
     title: 'Survey & Mapping',
+    shortTitle: 'Survey & GPS',
     subtitle: 'Site Survey, Land Boundary & GPS',
     icon: Layers,
     color: '#EA580C',
     bg: '#FFEDD5',
-    subServices: [
-      'Boundary Demarcation & Topo Survey',
-      'Digital Total Station Mapping',
-      'Drone Aerial Site Scanning',
-      'Soil Testing & Bearing Capacity'
-    ],
-    defaultDesc: 'Boundary survey and level demarcation before foundation work.'
+    subcategories: [
+      { id: 'sub_s1', name: 'Boundary Demarcation & Topo Survey', desc: 'Land area measurement and boundary stone marking', defaultNotes: 'Demarcate plot boundary stones.' },
+      { id: 'sub_s2', name: 'Digital Total Station Mapping', desc: 'Sub-centimeter precision coordinates', defaultNotes: 'Contour and level survey for construction.' }
+    ]
   },
   {
-    id: 's6',
+    id: 'cat_interior',
     title: 'Interior & Exterior Design',
+    shortTitle: 'Interiors',
     subtitle: 'Modern & Functional Spaces',
     icon: Home,
     color: '#0D9488',
     bg: '#CCFBF1',
-    subServices: [
-      'Modular Kitchen & Wardrobe Design',
-      'False Ceiling & Ambient Lighting',
-      'Wall Cladding & Designer Louvers',
-      'Balcony Landscaping & Decking'
-    ],
-    defaultDesc: 'Full interior woodwork and modular cabinetry layout makeover.'
+    subcategories: [
+      { id: 'sub_i1', name: 'Modular Kitchen & Wardrobe Design', desc: 'Custom plywood cabinets, soft-close fittings', defaultNotes: 'L-shape modular kitchen remodel.' },
+      { id: 'sub_i2', name: 'False Ceiling & Ambient Lighting', desc: 'Gypsum designer ceiling with cove lights', defaultNotes: 'Living room gypsum false ceiling.' }
+    ]
   },
   {
-    id: 's7',
+    id: 'cat_structural',
     title: 'Structural Analysis',
+    shortTitle: 'Structure Audit',
     subtitle: 'Safety & Strength Inspection',
     icon: ShieldCheck,
     color: '#16A34A',
     bg: '#DCFCE7',
-    subServices: [
-      'Non-Destructive Rebound Hammer Test',
-      'Load Bearing Capacity Audit',
-      'Earthquake Resistance Verification',
-      'Retrofitting & Jacketing Plan'
-    ],
-    defaultDesc: 'Safety audit of 15-year-old RCC building pillars.'
+    subcategories: [
+      { id: 'sub_st1', name: 'Load Bearing Capacity Audit', desc: 'Structural stability report for extra floors', defaultNotes: 'Audit foundation before adding 1st floor.' },
+      { id: 'sub_st2', name: 'Non-Destructive Rebound Hammer Test', desc: 'Concrete compressive strength measurement', defaultNotes: 'Test pillar strength after 10 years.' }
+    ]
   },
   {
-    id: 's8',
+    id: 'cat_estimation',
     title: 'Cost Estimation & BOQ',
+    shortTitle: 'Cost BOQ',
     subtitle: 'Detailed & Accurate Estimation',
     icon: Calculator,
     color: '#4F46E5',
     bg: '#EEF2FF',
-    subServices: [
-      'Itemized Bill of Quantities (BOQ)',
-      'Material Rate Analysis & Procurement',
-      'Milestone Payment Structuring',
-      'Contractor Cost Audit'
-    ],
-    defaultDesc: 'Detailed material and labor estimation for 2nd floor expansion.'
+    subcategories: [
+      { id: 'sub_boq1', name: 'Itemized Bill of Quantities (BOQ)', desc: 'Cement, steel, sand & labor breakdown', defaultNotes: 'Full material requirement estimate.' },
+      { id: 'sub_boq2', name: 'Contractor Cost Audit', desc: 'Verification of contractor bills and measurements', defaultNotes: 'Cross check contractor bill.' }
+    ]
   }
 ];
 
@@ -137,51 +127,72 @@ export default function App() {
   const [fullscreenMode, setFullscreenMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
 
-  // Multi-Service Selection State
-  const [selectedServiceIds, setSelectedServiceIds] = useState(['s1', 's2']); // Default 2 services selected for demo
-  const [currentSubformIndex, setCurrentSubformIndex] = useState(0); // Which service subform is active (0 to N-1)
+  // Active Category clicked from Home page
+  const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]);
 
-  // Per-Service Subform Data (stored as key-value by serviceId)
-  const [serviceSubformData, setServiceSubformData] = useState({
-    s1: {
-      subServices: ['Structural Crack & Beam Patch Work'],
-      description: 'Plaster flaking and hairline settlement crack along the main living room beam.',
+  // Selected subcategories (array of subcategory objects)
+  const [selectedSubcategories, setSelectedSubcategories] = useState([
+    CATEGORIES[0].subcategories[0],
+    CATEGORIES[0].subcategories[1]
+  ]);
+
+  // Current Subform Index (which sub-service is being configured right now: 0 to N-1)
+  const [currentSubformIdx, setCurrentSubformIdx] = useState(0);
+
+  // Patch work details and photos for each subcategory (keyed by subcategory id)
+  const [patchDataBySubId, setPatchDataBySubId] = useState({
+    sub_c1: {
+      notes: 'Plaster flaking and hairline settlement crack along the main living room beam.',
       photos: ['/images/patch_damage.svg']
     },
-    s2: {
-      subServices: ['Stop Roof & Terrace Water Leakage'],
-      description: 'Terrace water ponding and ceiling moisture spreading into bedroom wall.',
+    sub_c2: {
+      notes: 'Cracks widening near window frame, approx 6x4 ft area.',
       photos: ['/images/patch_damage.svg']
     }
   });
 
-  // Scheduling State (Date & Desired Time)
+  // Scheduling: Date & Time
   const [selectedDate, setSelectedDate] = useState(16); // Apr 2025
-  const [desiredTimeWindow, setDesiredTimeWindow] = useState('morning'); // 'morning' | 'afternoon' | 'evening' | 'flexible'
-  const [customDesiredTime, setCustomDesiredTime] = useState('Around 11:30 AM before lunch');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState('10:30 AM - 12:30 PM');
+  const [customTimeNote, setCustomTimeNote] = useState('Morning preferred before lunch');
 
-  // Payment State
+  // Payment
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
 
-  // Toggle Service Selection (Checkbox in Services list)
-  const toggleServiceSelection = (serviceId) => {
-    setSelectedServiceIds(prev => {
-      const exists = prev.includes(serviceId);
+  // When user clicks a Category on Home Page -> Open Subcategory page
+  const handleCategoryClick = (category) => {
+    setActiveCategory(category);
+    // Pre-select first subcategory as default
+    setSelectedSubcategories([category.subcategories[0]]);
+    // Ensure default patch data exists
+    setPatchDataBySubId(prev => ({
+      ...prev,
+      [category.subcategories[0].id]: {
+        notes: category.subcategories[0].defaultNotes,
+        photos: ['/images/patch_damage.svg']
+      }
+    }));
+    setCurrentScreen('subcategory_selection');
+  };
+
+  // Toggle subcategory checkbox
+  const toggleSubcategoryCheck = (sub) => {
+    setSelectedSubcategories(prev => {
+      const exists = prev.some(item => item.id === sub.id);
       let updated;
       if (exists) {
-        updated = prev.filter(id => id !== serviceId);
+        if (prev.length === 1) return prev; // keep at least 1
+        updated = prev.filter(item => item.id !== sub.id);
       } else {
-        updated = [...prev, serviceId];
+        updated = [...prev, sub];
       }
 
-      // Initialize subform data if not present
-      if (!serviceSubformData[serviceId]) {
-        const found = ALL_SERVICES.find(s => s.id === serviceId);
-        setServiceSubformData(fData => ({
-          ...fData,
-          [serviceId]: {
-            subServices: [found?.subServices[0] || ''],
-            description: found?.defaultDesc || 'Patch repair required.',
+      // Initialize patch data if not present
+      if (!patchDataBySubId[sub.id]) {
+        setPatchDataBySubId(p => ({
+          ...p,
+          [sub.id]: {
+            notes: sub.defaultNotes,
             photos: ['/images/patch_damage.svg']
           }
         }));
@@ -192,66 +203,66 @@ export default function App() {
 
   // Start filling subforms one by one
   const handleStartSubforms = () => {
-    if (selectedServiceIds.length === 0) {
-      alert('Please select at least one service!');
+    if (selectedSubcategories.length === 0) {
+      alert('Please select at least one sub-service!');
       return;
     }
-    setCurrentSubformIndex(0);
-    setCurrentScreen('service_subform');
+    setCurrentSubformIdx(0);
+    setCurrentScreen('subservice_patch_form');
   };
 
-  // Proceed from Subform N to N+1 or Date/Time
-  const handleNextSubform = () => {
-    if (currentSubformIndex < selectedServiceIds.length - 1) {
-      setCurrentSubformIndex(currentSubformIndex + 1);
+  // Move to next sub-service or to Date & Time screen
+  const handleNextSubservice = () => {
+    if (currentSubformIdx < selectedSubcategories.length - 1) {
+      setCurrentSubformIdx(currentSubformIdx + 1);
     } else {
-      // All services filled! Proceed to Date & Desired Time screen
+      // All subservices configured! Proceed to Date & Time
       setCurrentScreen('schedule_date_time');
     }
   };
 
-  // Go back one subform
-  const handlePrevSubform = () => {
-    if (currentSubformIndex > 0) {
-      setCurrentSubformIndex(currentSubformIndex - 1);
+  // Go back one sub-service
+  const handlePrevSubservice = () => {
+    if (currentSubformIdx > 0) {
+      setCurrentSubformIdx(currentSubformIdx - 1);
     } else {
-      setCurrentScreen('services');
+      setCurrentScreen('subcategory_selection');
     }
   };
 
-  // Upload image to currently active service subform
-  const handleUploadPhotoForCurrentService = (serviceId, file) => {
-    if (file) {
+  // Active subcategory in wizard
+  const currentSubObj = selectedSubcategories[currentSubformIdx] || selectedSubcategories[0];
+  const currentPatchData = patchDataBySubId[currentSubObj?.id] || {
+    notes: currentSubObj?.defaultNotes || 'Patch repair required.',
+    photos: ['/images/patch_damage.svg']
+  };
+
+  // Handle local image file upload for current subservice
+  const handleUploadPhoto = (e) => {
+    const file = e.target.files?.[0];
+    if (file && currentSubObj) {
       const url = URL.createObjectURL(file);
-      setServiceSubformData(prev => ({
+      setPatchDataBySubId(prev => ({
         ...prev,
-        [serviceId]: {
-          ...prev[serviceId],
-          photos: [...(prev[serviceId]?.photos || []), url]
+        [currentSubObj.id]: {
+          ...prev[currentSubObj.id],
+          photos: [...(prev[currentSubObj.id]?.photos || []), url]
         }
       }));
     }
-  };
-
-  // Active service in current subform wizard step
-  const activeServiceObj = ALL_SERVICES.find(s => s.id === selectedServiceIds[currentSubformIndex]) || ALL_SERVICES[0];
-  const activeSubform = serviceSubformData[activeServiceObj.id] || {
-    subServices: [activeServiceObj.subServices[0]],
-    description: activeServiceObj.defaultDesc,
-    photos: ['/images/patch_damage.svg']
   };
 
   // Sync bottom navigation tabs
   const navigateToTab = (tab) => {
     setActiveTab(tab);
     if (tab === 'home') setCurrentScreen('home');
-    if (tab === 'services') setCurrentScreen('services');
+    if (tab === 'services') setCurrentScreen('home');
     if (tab === 'bookings') setCurrentScreen('my_bookings');
     if (tab === 'projects') setCurrentScreen('projects');
     if (tab === 'profile') setCurrentScreen('profile');
   };
 
-  const showBottomNav = ['home', 'services', 'my_bookings', 'projects', 'profile'].includes(currentScreen);
+  const showBottomNav = ['home', 'my_bookings', 'projects', 'profile'].includes(currentScreen);
 
   return (
     <div className="simulator-container">
@@ -259,7 +270,7 @@ export default function App() {
       <div className="top-showcase-bar">
         <div className="showcase-header">
           <div className="brand-label">
-            <span className="gold-text">HP</span> HINDUSTAN PROJECTS <span style={{ opacity: 0.6, fontSize: '11px', fontWeight: '400' }}>(Multi-Service Flow)</span>
+            <span className="gold-text">HP</span> HINDUSTAN PROJECTS <span style={{ opacity: 0.6, fontSize: '11px', fontWeight: '400' }}>(Dynamic Estimation Flow)</span>
           </div>
           <button 
             onClick={() => setFullscreenMode(!fullscreenMode)}
@@ -272,11 +283,11 @@ export default function App() {
         {/* Screen Selector Pills */}
         <div className="screen-pills-row">
           {[
-            { id: 'home', label: '1. Home' },
-            { id: 'services', label: '2. Select Services (Multi)' },
-            { id: 'service_subform', label: '3. Service Sub-Forms' },
-            { id: 'schedule_date_time', label: '4. Date & Desired Time' },
-            { id: 'estimation_review', label: '5. Work Estimation' },
+            { id: 'home', label: '1. Home (Categories)' },
+            { id: 'subcategory_selection', label: '2. Subcategories' },
+            { id: 'subservice_patch_form', label: '3. Patch Details & Photos' },
+            { id: 'schedule_date_time', label: '4. Date & Time' },
+            { id: 'estimation_review', label: '5. Work Quotation' },
             { id: 'payment', label: '6. Payment' },
             { id: 'confirmation', label: '7. Work Started' },
             { id: 'my_bookings', label: '8. Bookings' },
@@ -288,7 +299,7 @@ export default function App() {
               className={`screen-pill-btn ${currentScreen === s.id ? 'active' : ''}`}
               onClick={() => {
                 setCurrentScreen(s.id);
-                if (['home', 'services', 'my_bookings', 'projects', 'profile'].includes(s.id)) {
+                if (['home', 'my_bookings', 'projects', 'profile'].includes(s.id)) {
                   setActiveTab(s.id === 'my_bookings' ? 'bookings' : s.id);
                 }
               }}
@@ -315,9 +326,10 @@ export default function App() {
         {/* Scrollable Screen Content */}
         <div className={`screen-scroll-viewport ${!showBottomNav ? 'no-bottom-nav' : ''}`}>
 
-          {/* ================= 1. HOME SCREEN ================= */}
+          {/* ================= 1. HOME SCREEN: SHOWS CATEGORIES ================= */}
           {currentScreen === 'home' && (
             <div className="fade-in-slide">
+              {/* Location Bar */}
               <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <MapPin size={15} color="#0B2545" />
@@ -329,6 +341,7 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Brand Header */}
               <div style={{ padding: '14px 18px 8px 18px' }}>
                 <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit', letterSpacing: '0.5px' }}>
                   HINDUSTAN PROJECTS
@@ -340,7 +353,7 @@ export default function App() {
 
               {/* Hero Banner Card */}
               <div style={{ padding: '0 16px', margin: '8px 0 16px 0' }}>
-                <div style={{ position: 'relative', height: '170px', borderRadius: '20px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+                <div style={{ position: 'relative', height: '160px', borderRadius: '20px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
                   <img 
                     src="/images/hero_villa.jpg" 
                     alt="Luxury Home"
@@ -348,175 +361,222 @@ export default function App() {
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                   <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(11,37,69,0.92) 0%, rgba(11,37,69,0.65) 60%, transparent 100%)', padding: '18px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <h2 style={{ fontSize: '17px', fontWeight: '800', color: '#fff', fontFamily: 'Outfit', lineHeight: '1.3', maxWidth: '200px' }}>
+                    <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#fff', fontFamily: 'Outfit', lineHeight: '1.3', maxWidth: '190px' }}>
                       Build Better With Expert Services
                     </h2>
                     <button 
-                      onClick={() => setCurrentScreen('services')}
-                      style={{ marginTop: '12px', background: '#F59E0B', color: '#071930', border: 'none', padding: '8px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', width: 'fit-content', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => handleCategoryClick(CATEGORIES[0])}
+                      style={{ marginTop: '10px', background: '#F59E0B', color: '#071930', border: 'none', padding: '8px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', width: 'fit-content', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
-                      Select Multiple Services →
+                      Book an Appointment →
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* 4 Quick Actions */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', padding: '0 16px 18px 16px' }}>
-                <div onClick={() => setCurrentScreen('services')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#EFF6FF', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                    <Grid size={22} />
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Our Services</span>
-                </div>
-
-                <div onClick={() => setCurrentScreen('projects')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#F3E8FF', color: '#7E22CE', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                    <Building size={22} />
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Recent Projects</span>
-                </div>
-
-                <div onClick={() => setCurrentScreen('services')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                    <Calculator size={22} />
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Multi-Quote</span>
-                </div>
-
-                <div onClick={() => setCurrentScreen('profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: '#DCFCE7', color: '#15803D', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                    <PhoneCall size={22} />
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#0B2545', textAlign: 'center' }}>Contact Us</span>
-                </div>
+              {/* CATEGORIES SECTION (ICON ON TOP, TEXT BELOW INSTEAD OF FULL) */}
+              <div style={{ padding: '0 16px 12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '15px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
+                  Categories
+                </span>
+                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                  {CATEGORIES.length} Services
+                </span>
               </div>
 
-              {/* Multi-Service Banner */}
-              <div style={{ padding: '0 16px 20px 16px' }}>
-                <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '16px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#1E40AF' }}>Need Multiple Repairs?</div>
-                    <div style={{ fontSize: '11px', color: '#3B82F6', marginTop: '2px' }}>Select civil, waterproofing, painting together in 1 visit!</div>
-                  </div>
-                  <button 
-                    onClick={() => setCurrentScreen('services')}
-                    style={{ background: '#1D4ED8', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+              {/* 4-Column Category Grid: Icon with text below */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '16px 8px',
+                padding: '0 16px 22px 16px'
+              }}>
+                {CATEGORIES.map((cat) => (
+                  <div
+                    key={cat.id}
+                    onClick={() => handleCategoryClick(cat)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '7px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
                   >
-                    Select →
-                  </button>
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '16px',
+                      background: cat.bg,
+                      color: cat.color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                      border: '1px solid rgba(0,0,0,0.04)',
+                      transition: 'transform 0.15s ease'
+                    }}>
+                      <cat.icon size={26} strokeWidth={2.2} />
+                    </div>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      color: '#0B2545',
+                      lineHeight: '1.25',
+                      textAlign: 'center',
+                      maxWidth: '75px'
+                    }}>
+                      {cat.shortTitle || cat.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Featured Project Showcase Card */}
+              <div style={{ padding: '0 16px 20px 16px' }}>
+                <div 
+                  onClick={() => setCurrentScreen('projects')}
+                  style={{
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '16px',
+                    padding: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Building size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Explore Recent Projects</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>Verified civil & architectural work</div>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} color="#94A3B8" />
                 </div>
               </div>
             </div>
           )}
 
-          {/* ================= 2. SERVICES LIST (WITH MULTI-SELECT CHECKBOXES) ================= */}
-          {currentScreen === 'services' && (
-            <div className="fade-in-slide" style={{ paddingBottom: '70px' }}>
+          {/* ================= 2. SUBCATEGORY PAGE (USER SELECTS CHECKBOXES & CLICKS NEXT) ================= */}
+          {currentScreen === 'subcategory_selection' && (
+            <div className="fade-in-slide">
               <div className="subscreen-top-header">
                 <button className="back-btn" onClick={() => setCurrentScreen('home')}>
                   <ArrowLeft size={18} />
                 </button>
-                <div className="subscreen-title">Select Services (Multiple)</div>
+                <div className="subscreen-title">{activeCategory.title}</div>
                 <div style={{ width: '24px' }} />
               </div>
 
-              {/* Explanatory Header */}
-              <div style={{ padding: '12px 16px 4px 16px' }}>
-                <p style={{ fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
-                  Select all the services you need. For each service selected, a sub-form will open one by one to upload patch photos.
-                </p>
-              </div>
-
-              {/* Service Cards List with Multi-Select Checkboxes */}
-              <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {ALL_SERVICES.map((item) => {
-                  const isChecked = selectedServiceIds.includes(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => toggleServiceSelection(item.id)}
-                      style={{
-                        background: isChecked ? '#FFFBEB' : '#fff',
-                        border: `1.5px solid ${isChecked ? '#F59E0B' : '#E2E8F0'}`,
-                        borderRadius: '14px',
-                        padding: '12px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      {/* Checkbox Icon */}
-                      <div className={`multi-select-pill ${isChecked ? 'checked' : ''}`} style={{ background: isChecked ? '#0B2545' : '#fff' }}>
-                        {isChecked && <Check size={14} color="#fff" />}
-                      </div>
-
-                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: item.bg, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <item.icon size={20} />
-                      </div>
-
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{item.title}</div>
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{item.subtitle}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Floating Multi-Service Bottom Action Bar */}
-              {selectedServiceIds.length > 0 && (
-                <div className="multi-select-floating-bar">
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '700' }}>
-                      {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'Service' : 'Services'} Selected
-                    </div>
-                    <div style={{ fontSize: '11px', opacity: 0.8 }}>
-                      Configure patch details & photos
-                    </div>
+              <div style={{ padding: '16px' }}>
+                {/* Category Header */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: activeCategory.bg, padding: '14px', borderRadius: '16px', marginBottom: '14px' }}>
+                  <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: '#fff', color: activeCategory.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <activeCategory.icon size={24} />
                   </div>
-
-                  <button 
-                    onClick={handleStartSubforms}
-                    style={{ background: '#F59E0B', color: '#071930', border: 'none', padding: '9px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                  >
-                    Next <ArrowRight size={14} />
-                  </button>
+                  <div>
+                    <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0B2545' }}>{activeCategory.title}</h2>
+                    <div style={{ fontSize: '11px', color: '#64748B' }}>{activeCategory.subtitle}</div>
+                  </div>
                 </div>
-              )}
+
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '6px' }}>
+                  Select Sub-Services (Checkboxes):
+                </div>
+                <p style={{ fontSize: '11px', color: '#64748B', marginBottom: '14px' }}>
+                  Check all the services you need. For each checked service, a sub-form will open next to upload patch photos.
+                </p>
+
+                {/* Subcategory Checkbox List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+                  {activeCategory.subcategories.map((sub) => {
+                    const isChecked = selectedSubcategories.some(item => item.id === sub.id);
+                    return (
+                      <div
+                        key={sub.id}
+                        onClick={() => toggleSubcategoryCheck(sub)}
+                        style={{
+                          background: isChecked ? '#EFF6FF' : '#fff',
+                          border: `1.5px solid ${isChecked ? '#1D4ED8' : '#E2E8F0'}`,
+                          borderRadius: '14px',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {/* Interactive Checkbox */}
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '5px',
+                          border: `2px solid ${isChecked ? '#1D4ED8' : '#CBD5E1'}`,
+                          background: isChecked ? '#1D4ED8' : '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {isChecked && <Check size={14} color="#fff" />}
+                        </div>
+
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>{sub.name}</div>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{sub.desc}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* NEXT BUTTON */}
+                <button 
+                  className="btn-hp-primary"
+                  onClick={handleStartSubforms}
+                  disabled={selectedSubcategories.length === 0}
+                  style={{ opacity: selectedSubcategories.length === 0 ? 0.6 : 1 }}
+                >
+                  Next ({selectedSubcategories.length} {selectedSubcategories.length === 1 ? 'Service' : 'Services'} Selected) →
+                </button>
+              </div>
             </div>
           )}
 
-          {/* ================= 3. SUB-FORM FOR EACH SERVICE (OPENED ONE BY ONE!) ================= */}
-          {currentScreen === 'service_subform' && (
+          {/* ================= 3. SUB-FORM FOR EACH SUB-SERVICE INDIVIDUALLY (PATCH WORK & IMAGES) ================= */}
+          {currentScreen === 'subservice_patch_form' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
-                <button className="back-btn" onClick={handlePrevSubform}>
+                <button className="back-btn" onClick={handlePrevSubservice}>
                   <ArrowLeft size={18} />
                 </button>
                 <div className="subscreen-title">
-                  Sub-Form {currentSubformIndex + 1} of {selectedServiceIds.length}
+                  Sub-Service {currentSubformIdx + 1} of {selectedSubcategories.length}
                 </div>
                 <div style={{ width: '24px' }} />
               </div>
 
               <div style={{ padding: '16px' }}>
-                {/* Wizard Progress Bar */}
+                {/* Wizard Progress Indicator */}
                 <div className="wizard-progress-bar">
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#0B2545' }}>
-                    SERVICE {currentSubformIndex + 1} OF {selectedServiceIds.length}
+                    SERVICE {currentSubformIdx + 1} OF {selectedSubcategories.length}
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    {selectedServiceIds.map((_, idx) => (
+                    {selectedSubcategories.map((_, idx) => (
                       <div 
                         key={idx} 
                         style={{
-                          width: idx === currentSubformIndex ? '20px' : '8px',
+                          width: idx === currentSubformIdx ? '20px' : '8px',
                           height: '8px',
                           borderRadius: '4px',
-                          background: idx <= currentSubformIndex ? '#0B2545' : '#CBD5E1',
+                          background: idx <= currentSubformIdx ? '#0B2545' : '#CBD5E1',
                           transition: 'all 0.2s ease'
                         }}
                       />
@@ -524,79 +584,34 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Current Service Header Badge */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: activeServiceObj.bg, padding: '12px', borderRadius: '14px', marginBottom: '16px' }}>
-                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#fff', color: activeServiceObj.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {React.createElement(activeServiceObj.icon, { size: 22 })}
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0B2545' }}>{activeServiceObj.title}</h3>
-                    <div style={{ fontSize: '11px', color: '#64748B' }}>Configure patch work details for this service</div>
-                  </div>
-                </div>
-
-                {/* Sub-Service Checkbox Selection */}
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '8px' }}>
-                    1. Select Specific Issues for {activeServiceObj.title}:
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {activeServiceObj.subServices.map((sub, sIdx) => {
-                      const isSubSelected = activeSubform.subServices?.includes(sub);
-                      return (
-                        <div
-                          key={sIdx}
-                          onClick={() => {
-                            const updated = isSubSelected 
-                              ? activeSubform.subServices.filter(item => item !== sub)
-                              : [...(activeSubform.subServices || []), sub];
-                            setServiceSubformData(prev => ({
-                              ...prev,
-                              [activeServiceObj.id]: {
-                                ...activeSubform,
-                                subServices: updated
-                              }
-                            }));
-                          }}
-                          style={{
-                            background: isSubSelected ? '#EFF6FF' : '#fff',
-                            border: `1.5px solid ${isSubSelected ? '#2563EB' : '#E2E8F0'}`,
-                            borderRadius: '10px',
-                            padding: '8px 12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            color: '#0F172A'
-                          }}
-                        >
-                          <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `1.5px solid ${isSubSelected ? '#2563EB' : '#94A3B8'}`, background: isSubSelected ? '#2563EB' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {isSubSelected && <Check size={12} color="#fff" />}
-                          </div>
-                          <span>{sub}</span>
-                        </div>
-                      );
-                    })}
+                {/* Active Sub-Service Title Badge */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '14px', marginBottom: '16px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {activeCategory.title}
+                  </span>
+                  <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0B2545', marginTop: '2px' }}>
+                    {currentSubObj.name}
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                    {currentSubObj.desc}
                   </div>
                 </div>
 
-                {/* Patch Work Photo Upload for THIS service */}
+                {/* 1. UPLOAD IMAGES FOR THIS SUB-SERVICE */}
                 <div style={{ marginBottom: '16px' }}>
                   <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
-                    2. Upload Images of {activeServiceObj.title} Patch Work Area:
+                    1. Upload Images of Patch Work Area:
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px' }}>
-                    Photos of damaged surface, cracks, seepage or specific repair spots.
+                    Upload clear photos of this specific damaged spot or crack.
                   </div>
 
+                  {/* Photo Upload Zone */}
                   <label style={{ display: 'block', border: '2px dashed #93C5FD', background: '#EFF6FF', borderRadius: '12px', padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
                     <input 
                       type="file" 
                       accept="image/*" 
-                      multiple 
-                      onChange={(e) => handleUploadPhotoForCurrentService(activeServiceObj.id, e.target.files?.[0])}
+                      onChange={handleUploadPhoto}
                       style={{ display: 'none' }} 
                     />
                     <UploadCloud size={24} color="#1D4ED8" style={{ margin: '0 auto 4px auto' }} />
@@ -605,18 +620,18 @@ export default function App() {
                     </div>
                   </label>
 
-                  {/* Uploaded Photos Preview for this service */}
-                  {activeSubform.photos && activeSubform.photos.length > 0 && (
+                  {/* Uploaded Photos Preview for this specific subservice */}
+                  {currentPatchData.photos && currentPatchData.photos.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '10px' }}>
-                      {activeSubform.photos.map((pUrl, pIdx) => (
+                      {currentPatchData.photos.map((pUrl, pIdx) => (
                         <div key={pIdx} style={{ position: 'relative', height: '65px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #CBD5E1' }}>
                           <img src={pUrl} alt="Patch" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           <button 
                             onClick={() => {
-                              const remaining = activeSubform.photos.filter((_, i) => i !== pIdx);
-                              setServiceSubformData(prev => ({
+                              const remaining = currentPatchData.photos.filter((_, i) => i !== pIdx);
+                              setPatchDataBySubId(prev => ({
                                 ...prev,
-                                [activeServiceObj.id]: { ...activeSubform, photos: remaining }
+                                [currentSubObj.id]: { ...currentPatchData, photos: remaining }
                               }));
                             }}
                             style={{ position: 'absolute', top: '3px', right: '3px', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
@@ -629,33 +644,33 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Description for THIS service */}
-                <div style={{ marginBottom: '22px' }}>
+                {/* 2. ENTER DETAILS OF THIS SUB-SERVICE */}
+                <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
-                    3. Notes / Measurements for {activeServiceObj.title}:
+                    2. Patch Work Detail / Measurements:
                   </div>
                   <textarea
-                    rows={2}
-                    value={activeSubform.description || ''}
+                    rows={3}
+                    value={currentPatchData.notes || ''}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setServiceSubformData(prev => ({
+                      setPatchDataBySubId(prev => ({
                         ...prev,
-                        [activeServiceObj.id]: { ...activeSubform, description: val }
+                        [currentSubObj.id]: { ...currentPatchData, notes: val }
                       }));
                     }}
-                    placeholder="Describe problem details, dimensions or locations..."
-                    style={{ width: '100%', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '8px 10px', fontSize: '12px', outline: 'none' }}
+                    placeholder="Enter details like dimensions (e.g. 10x12 ft), depth of crack, wall location..."
+                    style={{ width: '100%', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '10px', fontSize: '12px', outline: 'none' }}
                   />
                 </div>
 
-                {/* Subform Navigation Buttons */}
+                {/* Navigation Buttons: Previous / Next */}
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  {currentSubformIndex > 0 && (
+                  {currentSubformIdx > 0 && (
                     <button 
                       className="btn-hp-secondary"
                       style={{ flex: 1 }}
-                      onClick={handlePrevSubform}
+                      onClick={handlePrevSubservice}
                     >
                       ← Previous
                     </button>
@@ -663,11 +678,11 @@ export default function App() {
                   <button 
                     className="btn-hp-primary"
                     style={{ flex: 2 }}
-                    onClick={handleNextSubform}
+                    onClick={handleNextSubservice}
                   >
-                    {currentSubformIndex < selectedServiceIds.length - 1 
-                      ? `Next: ${ALL_SERVICES.find(s => s.id === selectedServiceIds[currentSubformIndex + 1])?.title || 'Next Service'} →`
-                      : 'Next: Select Date & Desired Time →'
+                    {currentSubformIdx < selectedSubcategories.length - 1 
+                      ? `Next: ${selectedSubcategories[currentSubformIdx + 1]?.name} →`
+                      : 'Next: Select Date & Time →'
                     }
                   </button>
                 </div>
@@ -675,29 +690,31 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 4. DATE SELECTION & USER DESIRED TIME SUGGESTION ================= */}
+          {/* ================= 4. DATE & TIME SELECTION SCREEN ================= */}
           {currentScreen === 'schedule_date_time' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
-                <button className="back-btn" onClick={() => setCurrentScreen('service_subform')}>
+                <button className="back-btn" onClick={() => setCurrentScreen('subservice_patch_form')}>
                   <ArrowLeft size={18} />
                 </button>
-                <div className="subscreen-title">Schedule Date & Desired Time</div>
+                <div className="subscreen-title">Select Date & Time</div>
                 <div style={{ width: '24px' }} />
               </div>
 
               <div style={{ padding: '16px' }}>
-                {/* Selected Services Summary Pill */}
+                {/* Summary of configured sub-services */}
                 <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '10px 12px', borderRadius: '12px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '700' }}>SERVICES CONFIGURED ({selectedServiceIds.length}):</div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginTop: '2px' }}>
-                    {selectedServiceIds.map(id => ALL_SERVICES.find(s => s.id === id)?.title).join(' • ')}
+                  <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '700' }}>
+                    CONFIGURED SUB-SERVICES ({selectedSubcategories.length}):
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginTop: '2px' }}>
+                    {selectedSubcategories.map(s => s.name).join(' • ')}
                   </div>
                 </div>
 
                 {/* 1. SELECT DATE */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>1. Preferred Date</span>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>1. Select Date</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>
                     <span>&lt;</span> Apr 2025 <span>&gt;</span>
                   </div>
@@ -732,52 +749,46 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. USER SUGGESTS DESIRED TIME (User Requirement) */}
+                {/* 2. SELECT TIME */}
                 <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
-                    2. Suggest Your Desired Time:
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px' }}>
-                    Pick your preferred window or suggest an exact time convenient for you.
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545', marginBottom: '6px' }}>
+                    2. Select Time Window:
                   </div>
 
-                  {/* Window Chips */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '10px' }}>
                     {[
-                      { id: 'morning', label: '🌅 Morning (9 AM - 12 PM)' },
-                      { id: 'afternoon', label: '☀️ Afternoon (1 PM - 4 PM)' },
-                      { id: 'evening', label: '🌆 Evening (4 PM - 7 PM)' },
-                      { id: 'flexible', label: '⚡ Flexible / Any Time' }
+                      '09:00 AM - 11:00 AM',
+                      '11:30 AM - 01:30 PM',
+                      '02:30 PM - 04:30 PM',
+                      '05:00 PM - 07:00 PM'
                     ].map(slot => (
                       <button
-                        key={slot.id}
-                        onClick={() => setDesiredTimeWindow(slot.id)}
+                        key={slot}
+                        onClick={() => setSelectedTimeSlot(slot)}
                         style={{
                           padding: '10px 8px',
                           borderRadius: '10px',
-                          border: `1.5px solid ${desiredTimeWindow === slot.id ? '#0B2545' : '#E2E8F0'}`,
-                          background: desiredTimeWindow === slot.id ? '#0B2545' : '#fff',
-                          color: desiredTimeWindow === slot.id ? '#fff' : '#0F172A',
+                          border: `1.5px solid ${selectedTimeSlot === slot ? '#0B2545' : '#E2E8F0'}`,
+                          background: selectedTimeSlot === slot ? '#0B2545' : '#fff',
+                          color: selectedTimeSlot === slot ? '#fff' : '#0F172A',
                           fontSize: '11px',
                           fontWeight: '600',
-                          cursor: 'pointer',
-                          textAlign: 'left'
+                          cursor: 'pointer'
                         }}
                       >
-                        {slot.label}
+                        {slot}
                       </button>
                     ))}
                   </div>
 
-                  {/* Custom Time Suggestion Input */}
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Any specific time preference?
+                    Custom time note (optional):
                   </label>
                   <input
                     type="text"
-                    value={customDesiredTime}
-                    onChange={(e) => setCustomDesiredTime(e.target.value)}
-                    placeholder="e.g. Around 11:30 AM before lunch, or after 5 PM"
+                    value={customTimeNote}
+                    onChange={(e) => setCustomTimeNote(e.target.value)}
+                    placeholder="e.g. Please call before arriving"
                     style={{ width: '100%', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '10px 12px', fontSize: '12px', outline: 'none' }}
                   />
                 </div>
@@ -786,20 +797,20 @@ export default function App() {
                   className="btn-hp-primary"
                   onClick={() => setCurrentScreen('estimation_review')}
                 >
-                  Send for Multi-Service Estimation (₹0 Upfront)
+                  Send for Quotation & Estimation (₹0 Upfront)
                 </button>
               </div>
             </div>
           )}
 
-          {/* ================= 5. MULTI-SERVICE WORK ESTIMATION REVIEW ================= */}
+          {/* ================= 5. ESTIMATION / QUOTATION REVIEW (USER APPROVES THEN WE START WORKING) ================= */}
           {currentScreen === 'estimation_review' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
                 <button className="back-btn" onClick={() => setCurrentScreen('schedule_date_time')}>
                   <ArrowLeft size={18} />
                 </button>
-                <div className="subscreen-title">Work Estimation</div>
+                <div className="subscreen-title">Work Quotation</div>
                 <div style={{ width: '24px' }} />
               </div>
 
@@ -807,40 +818,30 @@ export default function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <div>
                     <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0B2545' }}>
-                      Combined Estimation #{Math.floor(1000 + Math.random() * 9000)}
+                      Quotation #EST-2025-8942
                     </h3>
                     <div style={{ fontSize: '11px', color: '#64748B' }}>
-                      Scheduled: <strong>{selectedDate} Apr 2025</strong> ({customDesiredTime})
+                      Scheduled Date: <strong>{selectedDate} Apr 2025</strong> ({selectedTimeSlot})
                     </div>
                   </div>
                   <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '4px 8px', borderRadius: '6px' }}>
-                    MULTI-SERVICE
+                    QUOTATION READY
                   </span>
                 </div>
 
-                {/* Grouped Estimation Breakdown per selected service */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-                  {selectedServiceIds.map((sId) => {
-                    const sObj = ALL_SERVICES.find(s => s.id === sId);
-                    const sfData = serviceSubformData[sId] || {};
-                    const isCivil = sId === 's1';
-                    const sTotal = isCivil ? 7200 : 5400;
-
+                {/* Sub-services breakdown */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                  {selectedSubcategories.map((sub, idx) => {
+                    const cost = 4200 + idx * 1800;
+                    const patch = patchDataBySubId[sub.id] || {};
                     return (
-                      <div key={sId} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: '800', fontSize: '13px', color: '#0B2545' }}>{sObj?.title}</span>
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8' }}>₹{sTotal.toLocaleString()}</span>
+                      <div key={sub.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '6px', marginBottom: '6px' }}>
+                          <span style={{ fontWeight: '800', fontSize: '12px', color: '#0B2545' }}>{sub.name}</span>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8' }}>₹{cost.toLocaleString()}</span>
                         </div>
-
-                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '6px' }}>
-                          <strong>Sub-services:</strong> {sfData.subServices?.join(', ') || 'Inspection'}
-                        </div>
-
-                        <div style={{ fontSize: '11px', color: '#475569', background: '#F8FAFC', padding: '6px 8px', borderRadius: '8px' }}>
-                          "{sfData.description || 'Patch work specified.'}"
+                        <div style={{ fontSize: '11px', color: '#475569', background: '#F8FAFC', padding: '6px 8px', borderRadius: '6px' }}>
+                          "{patch.notes || 'Patch repair specified.'}"
                         </div>
                       </div>
                     );
@@ -850,25 +851,26 @@ export default function App() {
                 {/* Total Summary */}
                 <div style={{ background: '#0B2545', color: '#fff', borderRadius: '16px', padding: '14px', marginBottom: '18px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '12px', opacity: 0.8 }}>Total Services Configured</span>
-                    <span style={{ fontWeight: '700' }}>{selectedServiceIds.length} Services</span>
+                    <span style={{ fontSize: '12px', opacity: 0.8 }}>Total Services Included</span>
+                    <span style={{ fontWeight: '700' }}>{selectedSubcategories.length} Sub-Services</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '8px' }}>
                     <div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>TOTAL ESTIMATION</div>
+                      <div style={{ fontSize: '11px', opacity: 0.8 }}>TOTAL QUOTATION</div>
                       <div style={{ fontSize: '10px', color: '#F59E0B' }}>Includes all materials, labor & GST</div>
                     </div>
                     <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'Outfit', color: '#F59E0B' }}>
-                      ₹12,600
+                      ₹{(selectedSubcategories.length * 4200 + 1800).toLocaleString()}
                     </div>
                   </div>
                 </div>
 
+                {/* Action: Approve Quotation then we start working */}
                 <button 
                   className="btn-hp-primary"
                   onClick={() => setCurrentScreen('payment')}
                 >
-                  Approve Estimation & Proceed to Payment
+                  Approve Quotation & Proceed to Payment
                 </button>
               </div>
             </div>
@@ -887,9 +889,9 @@ export default function App() {
 
               <div style={{ padding: '16px' }}>
                 <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '14px', marginBottom: '18px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Total Multi-Service Estimation</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Approved Quotation Amount</div>
                   <div style={{ fontSize: '24px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                    ₹12,600
+                    ₹{(selectedSubcategories.length * 4200 + 1800).toLocaleString()}
                   </div>
                 </div>
 
@@ -932,11 +934,6 @@ export default function App() {
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', color: '#64748B', marginBottom: '20px' }}>
-                  <Lock size={12} color="#10B981" />
-                  <span>Your payment is secure and encrypted</span>
-                </div>
-
                 <button 
                   className="btn-hp-primary"
                   onClick={() => setCurrentScreen('confirmation')}
@@ -955,21 +952,21 @@ export default function App() {
               </div>
 
               <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                All Services Scheduled & Work Started!
+                Quotation Approved & Work Started!
               </h1>
               <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', marginBottom: '20px' }}>
-                Appointment locked for <strong>{selectedDate} Apr 2025</strong> ({customDesiredTime}). Technical team dispatched!
+                Scheduled for <strong>{selectedDate} Apr 2025</strong> ({selectedTimeSlot}). Our team has started working!
               </p>
 
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '16px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
                 <div>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SCHEDULED DATE & DESIRED TIME</div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{selectedDate} Apr 2025 • {customDesiredTime}</div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SCHEDULED DATE & TIME</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>{selectedDate} Apr 2025 • {selectedTimeSlot}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SERVICES INCLUDED ({selectedServiceIds.length})</div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SERVICES APPROVED ({selectedSubcategories.length})</div>
                   <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
-                    {selectedServiceIds.map(id => ALL_SERVICES.find(s => s.id === id)?.title).join(', ')}
+                    {selectedSubcategories.map(s => s.name).join(', ')}
                   </div>
                 </div>
                 <div>
@@ -1011,23 +1008,23 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
-                        Multi-Service Patch Work ({selectedServiceIds.length} Services)
+                        {activeCategory.title} ({selectedSubcategories.length} Sub-Services)
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748B' }}>
-                        {selectedDate} Apr 2025 • Desired Time: {customDesiredTime}
+                        {selectedDate} Apr 2025 • {selectedTimeSlot}
                       </div>
                     </div>
                     <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '3px 8px', borderRadius: '6px' }}>
-                      Active
+                      Work Active
                     </span>
                   </div>
 
                   <div style={{ fontSize: '11px', color: '#334155', background: '#F8FAFC', padding: '8px', borderRadius: '8px', marginBottom: '10px' }}>
-                    {selectedServiceIds.map(id => ALL_SERVICES.find(s => s.id === id)?.title).join(' • ')}
+                    {selectedSubcategories.map(s => s.name).join(' • ')}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', fontSize: '11px', fontWeight: '600', color: '#0B2545' }}>
-                    <span style={{ cursor: 'pointer' }} onClick={() => setCurrentScreen('estimation_review')}>View Estimation</span>
+                    <span style={{ cursor: 'pointer' }} onClick={() => setCurrentScreen('estimation_review')}>View Quotation</span>
                     <span style={{ cursor: 'pointer' }}>Track Team</span>
                     <span style={{ color: '#EF4444', cursor: 'pointer' }}>Support</span>
                   </div>
