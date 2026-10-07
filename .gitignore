@@ -26,3 +26,17 @@ dist-ssr
 # Standalone separate projects
 ecommerce_demo/
 
+
+# Environment files
+.env
+.env.*
+*.env
+backend/.env
+
+# Uploads
+uploads/
+backend/uploads/
+
+Hipro_app/
+!.env.example
+!backend/.env.example
