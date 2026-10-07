@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Home, Grid, Calendar, Briefcase, User, MapPin, Bell, ChevronRight,
   ArrowLeft, Star, Clock, ShieldCheck, Users, CheckCircle2,
@@ -7,8 +7,10 @@ import {
   X, AlertCircle, LogOut, Info, Settings, Bookmark, Search, Maximize2,
   UploadCloud, Sparkles, ArrowRight
 } from 'lucide-react';
+import AdminApp from './admin/AdminApp.jsx';
 
 // The 8 Primary Construction & Maintenance Categories with Subcategories
+
 const CATEGORIES = [
   {
     id: 'cat_civil',
@@ -123,9 +125,22 @@ const CATEGORIES = [
 ];
 
 export default function App() {
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      const path = window.location.pathname;
+      if (hash === '#client') return 'client';
+      if (hash === '#admin' || path.includes('/admin')) return 'admin';
+    }
+    return 'admin'; // Defaults to Admin Panel as requested
+  });
+
   const [currentScreen, setCurrentScreen] = useState('home');
   const [fullscreenMode, setFullscreenMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
+
+  // Dynamic Categories from Backend API
+  const [categoriesList, setCategoriesList] = useState(CATEGORIES);
 
   // Active Category clicked from Home page
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]);
@@ -151,13 +166,225 @@ export default function App() {
     }
   });
 
+  // Fetch Services & SubServices dynamically from Backend API on mount
+  useEffect(() => {
+    fetch('http://localhost:5000/api/v1/services')
+      .then(res => res.json())
+      .then(data => {
+        const backendServices = data.services || data.data || [];
+        if (backendServices.length > 0) {
+          const mapped = backendServices.map((bs, index) => {
+            const defaultMatch = CATEGORIES.find(c =>
+              c.id.toLowerCase().includes(bs.code.toLowerCase()) ||
+              bs.code.toLowerCase().includes(c.id.toLowerCase()) ||
+              c.title.toLowerCase().includes(bs.name.toLowerCase())
+            ) || CATEGORIES[index % CATEGORIES.length];
+
+            return {
+              id: bs.code || bs.id,
+              title: bs.name,
+              shortTitle: bs.name.split(' ')[0] + (bs.name.split(' ')[1] ? ' ' + bs.name.split(' ')[1] : ''),
+              subtitle: bs.description || defaultMatch.subtitle,
+              icon: defaultMatch.icon,
+              color: defaultMatch.color,
+              bg: defaultMatch.bg,
+              subcategories: (bs.subServices && bs.subServices.length > 0)
+                ? bs.subServices.map((sub, i) => ({
+                  id: sub.id || `${bs.code}_${i}`,
+                  name: sub.titleEn || sub.name,
+                  desc: sub.desc || sub.description || '',
+                  defaultNotes: `Issue: ${sub.titleEn} (${sub.desc})`,
+                  checklist: sub.checklist || []
+                }))
+                : defaultMatch.subcategories
+            };
+          });
+
+          setCategoriesList(mapped);
+          setActiveCategory(mapped[0]);
+          if (mapped[0].subcategories && mapped[0].subcategories.length > 0) {
+            setSelectedSubcategories([mapped[0].subcategories[0]]);
+          }
+        }
+      })
+      .catch(err => {
+        console.log('Backend offline or loading defaults:', err);
+      });
+
+    // Auto-fetch existing requests from Neon backend
+    loadAdminRequests();
+  }, []);
+
   // Scheduling: Date & Time
   const [selectedDate, setSelectedDate] = useState(16); // Apr 2025
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('10:30 AM - 12:30 PM');
   const [customTimeNote, setCustomTimeNote] = useState('Morning preferred before lunch');
 
-  // Payment
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
+  // Dynamic Live Quotation & Submitted Request State
+  const [submittedRequest, setSubmittedRequest] = useState(null);
+  const [liveQuotation, setLiveQuotation] = useState(null);
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [showAdminDesk, setShowAdminDesk] = useState(false);
+  const [allBackendRequests, setAllBackendRequests] = useState([]);
+
+  // Admin Custom Quote Form State
+  const [adminQuoteForm, setAdminQuoteForm] = useState({
+    requestId: '',
+    items: [
+      { item: 'Polymer-modified waterproof coating / bonding agent', qty: 2, unit: 'Bucket (20kg)', rate: 1850, amount: 3700 },
+      { item: 'Fiberglass mesh reinforcement for corner joints & cracks', qty: 25, unit: 'R.Ft', rate: 35, amount: 875 },
+      { item: 'Skilled Mason & Waterproofing Specialist Labor', qty: 2, unit: 'Days', rate: 1200, amount: 2400 }
+    ],
+    materialCost: 4575,
+    laborCost: 2400,
+    subtotal: 6975,
+    taxGST: 1255,
+    grandtotal: 8230,
+    estimatedTimeline: '1 - 2 Working Days',
+    termsAndConditions: 'Includes 2 Years comprehensive anti-leakage warranty.'
+  });
+
+  // Fetch all requests for Admin Desk
+  const loadAdminRequests = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/v1/requests');
+      const data = await res.json();
+      if (data && data.data && data.data.length > 0) {
+        setAllBackendRequests(data.data);
+        setAdminQuoteForm(prev => {
+          const currentExists = data.data.some(r => r.id === prev.requestId);
+          return {
+            ...prev,
+            requestId: currentExists ? prev.requestId : data.data[0].id
+          };
+        });
+      } else {
+        setAllBackendRequests([]);
+      }
+    } catch (err) {
+      console.log('Failed to fetch admin requests:', err);
+    }
+  };
+
+  // Helper to create a quick demo request if none exist
+  const handleCreateDemoRequest = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/v1/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          servicecode: 'cat_waterproof',
+          subServiceCode: 'Stop Roof & Terrace Water Leakage',
+          issueDescription: 'Severe water seepage from terrace slab during monsoon rains. Area ~450 sq.ft.',
+          propertyType: 'Residential Villa',
+          propertySize: '1500 sq.ft',
+          location: 'Bhilwara, Rajasthan',
+          preferredDate: '16 Apr 2025',
+          preferredTime: '10:30 AM - 12:30 PM',
+          addressline: 'B-42, Shastri Nagar, Bhilwara'
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setSubmittedRequest(data.data);
+        await loadAdminRequests();
+        setAdminQuoteForm(prev => ({ ...prev, requestId: data.data.id }));
+      }
+    } catch (e) {
+      console.log('Demo request error:', e);
+    }
+  };
+
+  // 1. User Submits Request for Free Inspection (Saved in Neon DB as SUBMITTED / ESTIMATING)
+  const handleSendForQuotation = async () => {
+    setIsSubmittingRequest(true);
+    try {
+      const formData = new FormData();
+      formData.append('servicecode', activeCategory.id);
+      formData.append('subServiceCode', selectedSubcategories.map(s => s.name).join(', '));
+      formData.append('issueDescription', Object.values(patchDataBySubId).map(p => p.notes).filter(Boolean).join(' | ') || 'Repair inspection request');
+      formData.append('propertyType', 'house');
+      formData.append('propertySize', '1200 sq.ft');
+      formData.append('location', 'Bhilwara');
+      formData.append('preferredDate', `${selectedDate} Apr 2025`);
+      formData.append('preferredTime', selectedTimeSlot);
+      formData.append('addressline', 'B-42, Shastri Nagar, Bhilwara');
+
+      const res = await fetch('http://localhost:5000/api/v1/requests', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        setSubmittedRequest(data.data);
+        setAdminQuoteForm(prev => ({ ...prev, requestId: data.data.id }));
+        loadAdminRequests();
+      }
+    } catch (error) {
+      console.log('Request submission error:', error);
+    } finally {
+      setIsSubmittingRequest(false);
+      setCurrentScreen('request_submitted');
+    }
+  };
+
+  // 2. Admin Sends Custom Quotation to User (POST /api/v1/quotations)
+  const handleAdminSendQuotation = async (e) => {
+    e.preventDefault();
+    if (!adminQuoteForm.requestId) {
+      alert('Please select a request to quote for');
+      return;
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/v1/quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: adminQuoteForm.requestId,
+          lineItem: adminQuoteForm.items,
+          materialCost: adminQuoteForm.materialCost,
+          laborCost: adminQuoteForm.laborCost,
+          subtotal: adminQuoteForm.subtotal,
+          taxGST: adminQuoteForm.taxGST,
+          grandtotal: adminQuoteForm.grandtotal,
+          estimatedTimeline: adminQuoteForm.estimatedTimeline,
+          termsAndConditions: adminQuoteForm.termsAndConditions,
+          created_by: 'Hipro Technical Estimator Desk'
+        })
+      });
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        setLiveQuotation(data.data);
+        setShowAdminDesk(false);
+        loadAdminRequests();
+        alert('✅ Quotation sent to customer successfully!');
+        setCurrentScreen('estimation_review');
+      } else {
+        alert('Failed: ' + (data.message || 'Error'));
+      }
+    } catch (err) {
+      alert('Error sending quote: ' + err.message);
+    }
+  };
+
+  // 3. User Approves Quotation in Neon DB
+  const handleApproveQuotation = async () => {
+    if (liveQuotation?.id) {
+      try {
+        await fetch(`http://localhost:5000/api/v1/quotations/${liveQuotation.id}/decision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision: 'ACCEPTED' })
+        });
+      } catch (err) {
+        console.log('Quote approval sync error:', err);
+      }
+    }
+    setCurrentScreen('payment');
+  };
 
   // When user clicks a Category on Home Page -> Open Subcategory page
   const handleCategoryClick = (category) => {
@@ -272,12 +499,23 @@ export default function App() {
           <div className="brand-label">
             <span className="gold-text">HP</span> HINDUSTAN PROJECTS <span style={{ opacity: 0.6, fontSize: '11px', fontWeight: '400' }}>(Dynamic Estimation Flow)</span>
           </div>
-          <button 
-            onClick={() => setFullscreenMode(!fullscreenMode)}
-            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-          >
-            <Maximize2 size={12} /> {fullscreenMode ? 'Bezel' : 'Full'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => {
+                loadAdminRequests();
+                setShowAdminDesk(true);
+              }}
+              style={{ background: '#F59E0B', color: '#071930', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(245,158,11,0.4)' }}
+            >
+              <FileText size={12} /> 👨‍💼 Admin / Estimator Desk
+            </button>
+            <button
+              onClick={() => setFullscreenMode(!fullscreenMode)}
+              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <Maximize2 size={12} /> {fullscreenMode ? 'Bezel' : 'Full'}
+            </button>
+          </div>
         </div>
 
         {/* Screen Selector Pills */}
@@ -312,7 +550,7 @@ export default function App() {
 
       {/* Native Mobile Phone Chassis */}
       <div className={`native-phone-wrapper ${fullscreenMode ? 'full-view' : ''}`}>
-        
+
         {/* Status Bar with Dynamic Island */}
         <div className="phone-status-bar">
           <span>9:41</span>
@@ -354,8 +592,8 @@ export default function App() {
               {/* Hero Banner Card */}
               <div style={{ padding: '0 16px', margin: '8px 0 16px 0' }}>
                 <div style={{ position: 'relative', height: '160px', borderRadius: '20px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
-                  <img 
-                    src="/images/hero_villa.jpg" 
+                  <img
+                    src="/images/hero_villa.jpg"
                     alt="Luxury Home"
                     onError={(e) => { e.target.src = '/images/construction_site.svg'; }}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -364,8 +602,8 @@ export default function App() {
                     <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#fff', fontFamily: 'Outfit', lineHeight: '1.3', maxWidth: '190px' }}>
                       Build Better With Expert Services
                     </h2>
-                    <button 
-                      onClick={() => handleCategoryClick(CATEGORIES[0])}
+                    <button
+                      onClick={() => handleCategoryClick(categoriesList[0])}
                       style={{ marginTop: '10px', background: '#F59E0B', color: '#071930', border: 'none', padding: '8px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', width: 'fit-content', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
                       Book an Appointment →
@@ -380,7 +618,7 @@ export default function App() {
                   Categories
                 </span>
                 <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
-                  {CATEGORIES.length} Services
+                  {categoriesList.length} Services
                 </span>
               </div>
 
@@ -391,7 +629,7 @@ export default function App() {
                 gap: '16px 8px',
                 padding: '0 16px 22px 16px'
               }}>
-                {CATEGORIES.map((cat) => (
+                {categoriesList.map((cat) => (
                   <div
                     key={cat.id}
                     onClick={() => handleCategoryClick(cat)}
@@ -435,7 +673,7 @@ export default function App() {
 
               {/* Featured Project Showcase Card */}
               <div style={{ padding: '0 16px 20px 16px' }}>
-                <div 
+                <div
                   onClick={() => setCurrentScreen('projects')}
                   style={{
                     background: '#F8FAFC',
@@ -537,7 +775,7 @@ export default function App() {
                 </div>
 
                 {/* NEXT BUTTON */}
-                <button 
+                <button
                   className="btn-hp-primary"
                   onClick={handleStartSubforms}
                   disabled={selectedSubcategories.length === 0}
@@ -570,8 +808,8 @@ export default function App() {
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     {selectedSubcategories.map((_, idx) => (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={idx}
                         style={{
                           width: idx === currentSubformIdx ? '20px' : '8px',
                           height: '8px',
@@ -608,11 +846,11 @@ export default function App() {
 
                   {/* Photo Upload Zone */}
                   <label style={{ display: 'block', border: '2px dashed #93C5FD', background: '#EFF6FF', borderRadius: '12px', padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
+                    <input
+                      type="file"
+                      accept="image/*"
                       onChange={handleUploadPhoto}
-                      style={{ display: 'none' }} 
+                      style={{ display: 'none' }}
                     />
                     <UploadCloud size={24} color="#1D4ED8" style={{ margin: '0 auto 4px auto' }} />
                     <div style={{ fontSize: '12px', fontWeight: '700', color: '#1D4ED8' }}>
@@ -626,7 +864,7 @@ export default function App() {
                       {currentPatchData.photos.map((pUrl, pIdx) => (
                         <div key={pIdx} style={{ position: 'relative', height: '65px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #CBD5E1' }}>
                           <img src={pUrl} alt="Patch" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button 
+                          <button
                             onClick={() => {
                               const remaining = currentPatchData.photos.filter((_, i) => i !== pIdx);
                               setPatchDataBySubId(prev => ({
@@ -667,7 +905,7 @@ export default function App() {
                 {/* Navigation Buttons: Previous / Next */}
                 <div style={{ display: 'flex', gap: '10px' }}>
                   {currentSubformIdx > 0 && (
-                    <button 
+                    <button
                       className="btn-hp-secondary"
                       style={{ flex: 1 }}
                       onClick={handlePrevSubservice}
@@ -675,12 +913,12 @@ export default function App() {
                       ← Previous
                     </button>
                   )}
-                  <button 
+                  <button
                     className="btn-hp-primary"
                     style={{ flex: 2 }}
                     onClick={handleNextSubservice}
                   >
-                    {currentSubformIdx < selectedSubcategories.length - 1 
+                    {currentSubformIdx < selectedSubcategories.length - 1
                       ? `Next: ${selectedSubcategories[currentSubformIdx + 1]?.name} →`
                       : 'Next: Select Date & Time →'
                     }
@@ -726,7 +964,7 @@ export default function App() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
                     {[13, 14, 15, 16, 17, 18, 19].map(date => (
-                      <div 
+                      <div
                         key={date}
                         onClick={() => setSelectedDate(date)}
                         style={{
@@ -793,13 +1031,77 @@ export default function App() {
                   />
                 </div>
 
-                <button 
+                <button
                   className="btn-hp-primary"
-                  onClick={() => setCurrentScreen('estimation_review')}
+                  disabled={isSubmittingRequest}
+                  onClick={handleSendForQuotation}
                 >
-                  Send for Quotation & Estimation (₹0 Upfront)
+                  {isSubmittingRequest ? 'Submitting to Engineering Team...' : 'Send for Inspection & Quotation (₹0 Upfront)'}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ================= 4.5. REQUEST SUBMITTED — UNDER REVIEW BY ESTIMATOR ================= */}
+          {currentScreen === 'request_submitted' && (
+            <div className="fade-in-slide" style={{ padding: '24px 16px', textAlign: 'center' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
+                <Clock size={36} />
+              </div>
+
+              <span style={{ fontSize: '11px', fontWeight: '800', background: '#FEF3C7', color: '#B45309', padding: '4px 10px', borderRadius: '8px', letterSpacing: '0.5px' }}>
+                🟡 UNDER ESTIMATOR REVIEW (₹0 UPFRONT)
+              </span>
+
+              <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit', marginTop: '12px', marginBottom: '6px' }}>
+                Request #{submittedRequest?.requestNumber || 'REQ-2026-0841'} Submitted!
+              </h2>
+
+              <p style={{ fontSize: '12px', color: '#64748B', lineHeight: '1.5', maxWidth: '320px', margin: '0 auto 20px auto' }}>
+                Our civil engineering team in Bhilwara is reviewing your uploaded damage photos & patch work notes.
+              </p>
+
+              {/* Request Details Card */}
+              <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>Category:</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>{activeCategory.title}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>Sub-Services:</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>{selectedSubcategories.length} Selected</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>Preferred Slot:</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>{selectedDate} Apr 2025 ({selectedTimeSlot})</span>
+                </div>
+              </div>
+
+              {/* Simulate Admin Sending Quote Action */}
+              <div style={{ background: '#EFF6FF', border: '1.5px dashed #93C5FD', borderRadius: '16px', padding: '14px', marginBottom: '14px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8', marginBottom: '4px' }}>
+                  👨‍💼 Admin / Estimator Simulation:
+                </div>
+                <div style={{ fontSize: '11px', color: '#475569', marginBottom: '10px' }}>
+                  As Admin, open the Estimator Desk to prepare custom material & labor pricing for this request.
+                </div>
+                <button
+                  onClick={() => {
+                    loadAdminRequests();
+                    setShowAdminDesk(true);
+                  }}
+                  style={{ width: '100%', background: '#1D4ED8', color: '#fff', border: 'none', padding: '10px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  <FileText size={14} /> Open Estimator Desk & Send Quote →
+                </button>
+              </div>
+
+              <button
+                className="btn-hp-secondary"
+                onClick={() => setCurrentScreen('my_bookings')}
+              >
+                Track in My Bookings
+              </button>
             </div>
           )}
 
@@ -807,7 +1109,7 @@ export default function App() {
           {currentScreen === 'estimation_review' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
-                <button className="back-btn" onClick={() => setCurrentScreen('schedule_date_time')}>
+                <button className="back-btn" onClick={() => setCurrentScreen('request_submitted')}>
                   <ArrowLeft size={18} />
                 </button>
                 <div className="subscreen-title">Work Quotation</div>
@@ -818,57 +1120,79 @@ export default function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <div>
                     <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0B2545' }}>
-                      Quotation #EST-2025-8942
+                      Quotation #{liveQuotation?.quoteNumber || 'EST-2026-8942'}
                     </h3>
                     <div style={{ fontSize: '11px', color: '#64748B' }}>
                       Scheduled Date: <strong>{selectedDate} Apr 2025</strong> ({selectedTimeSlot})
                     </div>
                   </div>
                   <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '4px 8px', borderRadius: '6px' }}>
-                    QUOTATION READY
+                    {liveQuotation?.status === 'ACCEPTED' ? 'APPROVED' : 'QUOTATION READY'}
                   </span>
                 </div>
 
-                {/* Sub-services breakdown */}
+                {/* Dynamic Itemized Line Items from Neon DB */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-                  {selectedSubcategories.map((sub, idx) => {
-                    const cost = 4200 + idx * 1800;
-                    const patch = patchDataBySubId[sub.id] || {};
-                    return (
-                      <div key={sub.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px' }}>
+                  {liveQuotation?.lineItem && Array.isArray(liveQuotation.lineItem) && liveQuotation.lineItem.length > 0 ? (
+                    liveQuotation.lineItem.map((item, idx) => (
+                      <div key={idx} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '6px', marginBottom: '6px' }}>
-                          <span style={{ fontWeight: '800', fontSize: '12px', color: '#0B2545' }}>{sub.name}</span>
-                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8' }}>₹{cost.toLocaleString()}</span>
+                          <span style={{ fontWeight: '800', fontSize: '12px', color: '#0B2545' }}>{item.item}</span>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8' }}>₹{Number(item.amount).toLocaleString()}</span>
                         </div>
                         <div style={{ fontSize: '11px', color: '#475569', background: '#F8FAFC', padding: '6px 8px', borderRadius: '6px' }}>
-                          "{patch.notes || 'Patch repair specified.'}"
+                          Qty: {item.qty} {item.unit} @ ₹{item.rate}/{item.unit}
                         </div>
                       </div>
-                    );
-                  })}
+                    ))
+                  ) : (
+                    selectedSubcategories.map((sub, idx) => {
+                      const cost = 4200 + idx * 1800;
+                      const patch = patchDataBySubId[sub.id] || {};
+                      return (
+                        <div key={sub.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '6px', marginBottom: '6px' }}>
+                            <span style={{ fontWeight: '800', fontSize: '12px', color: '#0B2545' }}>{sub.name}</span>
+                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8' }}>₹{cost.toLocaleString()}</span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#475569', background: '#F8FAFC', padding: '6px 8px', borderRadius: '6px' }}>
+                            "{patch.notes || 'Patch repair specified.'}"
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
-                {/* Total Summary */}
+                {/* Total Summary (Calculated from Backend Quotation) */}
                 <div style={{ background: '#0B2545', color: '#fff', borderRadius: '16px', padding: '14px', marginBottom: '18px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '12px', opacity: 0.8 }}>Total Services Included</span>
-                    <span style={{ fontWeight: '700' }}>{selectedSubcategories.length} Sub-Services</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', fontSize: '12px', opacity: 0.8 }}>
+                    <span>Material Cost</span>
+                    <span>₹{Number(liveQuotation?.materialCost || (selectedSubcategories.length * 2400)).toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', fontSize: '12px', opacity: 0.8 }}>
+                    <span>Labor & Specialist Wages</span>
+                    <span>₹{Number(liveQuotation?.laborCost || (selectedSubcategories.length * 1800)).toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '12px', opacity: 0.8 }}>
+                    <span>GST (18%)</span>
+                    <span>₹{Number(liveQuotation?.taxGST || 585).toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '8px' }}>
                     <div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>TOTAL QUOTATION</div>
+                      <div style={{ fontSize: '11px', opacity: 0.8 }}>TOTAL PAYABLE</div>
                       <div style={{ fontSize: '10px', color: '#F59E0B' }}>Includes all materials, labor & GST</div>
                     </div>
                     <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'Outfit', color: '#F59E0B' }}>
-                      ₹{(selectedSubcategories.length * 4200 + 1800).toLocaleString()}
+                      ₹{Number(liveQuotation?.grandtotal || liveQuotation?.totalCost || (selectedSubcategories.length * 4200 + 1800)).toLocaleString()}
                     </div>
                   </div>
                 </div>
 
                 {/* Action: Approve Quotation then we start working */}
-                <button 
+                <button
                   className="btn-hp-primary"
-                  onClick={() => setCurrentScreen('payment')}
+                  onClick={handleApproveQuotation}
                 >
                   Approve Quotation & Proceed to Payment
                 </button>
@@ -891,7 +1215,7 @@ export default function App() {
                 <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '14px', marginBottom: '18px' }}>
                   <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>Approved Quotation Amount</div>
                   <div style={{ fontSize: '24px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                    ₹{(selectedSubcategories.length * 4200 + 1800).toLocaleString()}
+                    ₹{Number(liveQuotation?.grandtotal || liveQuotation?.totalCost || (selectedSubcategories.length * 4200 + 1800)).toLocaleString()}
                   </div>
                 </div>
 
@@ -934,7 +1258,7 @@ export default function App() {
                   ))}
                 </div>
 
-                <button 
+                <button
                   className="btn-hp-primary"
                   onClick={() => setCurrentScreen('confirmation')}
                 >
@@ -975,7 +1299,7 @@ export default function App() {
                 </div>
               </div>
 
-              <button 
+              <button
                 className="btn-hp-primary"
                 style={{ marginBottom: '10px' }}
                 onClick={() => setCurrentScreen('my_bookings')}
@@ -983,7 +1307,7 @@ export default function App() {
                 Track Work Progress
               </button>
 
-              <button 
+              <button
                 className="btn-hp-secondary"
                 onClick={() => setCurrentScreen('home')}
               >
@@ -1047,8 +1371,8 @@ export default function App() {
               <div style={{ padding: '8px 16px 20px 16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                   <div style={{ height: '140px', width: '100%', position: 'relative' }}>
-                    <img 
-                      src="/images/hero_villa.jpg" 
+                    <img
+                      src="/images/hero_villa.jpg"
                       alt="Modern Villa"
                       onError={(e) => { e.target.src = '/images/construction_site.svg'; }}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -1065,8 +1389,8 @@ export default function App() {
 
                 <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                   <div style={{ height: '140px', width: '100%', position: 'relative' }}>
-                    <img 
-                      src="/images/warehouse.svg" 
+                    <img
+                      src="/images/warehouse.svg"
                       alt="Warehouse"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -1146,7 +1470,7 @@ export default function App() {
         {/* 5-Tab Bottom Navigation Bar */}
         {showBottomNav && (
           <div className="phone-bottom-nav">
-            <button 
+            <button
               className={`nav-tab-btn ${activeTab === 'home' ? 'active' : ''}`}
               onClick={() => navigateToTab('home')}
             >
@@ -1154,7 +1478,7 @@ export default function App() {
               <span>Home</span>
             </button>
 
-            <button 
+            <button
               className={`nav-tab-btn ${activeTab === 'services' ? 'active' : ''}`}
               onClick={() => navigateToTab('services')}
             >
@@ -1162,7 +1486,7 @@ export default function App() {
               <span>Services</span>
             </button>
 
-            <button 
+            <button
               className={`nav-tab-btn ${activeTab === 'bookings' ? 'active' : ''}`}
               onClick={() => navigateToTab('bookings')}
             >
@@ -1170,7 +1494,7 @@ export default function App() {
               <span>Bookings</span>
             </button>
 
-            <button 
+            <button
               className={`nav-tab-btn ${activeTab === 'projects' ? 'active' : ''}`}
               onClick={() => navigateToTab('projects')}
             >
@@ -1178,7 +1502,7 @@ export default function App() {
               <span>Projects</span>
             </button>
 
-            <button 
+            <button
               className={`nav-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
               onClick={() => navigateToTab('profile')}
             >
@@ -1189,6 +1513,214 @@ export default function App() {
         )}
 
       </div>
+
+      {/* ================= 👨‍💼 ADMIN / ESTIMATOR DESK MODAL ================= */}
+      {showAdminDesk && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(7, 25, 48, 0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#fff', borderRadius: '24px', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '22px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px', marginBottom: '16px' }}>
+              <div>
+                <span style={{ fontSize: '10px', fontWeight: '800', background: '#FEF3C7', color: '#D97706', padding: '3px 8px', borderRadius: '6px' }}>
+                  ADMIN PORTAL
+                </span>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0B2545', marginTop: '4px' }}>
+                  Technical Estimator Desk
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAdminDesk(false)}
+                style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#F1F5F9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: '#64748B' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminSendQuotation} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Select Customer Request */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>
+                    Select Customer Request to Quote:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={loadAdminRequests}
+                    style={{ fontSize: '10px', color: '#1D4ED8', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    🔄 Refresh
+                  </button>
+                </div>
+
+                {allBackendRequests.length === 0 ? (
+                  <div style={{ background: '#FFFBEB', border: '1px dashed #F59E0B', borderRadius: '10px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#B45309' }}>
+                      No active requests found in database. Submit one from the app or generate a sample request:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCreateDemoRequest}
+                      style={{ background: '#F59E0B', color: '#071930', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', width: 'fit-content' }}
+                    >
+                      + Create Sample Customer Request
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={adminQuoteForm.requestId}
+                      onChange={(e) => setAdminQuoteForm(prev => ({ ...prev, requestId: e.target.value }))}
+                      style={{ width: '100%', borderRadius: '10px', border: '1.5px solid #CBD5E1', padding: '9px 12px', fontSize: '12px', color: '#0F172A', outline: 'none', fontWeight: '600' }}
+                    >
+                      {allBackendRequests.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.requestNumber} — {r.subServiceCode || r.servicecode} [{r.status}]
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Selected Request Detail Badge */}
+                    {(() => {
+                      const sel = allBackendRequests.find(r => r.id === adminQuoteForm.requestId);
+                      if (!sel) return null;
+                      return (
+                        <div style={{ marginTop: '8px', background: '#F1F5F9', borderRadius: '8px', padding: '8px 10px', fontSize: '11px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '3px', borderLeft: '3px solid #1D4ED8' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: '700', color: '#0F172A' }}>Service: {sel.subServiceCode || sel.servicecode}</span>
+                            <span style={{ fontSize: '10px', background: '#E2E8F0', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>{sel.status}</span>
+                          </div>
+                          <div><strong>Location & Slot:</strong> {sel.location} • {sel.preferredDate} ({sel.preferredTime})</div>
+                          <div><strong>Issue Notes:</strong> {sel.issueDescription}</div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+
+              {/* Itemized Materials & Labor Line Items */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545' }}>
+                    Itemized Cost Breakdown (Line Items):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAdminQuoteForm(prev => ({
+                      ...prev,
+                      items: [...prev.items, { item: 'New Material / Labor Scope', qty: 1, unit: 'Unit', rate: 1000, amount: 1000 }]
+                    }))}
+                    style={{ fontSize: '11px', fontWeight: '700', color: '#1D4ED8', background: '#EFF6FF', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}
+                  >
+                    + Add Item
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
+                  {adminQuoteForm.items.map((item, idx) => (
+                    <div key={idx} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={item.item}
+                          onChange={(e) => {
+                            const newItems = [...adminQuoteForm.items];
+                            newItems[idx].item = e.target.value;
+                            setAdminQuoteForm(prev => ({ ...prev, items: newItems }));
+                          }}
+                          placeholder="Item Description"
+                          style={{ flex: 1, border: '1px solid #CBD5E1', borderRadius: '6px', padding: '4px 8px', fontSize: '11px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = adminQuoteForm.items.filter((_, i) => i !== idx);
+                            setAdminQuoteForm(prev => ({ ...prev, items: newItems }));
+                          }}
+                          style={{ color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px' }}>
+                        <input
+                          type="number"
+                          value={item.qty}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const newItems = [...adminQuoteForm.items];
+                            newItems[idx].qty = val;
+                            newItems[idx].amount = val * newItems[idx].rate;
+                            const sub = newItems.reduce((acc, cur) => acc + cur.amount, 0);
+                            const gst = Math.round(sub * 0.18);
+                            setAdminQuoteForm(prev => ({ ...prev, items: newItems, subtotal: sub, taxGST: gst, grandtotal: sub + gst }));
+                          }}
+                          placeholder="Qty"
+                          style={{ border: '1px solid #CBD5E1', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
+                        />
+                        <input
+                          type="text"
+                          value={item.unit}
+                          onChange={(e) => {
+                            const newItems = [...adminQuoteForm.items];
+                            newItems[idx].unit = e.target.value;
+                            setAdminQuoteForm(prev => ({ ...prev, items: newItems }));
+                          }}
+                          placeholder="Unit"
+                          style={{ border: '1px solid #CBD5E1', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
+                        />
+                        <input
+                          type="number"
+                          value={item.rate}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const newItems = [...adminQuoteForm.items];
+                            newItems[idx].rate = val;
+                            newItems[idx].amount = newItems[idx].qty * val;
+                            const sub = newItems.reduce((acc, cur) => acc + cur.amount, 0);
+                            const gst = Math.round(sub * 0.18);
+                            setAdminQuoteForm(prev => ({ ...prev, items: newItems, subtotal: sub, taxGST: gst, grandtotal: sub + gst }));
+                          }}
+                          placeholder="Rate"
+                          style={{ border: '1px solid #CBD5E1', borderRadius: '6px', padding: '4px 6px', fontSize: '11px' }}
+                        />
+                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          ₹{item.amount}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Total Calculation Card */}
+              <div style={{ background: '#0B2545', color: '#fff', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
+                  <span>Subtotal Cost:</span>
+                  <span>₹{adminQuoteForm.subtotal}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
+                  <span>GST (18%):</span>
+                  <span>₹{adminQuoteForm.taxGST}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '6px', fontSize: '14px', fontWeight: '800', color: '#F59E0B' }}>
+                  <span>Final Quotation to User:</span>
+                  <span>₹{adminQuoteForm.grandtotal}</span>
+                </div>
+              </div>
+
+              {/* Submit Quote Button */}
+              <button
+                type="submit"
+                className="btn-hp-primary"
+                style={{ background: '#10B981', boxShadow: '0 4px 14px rgba(16,185,129,0.4)' }}
+              >
+                🚀 Send Quotation to Customer (POST /api/v1/quotations)
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

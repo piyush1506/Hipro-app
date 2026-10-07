@@ -40,3 +40,9 @@ backend/uploads/
 Hipro_app/
 !.env.example
 !backend/.env.example
+
+app_backend/**/.env
+app_backend/**/uploads/
+!app_backend/**/.env.example
+
+imageprovide/
