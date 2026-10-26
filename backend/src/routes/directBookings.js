@@ -241,8 +241,21 @@ router.post('/', async (req, res) => {
 
     // Locked Server Pricing (Client-side price is never trusted)
     const visitingCharge = subService.visitingCharge || 199.0;
-    const onlinePaidAmount = visitingCharge;
-    const totalAmount = visitingCharge;
+    let additionalTotal = 0;
+    if (subService.requiredFields) {
+      try {
+        const rf = typeof subService.requiredFields === 'string' ? JSON.parse(subService.requiredFields) : subService.requiredFields;
+        const charges = rf.charges || rf.additionalCharges || (Array.isArray(rf) ? rf.filter(f => f.fieldType === 'charge' || f.fieldType === 'fee' || f.isCharge === true) : []);
+        if (Array.isArray(charges)) {
+          for (const c of charges) {
+            const amt = parseFloat(c.amount || 0);
+            if (!isNaN(amt) && !c.isFree) additionalTotal += amt;
+          }
+        }
+      } catch (err) {}
+    }
+    const onlinePaidAmount = visitingCharge + additionalTotal;
+    const totalAmount = visitingCharge + additionalTotal;
 
     const bookingNumber = await generateBookingNumber();
 

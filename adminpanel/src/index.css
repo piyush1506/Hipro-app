@@ -38,20 +38,26 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-body {
+html, body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #F8FAFC;
+  color: var(--hp-text);
   font-family: var(--font-body);
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 400; /* Modern clean readable regular weight */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0B192C;
-  color: var(--hp-text);
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  overflow-x: hidden;
 }
 
 /* Master Simulator Wrapper */
@@ -91,8 +97,8 @@ body {
   align-items: center;
   gap: 8px;
   font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 13px;
+  font-weight: 800;
+  font-size: 14px;
   letter-spacing: 0.3px;
 }
 
@@ -116,7 +122,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #cbd5e1;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 4px 10px;
   border-radius: 20px;
   cursor: pointer;
@@ -172,7 +178,7 @@ body {
   right: 0;
   z-index: 999;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: #0F172A;
 }
 
@@ -236,8 +242,8 @@ body {
   background: transparent;
   border: none;
   color: var(--hp-text-muted);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
   padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
@@ -349,10 +355,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   background: #E2E8F0;
-  color: #64748B;
+  color: #1e2630;
 }
 
 .wizard-step-dot.active {
@@ -421,5 +427,32 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Print Optimization for Official Quotations & Invoices */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printableQuotationContent,
+  #printableQuotationContent * {
+    visibility: visible !important;
+  }
+  #printableQuotationContent {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    z-index: 999999 !important;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
   }
 }

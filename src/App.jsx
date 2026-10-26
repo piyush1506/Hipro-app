@@ -241,8 +241,93 @@ export default function App() {
     taxGST: 1255,
     grandtotal: 8230,
     estimatedTimeline: '1 - 2 Working Days',
-    termsAndConditions: 'Includes 2 Years comprehensive anti-leakage warranty.'
+    termsAndConditions: 'Includes standard engineering specifications and quality materials.'
   });
+
+  // Requests Tab & Chat Modal State
+  const [requestsTab, setRequestsTab] = useState('requests');
+  const [activeChat, setActiveChat] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInputText, setChatInputText] = useState('');
+
+  const resolveChatThreadId = (context) => {
+    if (!context) return 'thread_general';
+    if (context.quoteNumber) return `thread_quote_${context.quoteNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    if (context.requestNumber) return `thread_req_${context.requestNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    if (context.tag) return `thread_ctx_${context.tag.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    return 'thread_general';
+  };
+
+  const fetchWebChatMessages = async (context) => {
+    const threadId = resolveChatThreadId(context);
+    try {
+      const res = await fetch(`http://localhost:5000/api/v1/chat/threads/${threadId}/messages`);
+      const data = await res.json();
+      if (data.success && data.data && data.data.length > 0) {
+        setChatMessages(data.data.map(m => ({
+          text: m.text,
+          isUser: m.sender === 'customer',
+          senderName: m.senderName,
+          time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        })));
+      }
+      fetch(`http://localhost:5000/api/v1/chat/threads/${threadId}/read`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reader: 'customer' })
+      }).catch(() => {});
+    } catch (_) {}
+  };
+
+  const openChatModal = (context) => {
+    setActiveChat(context);
+    setChatMessages([
+      {
+        text: `Hello! I am Er. Vikram Sharma, Senior Technical Lead at Hipro. How can I assist you with ${context.tag || context.quoteNumber ? 'Quotation #' + context.quoteNumber : 'your waterproofing requirements'} today?`,
+        isUser: false,
+        time: 'Just now'
+      }
+    ]);
+    fetchWebChatMessages(context);
+  };
+
+  useEffect(() => {
+    if (!activeChat) return;
+    const interval = setInterval(() => {
+      fetchWebChatMessages(activeChat);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [activeChat]);
+
+  const sendChatMessage = async (customText) => {
+    const text = (customText || chatInputText).trim();
+    if (!text || !activeChat) return;
+    setChatMessages(prev => [...prev, { text, isUser: true, time: 'Just now' }]);
+    if (!customText) setChatInputText('');
+
+    const threadId = resolveChatThreadId(activeChat);
+    try {
+      await fetch('http://localhost:5000/api/v1/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threadId,
+          sender: 'customer',
+          senderName: userProfile.name || 'Client',
+          text,
+          contextType: activeChat.type || 'GENERAL',
+          contextTag: activeChat.tag,
+          quoteNumber: activeChat.quoteNumber,
+          requestNumber: activeChat.requestNumber,
+          customerName: userProfile.name || 'Client',
+          customerPhone: userProfile.phone || '+91 94628 77757'
+        })
+      });
+      fetchWebChatMessages(activeChat);
+    } catch (e) {
+      console.error('Send chat message failed', e);
+    }
+  };
 
   // Fetch all requests for Admin Desk
   const loadAdminRequests = async () => {
@@ -574,8 +659,14 @@ export default function App() {
                   <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Bhilwara, Rajasthan</span>
                   <ChevronDown size={14} color="#64748B" />
                 </div>
-                <button style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <button
+                  onClick={() => liveQuotation ? setCurrentScreen('estimation_review') : null}
+                  style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
+                >
                   <Bell size={16} color="#0B2545" />
+                  {liveQuotation && (
+                    <span style={{ position: 'absolute', top: '5px', right: '5px', width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444' }} />
+                  )}
                 </button>
               </div>
 
@@ -588,6 +679,40 @@ export default function App() {
                   Construction &nbsp;|&nbsp; Architecture &nbsp;|&nbsp; Engineering
                 </div>
               </div>
+
+              {/* QUOTATION RECEIVED ALERT CARD */}
+              {liveQuotation && (
+                <div style={{ padding: '0 16px', marginBottom: '16px' }}>
+                  <div style={{ background: '#FFFFFF', border: '1.5px solid #3B82F6', borderRadius: '18px', padding: '14px', boxShadow: '0 4px 16px rgba(59, 130, 246, 0.12)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#EFF6FF', padding: '4px 8px', borderRadius: '12px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#1D4ED8' }}>NEW QUOTATION RECEIVED</span>
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>#{liveQuotation.quoteNumber}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                      <img
+                        src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=200&q=80"
+                        alt="Quotation Scope"
+                        style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>Inspection & Waterproofing Scope</div>
+                        <div style={{ fontSize: '17px', fontWeight: '800', color: '#1D4ED8', marginTop: '2px' }}>
+                          ₹{liveQuotation.grandtotal?.toLocaleString('en-IN') || liveQuotation.grandtotal}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setCurrentScreen('estimation_review')}
+                      style={{ width: '100%', background: '#1D4ED8', color: '#fff', border: 'none', padding: '10px', borderRadius: '12px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      View Quotation & Scope →
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Hero Banner Card */}
               <div style={{ padding: '0 16px', margin: '8px 0 16px 0' }}>
@@ -1294,8 +1419,8 @@ export default function App() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>WARRANTY COVERAGE</div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#10B981' }}>2 Years Seepage & Crack Shield</div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: '600' }}>SERVICE EXECUTION</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#10B981' }}>Standard Engineering Quality</div>
                 </div>
               </div>
 
@@ -1316,43 +1441,143 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 8. MY BOOKINGS ================= */}
+          {/* ================= 8. REQUESTS & QUOTATIONS ================= */}
           {currentScreen === 'my_bookings' && (
             <div className="fade-in-slide">
               <div className="subscreen-top-header">
                 <button className="back-btn" onClick={() => setCurrentScreen('home')}>
                   <ArrowLeft size={18} />
                 </button>
-                <div className="subscreen-title">My Bookings</div>
-                <div style={{ width: '24px' }} />
+                <div className="subscreen-title">Requests & Quotations</div>
+                <button
+                  onClick={() => openChatModal({ title: 'Support Desk', type: 'GENERAL' })}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#1864E8' }}
+                >
+                  <MessageSquare size={18} />
+                </button>
+              </div>
+
+              {/* 2-Section Switcher: [ Requests ] & [ Quotations ] */}
+              <div style={{ padding: '8px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#F1F5F9', borderRadius: '12px', padding: '3px' }}>
+                  <button
+                    onClick={() => setRequestsTab('requests')}
+                    style={{
+                      background: requestsTab === 'requests' ? '#fff' : 'transparent',
+                      color: requestsTab === 'requests' ? '#0B2545' : '#64748B',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '8px',
+                      fontSize: '12px',
+                      fontWeight: requestsTab === 'requests' ? '700' : '600',
+                      cursor: 'pointer',
+                      boxShadow: requestsTab === 'requests' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none'
+                    }}
+                  >
+                    📋 Requests ({allBackendRequests.length || 1})
+                  </button>
+                  <button
+                    onClick={() => setRequestsTab('quotations')}
+                    style={{
+                      background: requestsTab === 'quotations' ? '#fff' : 'transparent',
+                      color: requestsTab === 'quotations' ? '#0B2545' : '#64748B',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '8px',
+                      fontSize: '12px',
+                      fontWeight: requestsTab === 'quotations' ? '700' : '600',
+                      cursor: 'pointer',
+                      boxShadow: requestsTab === 'quotations' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none'
+                    }}
+                  >
+                    🧾 Quotations ({liveQuotation ? 1 : 0})
+                  </button>
+                </div>
               </div>
 
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
-                        {activeCategory.title} ({selectedSubcategories.length} Sub-Services)
+                {requestsTab === 'requests' ? (
+                  // REQUESTS SECTION
+                  <>
+                    <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
+                            {activeCategory.title} ({selectedSubcategories.length} Sub-Services)
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748B' }}>
+                            {selectedDate} Apr 2025 • {selectedTimeSlot}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '3px 8px', borderRadius: '6px' }}>
+                          Under Review
+                        </span>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>
-                        {selectedDate} Apr 2025 • {selectedTimeSlot}
+
+                      <div style={{ fontSize: '11px', color: '#334155', background: '#F8FAFC', padding: '8px', borderRadius: '8px', marginBottom: '10px' }}>
+                        {selectedSubcategories.map(s => s.name).join(' • ')}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => openChatModal({ title: 'Inspection Support', type: 'REQUEST', tag: activeCategory.title })}
+                          style={{ flex: 1, background: '#EFF6FF', color: '#1864E8', border: '1px solid #BFDBFE', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          💬 Chat with Engineer
+                        </button>
+                        {liveQuotation && (
+                          <button
+                            onClick={() => setCurrentScreen('estimation_review')}
+                            style={{ flex: 1, background: '#10B981', color: '#fff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            View Quotation
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '3px 8px', borderRadius: '6px' }}>
-                      Work Active
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: '11px', color: '#334155', background: '#F8FAFC', padding: '8px', borderRadius: '8px', marginBottom: '10px' }}>
-                    {selectedSubcategories.map(s => s.name).join(' • ')}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '10px', fontSize: '11px', fontWeight: '600', color: '#0B2545' }}>
-                    <span style={{ cursor: 'pointer' }} onClick={() => setCurrentScreen('estimation_review')}>View Quotation</span>
-                    <span style={{ cursor: 'pointer' }}>Track Team</span>
-                    <span style={{ color: '#EF4444', cursor: 'pointer' }}>Support</span>
-                  </div>
-                </div>
+                  </>
+                ) : (
+                  // QUOTATIONS SECTION
+                  <>
+                    {liveQuotation ? (
+                      <div style={{ background: '#fff', border: '1px solid #3B82F6', borderRadius: '16px', padding: '14px', boxShadow: '0 4px 14px rgba(59,130,246,0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#1D4ED8', fontFamily: 'monospace' }}>
+                            #{liveQuotation.quoteNumber}
+                          </span>
+                          <span style={{ fontSize: '10px', fontWeight: '700', background: '#FEF3C7', color: '#D97706', padding: '3px 8px', borderRadius: '6px' }}>
+                            Pending Decision
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
+                          Inspection & Waterproofing Scope
+                        </div>
+                        <div style={{ fontSize: '18px', fontWeight: '800', color: '#1D4ED8', marginBottom: '12px' }}>
+                          ₹{liveQuotation.grandtotal?.toLocaleString('en-IN') || liveQuotation.grandtotal}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => setCurrentScreen('estimation_review')}
+                            style={{ flex: 1, background: '#1864E8', color: '#fff', border: 'none', padding: '9px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            Review Scope →
+                          </button>
+                          <button
+                            onClick={() => openChatModal({ title: 'Quotation Discussion', type: 'QUOTATION', quoteNumber: liveQuotation.quoteNumber, amount: liveQuotation.grandtotal })}
+                            style={{ flex: 1, background: '#F8FAFC', color: '#1864E8', border: '1px solid #CBD5E1', padding: '9px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            💬 Discuss Quote
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B' }}>
+                        <p style={{ fontSize: '13px', fontWeight: '600' }}>No Quotations Issued Yet</p>
+                        <p style={{ fontSize: '11.5px', marginTop: '4px' }}>Once admin inspects your site, quotations will be listed here.</p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1430,7 +1655,7 @@ export default function App() {
 
               <div style={{ padding: '12px 16px 24px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {[
-                  { label: 'My Bookings', icon: Calendar, action: () => setCurrentScreen('my_bookings') },
+                  { label: 'My Requests', icon: Calendar, action: () => setCurrentScreen('my_bookings') },
                   { label: 'My Addresses', icon: MapPin },
                   { label: 'Payment Methods', icon: CreditCard, action: () => setCurrentScreen('payment') },
                   { label: 'Notifications', icon: Bell },
@@ -1491,7 +1716,7 @@ export default function App() {
               onClick={() => navigateToTab('bookings')}
             >
               <Calendar size={19} className="nav-icon" />
-              <span>Bookings</span>
+              <span>Requests</span>
             </button>
 
             <button
@@ -1513,6 +1738,94 @@ export default function App() {
         )}
 
       </div>
+
+      {/* ================= 💬 EXPERT CHAT BOTTOM SHEET / MODAL ================= */}
+      {activeChat && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(7, 25, 48, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', maxWidth: '420px', width: '100%', height: '75vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.3)' }}>
+            {/* Header */}
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#1864E8', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', position: 'relative' }}>
+                  VS
+                  <span style={{ position: 'absolute', bottom: 0, right: 0, width: '10px', height: '10px', borderRadius: '50%', background: '#10B981', border: '2px solid #fff' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '800', color: '#0B2545', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Er. Vikram Sharma <span style={{ color: '#1864E8', fontSize: '11px' }}>✓</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Senior Technical Lead • Online</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveChat(null)}
+                style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#F1F5F9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: '#64748B' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Context bar */}
+            {activeChat.tag || activeChat.quoteNumber ? (
+              <div style={{ background: '#F8FAFC', padding: '6px 18px', fontSize: '11px', color: '#1864E8', fontWeight: '600', borderBottom: '1px solid #F1F5F9' }}>
+                📌 Regarding: {activeChat.quoteNumber ? `Quotation #${activeChat.quoteNumber}` : activeChat.tag}
+              </div>
+            ) : null}
+
+            {/* Messages Scroll Area */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {chatMessages.map((msg, i) => (
+                <div key={i} style={{ alignSelf: msg.isUser ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+                  <div style={{
+                    background: msg.isUser ? '#1864E8' : '#F1F5F9',
+                    color: msg.isUser ? '#fff' : '#0F172A',
+                    padding: '10px 14px',
+                    borderRadius: msg.isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    fontSize: '13px',
+                    lineHeight: '1.4'
+                  }}>
+                    {msg.text}
+                  </div>
+                  <div style={{ fontSize: '9.5px', color: '#94A3B8', marginTop: '3px', textAlign: msg.isUser ? 'right' : 'left' }}>
+                    {msg.time}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick chips */}
+            <div style={{ padding: '0 12px 8px 12px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
+              {['Can I get a discount?', 'When will engineer visit?', 'Work execution details'].map((c, i) => (
+                <button
+                  key={i}
+                  onClick={() => sendChatMessage(c)}
+                  style={{ whiteSpace: 'nowrap', background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1864E8', borderRadius: '12px', padding: '4px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            {/* Input area */}
+            <div style={{ padding: '10px 14px 16px 14px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                placeholder="Type your question..."
+                value={chatInputText}
+                onChange={(e) => setChatInputText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+                style={{ flex: 1, padding: '10px 14px', borderRadius: '20px', border: '1px solid #CBD5E1', fontSize: '13px', outline: 'none' }}
+              />
+              <button
+                onClick={() => sendChatMessage()}
+                style={{ background: '#1864E8', color: '#fff', border: 'none', borderRadius: '20px', padding: '0 16px', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= 👨‍💼 ADMIN / ESTIMATOR DESK MODAL ================= */}
       {showAdminDesk && (

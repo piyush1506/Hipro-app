@@ -616,8 +616,21 @@ router.post('/bookings', (req, res) => {
 router.get('/my-bookings/:userId', (req, res) => {
   try {
     const { userId } = req.params;
+    const { phone } = req.query;
     const bookings = loadBookings();
-    const userBookings = bookings.filter((b) => b.userId === userId);
+    const cleanId = String(userId || '').trim().toLowerCase();
+    const cleanPhone = String(phone || '').trim();
+
+    const userBookings = bookings.filter((b) => {
+      const bUser = String(b.userId || '').trim().toLowerCase();
+      const bPhone = String(b.travelerPhone || '').trim();
+
+      if (cleanPhone && bPhone === cleanPhone) return true;
+      if (cleanId === 'guest_user') {
+        return !b.userId || b.userId === 'guest_user' || (cleanPhone && bPhone === cleanPhone);
+      }
+      return bUser === cleanId || (cleanId.length >= 10 && bPhone === cleanId) || (cleanPhone && bPhone === cleanPhone);
+    });
 
     res.json({
       success: true,

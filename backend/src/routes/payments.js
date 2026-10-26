@@ -152,7 +152,21 @@ router.post('/create-order', async (req, res) => {
         where: { id: subServiceId }
       });
       if (subService) {
-        payableAmount = parseFloat(subService.visitingCharge || 199.0);
+        let base = parseFloat(subService.visitingCharge || 199.0);
+        let extra = 0;
+        if (subService.requiredFields) {
+          try {
+            const rf = typeof subService.requiredFields === 'string' ? JSON.parse(subService.requiredFields) : subService.requiredFields;
+            const charges = rf.charges || rf.additionalCharges || (Array.isArray(rf) ? rf.filter(f => f.fieldType === 'charge' || f.fieldType === 'fee' || f.isCharge === true) : []);
+            if (Array.isArray(charges)) {
+              for (const c of charges) {
+                const amt = parseFloat(c.amount || 0);
+                if (!isNaN(amt) && !c.isFree) extra += amt;
+              }
+            }
+          } catch (err) {}
+        }
+        payableAmount = base + extra;
       }
     }
     // 4. Fallback if no entity specified

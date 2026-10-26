@@ -62,7 +62,7 @@ export const SERVICES = [
         titleEn: 'Stop Roof & Terrace Leakage',
         titleHi: 'छत की लीकेज रोकना',
         desc: 'Multi-layer elastomeric polymer waterproofing and joint sealing with ponding test.',
-        checklist: ['Thermal leak detection', 'Primer + 3 waterproof coats', '2-Year written warranty']
+        checklist: ['Thermal leak detection', 'Primer + 3 waterproof coats', 'Certified multi-layer protection']
       },
       {
         id: 's02_2',
@@ -170,7 +170,7 @@ export const SERVICES = [
         titleEn: 'Termite Treatment & Protection',
         titleHi: 'दीमक का संपूर्ण इलाज',
         desc: 'Drill-fill-seal chemical barrier around doors, wardrobes, and floor skirtings.',
-        checklist: ['Odorless Bayer chemicals', 'Door frame perimeter drill', '3-Year warranty cert']
+        checklist: ['Odorless Bayer chemicals', 'Door frame perimeter drill', 'Deep perimeter drill barrier']
       },
       {
         id: 's05_2',
@@ -537,7 +537,7 @@ export const DEMO_PRESETS = [
       gst: 0,
       totalAmount: 12450,
       timeline: '2 Days Execution',
-      warranty: '2 Years Seepage-Free Warranty'
+      coverage: 'Complete terrace sealing'
     }
   },
   {
@@ -559,7 +559,7 @@ export const DEMO_PRESETS = [
       gst: 0,
       totalAmount: 4600,
       timeline: 'Same-day Execution (4 Hours)',
-      warranty: '1 Year Warranty'
+      coverage: 'Concealed leak resolution'
     }
   },
   {
@@ -581,7 +581,7 @@ export const DEMO_PRESETS = [
       gst: 0,
       totalAmount: 2750,
       timeline: '1 Day Execution',
-      warranty: '6 Months Bonding Warranty'
+      coverage: 'Precision tile realignment'
     }
   }
 ];

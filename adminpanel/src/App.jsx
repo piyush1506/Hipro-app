@@ -32,8 +32,8 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
   const [builderRequestId, setBuilderRequestId] = useState('');
   const [builderEstimator, setBuilderEstimator] = useState('Hipro Technical Admin Desk');
   const [builderTimeline, setBuilderTimeline] = useState('1-2 Working Days');
-  const [builderWarranty, setBuilderWarranty] = useState('1 Year Anti-Leakage & Workmanship Warranty');
-  const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service warranty applies upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
+  const [builderScope, setBuilderScope] = useState('Standard Engineering Specifications');
+  const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service terms apply upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
   const [lineItems, setLineItems] = useState([
     { item: 'Surface Preparation & Moisture Tracing', qty: 1, unit: 'Lumpsum', rate: 1200 },
     { item: 'Chemical PU Injection / Polymer Grouting', qty: 15, unit: 'Running Ft', rate: 180 },
@@ -230,7 +230,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
       estimatedTimeline: builderTimeline,
       termsAndConditions: builderTerms,
       created_by: builderEstimator,
-      warranty_coverage: builderWarranty
+      service_scope: builderScope
     };
 
     try {
@@ -271,7 +271,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
     { key: 'ESTIMATING', step: 2, label: 'Estimating', desc: 'Technical & Site Audit' },
     { key: 'QUOTED', step: 3, label: 'Quoted', desc: 'Quotation Ready' },
     { key: 'IN_PROGRESS', step: 4, label: 'In Progress', desc: 'Execution & Mobilization' },
-    { key: 'COMPLETED', step: 5, label: 'Completed', desc: 'Work Done & Warranty' },
+    { key: 'COMPLETED', step: 5, label: 'Completed', desc: 'Work Done & Handover' },
   ];
 
   const getTimelineStepIndex = (status) => {
@@ -848,7 +848,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                           <div><strong>Client:</strong> {q.request?.user?.name || 'Customer'}</div>
                           <div className="font-mono">{q.request?.user?.phoneNumber || 'N/A'}</div>
                           <div><strong>Timeline:</strong> {q.estimatedTimeline || '1-2 Days'}</div>
-                          <div><strong>Warranty:</strong> {q.warranty_coverage ? q.warranty_coverage.slice(0, 18) + '...' : '1 Year'}</div>
+                          <div><strong>Scope:</strong> {q.estimatedTimeline || 'Standard'}</div>
                         </div>
 
                         <div className="text-[10.5px] text-slate-400 font-light">
@@ -1003,12 +1003,12 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="block text-[10.5px] font-medium text-slate-400 uppercase">Digital Warranty</label>
-                      <select value={builderWarranty} onChange={(e) => setBuilderWarranty(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
-                        <option value="1 Year Anti-Leakage & Workmanship Warranty">1 Year Anti-Leakage & Workmanship Warranty</option>
-                        <option value="2 Years Comprehensive Waterproofing Warranty">2 Years Comprehensive Waterproofing Warranty</option>
-                        <option value="3 Years Structural Patchwork Warranty">3 Years Structural Patchwork Warranty</option>
-                        <option value="6 Months Standard Service Warranty">6 Months Standard Service Warranty</option>
+                      <label className="block text-[10.5px] font-medium text-slate-400 uppercase">Service Scope</label>
+                      <select value={builderScope} onChange={(e) => setBuilderScope(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
+                        <option value="Standard Engineering Specifications">Standard Engineering Specifications</option>
+                        <option value="Comprehensive Waterproofing Scope">Comprehensive Waterproofing Scope</option>
+                        <option value="Structural Patchwork Scope">Structural Patchwork Scope</option>
+                        <option value="Standard Maintenance Scope">Standard Maintenance Scope</option>
                       </select>
                     </div>
                   </div>
@@ -1378,7 +1378,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               </div>
 
               <div className="p-3 rounded-lg bg-slate-50 border border-dashed border-slate-300 text-[10.5px] text-slate-500 space-y-0.5 font-light">
-                <div><strong>Warranty Terms:</strong> {activeQuoteModal.warranty_coverage || '1 Year Service Warranty'}</div>
+                <div><strong>Service Specifications:</strong> {(activeQuoteModal.service_scope) || 'Standard Engineering Specifications'}</div>
                 <div><strong>Commercial Terms:</strong> {activeQuoteModal.termsAndConditions || 'Standard payment terms apply.'}</div>
               </div>
             </div>

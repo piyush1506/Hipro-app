@@ -9,8 +9,8 @@
 
 1. **User Submits Patch Work Details & Photos:** The customer selects a service, describes the issue, and uploads photos/images of the damaged area (e.g. wall seepage, ceiling crack, broken tiles, pipe leak).
 2. **Team / Admin Evaluates & Generates Quotation:** The HiBuild estimation team reviews the uploaded photos and scope of work to generate an itemized digital quotation.
-3. **User Reviews Quotation & Makes Payment:** The user reviews the breakdown (materials, labor, warranty terms) in the app. Once accepted, the user proceeds to payment (UPI / Dynamic QR / Cards).
-4. **Work Execution & Digital Warranty:** Work is assigned and executed. A digital warranty certificate is generated upon completion.
+3. **User Reviews Quotation & Makes Payment:** The user reviews the breakdown (materials, labor, execution terms) in the app. Once accepted, the user proceeds to payment (UPI / Dynamic QR / Cards).
+4. **Work Execution & Handover:** Work is assigned and executed. A work completion report is generated upon sign-off.
 
 ---
 
@@ -23,14 +23,14 @@ flowchart TD
     
     C --> D["4. Admin / Estimator Reviews Photos<br/>• Evaluates damage severity<br/>• Prepares itemized quotation"]
     
-    D --> E["5. User Receives Digital Quotation<br/>• Instant In-App Notification & WhatsApp alert<br/>• View breakdown: Materials + Labor + Warranty"]
+    D --> E["5. User Receives Digital Quotation<br/>• Instant In-App Notification & WhatsApp alert<br/>• View breakdown: Materials + Labor + Terms"]
     
     E --> F{"6. User Decision"}
     F -->|Reject / Request Call| G["User Rejects or Requests Callback<br/>• Direct Call to +91 94628 77757"]
     F -->|Accept & Pay| H["7. User Makes Payment<br/>• UPI Intent (GPay, PhonePe, Paytm)<br/>• Dynamic UPI QR Code<br/>• Cards / NetBanking"]
     
     H --> I["8. Work Scheduled & Executed<br/>• Assigned technician arrives<br/>• Repair completed"]
-    I --> J["9. Digital Warranty Issued<br/>• Stored in User's Digital Warranty Vault"]
+    I --> J["9. Work Completion Signed<br/>• Stored in User's Project Records"]
 ```
 
 ---
@@ -95,7 +95,7 @@ erDiagram
         decimal taxes_gst
         decimal total_amount
         string estimated_timeline "e.g. 1-2 Days"
-        string warranty_coverage "e.g. 1 Year Anti-Leakage Warranty"
+        string service_scope "e.g. Standard Engineering Scope"
         enum user_decision "PENDING | ACCEPTED | REJECTED"
         timestamp valid_until
         timestamp created_at
@@ -218,7 +218,7 @@ model Quotation {
   materialCost Decimal        @db.Decimal(10, 2)
   laborCost    Decimal        @db.Decimal(10, 2)
   totalAmount  Decimal        @db.Decimal(10, 2)
-  warranty     String?        // e.g. "1 Year Warranty"
+  coverage     String?        // e.g. "Standard Maintenance Scope"
   timeline     String?        // e.g. "Within 24 Hours"
   decision     QuoteDecision  @default(PENDING)
   payment      Payment?
@@ -265,7 +265,7 @@ model Payment {
     "materialCost": 8750,
     "laborCost": 1500,
     "totalAmount": 10250,
-    "warranty": "2 Years Seepage Warranty",
+    "service_scope": "Complete terrace sealing",
     "timeline": "Completion in 2 Days"
   }
   ```
