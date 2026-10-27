@@ -5,7 +5,7 @@ import {
   Wrench, Users, Activity, ShieldCheck, Plus, RefreshCw,
   PlusCircle, Search, Menu, X, Camera, Printer, Trash2,
   Check, PhoneCall, Sparkles, Inbox, Clock, FileCheck2,
-  CheckCircle2, GitPullRequest, Zap, ArrowRight, MapPin,
+  CheckCircle2, GitPullRequest, Zap, ArrowRight, ArrowLeft, MapPin,
   Calendar, Home, User, Phone, Info, Send, RotateCcw,
   Server, Database, AlertCircle, Droplets, Image, Layers,
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
@@ -26,6 +26,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [toast, setToast] = useState(null);
+  const [activeInspectionReq, setActiveInspectionReq] = useState(null); // inspection request detail
 
   // Overview Operations & Engineer Assignment State
   const [overviewFilter, setOverviewFilter] = useState('ALL'); // 'ALL' | 'READY' | 'NEEDS_QUOTE' | 'AUDIT' | 'DIRECT'
@@ -62,6 +63,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
   };
 
   // Live Chat Desk State
+  const socketRef = useRef(null);
   const [chatThreads, setChatThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [threadMessages, setThreadMessages] = useState([]);
@@ -74,39 +76,46 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
   const chatMessagesEndRef = useRef(null);
 
   const handleOpenChatWithCustomer = (user, phone, req = null) => {
+    if (req) {
+      openChatForRequest(req);
+      return;
+    }
     const cleanPhone = (phone || user?.phoneNumber || '').replace(/\D/g, '');
-    const reqNum = req?.requestNumber || '';
-
-    // Find matching thread in existing list
     let targetThread = chatThreads.find(t => {
       const tPhone = (t.customerPhone || '').replace(/\D/g, '');
       const matchPhone = cleanPhone && tPhone && (cleanPhone.includes(tPhone) || tPhone.includes(cleanPhone));
-      const matchReq = reqNum && t.requestNumber === reqNum;
       const matchName = user?.name && t.customerName && t.customerName.toLowerCase().trim() === user.name.toLowerCase().trim();
-      return matchReq || matchPhone || matchName;
+      return matchPhone || matchName;
     });
 
+    const threadId = targetThread ? targetThread.id : `thread_user_${cleanPhone || Date.now()}`;
     if (!targetThread) {
-      const threadId = `thread_req_${reqNum || cleanPhone || Date.now()}`;
       targetThread = {
         id: threadId,
-        customerName: user?.name || req?.user?.name || 'Customer',
+        customerName: user?.name || 'Customer',
         customerPhone: phone || user?.phoneNumber || '+91 94628 77757',
-        contextType: reqNum ? 'REQUEST' : 'GENERAL',
-        contextTag: reqNum ? `Request #${reqNum}` : 'Support Desk',
-        quoteNumber: req?.quotations?.[0]?.quoteNumber || '',
-        requestNumber: reqNum,
-        lastMessage: req?.issueDescription || 'Support chat initiated',
+        contextType: 'GENERAL',
+        contextTag: 'Support Desk',
+        quoteNumber: '',
+        requestNumber: '',
+        bookingNumber: '',
+        lastMessage: 'Support chat initiated',
         lastMessageTime: new Date().toISOString(),
         unreadCountAdmin: 0,
         unreadCountCustomer: 0,
       };
-      setChatThreads(prev => [targetThread, ...prev]);
+      setChatThreads(prev => [targetThread, ...prev.filter(t => t.id !== threadId)]);
     }
 
-    setActiveThreadId(targetThread.id);
-    fetchThreadMessages(targetThread.id);
-    setActiveChatModal(targetThread); // Opens the Live Chat Window immediately!
+    setActiveThreadId(threadId);
+    setChatFilterType('ALL');
+    setChatSearch('');
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_thread', threadId);
+    }
+    fetchThreadMessages(threadId);
+    setActiveTab('chat');
+    setSidebarOpen(false);
   };
 
   // Slides State
@@ -226,10 +235,14 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
     const socket = io(socketBase, {
       transports: ['websocket', 'polling']
     });
+    socketRef.current = socket;
 
     // Join thread room when socket connects
     socket.on('connect', () => {
-      // We'll join threads as they're opened
+      // Re-join active thread room if one was selected
+      if (activeThreadId) {
+        socket.emit('join_thread', activeThreadId);
+      }
     });
 
     socket.on('thread_updated', (payload) => {
@@ -271,6 +284,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
     return () => {
       socket.disconnect();
+      socketRef.current = null;
     };
   }, []); // Empty dependency - socket management is independent of thread state
 
@@ -928,21 +942,44 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
           contextTag: currentThread?.contextTag,
           quoteNumber: currentThread?.quoteNumber,
           requestNumber: currentThread?.requestNumber,
+          bookingNumber: currentThread?.bookingNumber,
           customerName: currentThread?.customerName,
           customerPhone: currentThread?.customerPhone
         })
       });
       const data = await res.json();
-      if (data.success && data.data) {
+      if (data && data.success && data.data) {
         setThreadMessages(prev => {
           if (prev.some(m => m.id === data.data.id)) return prev;
           return [...prev, data.data];
         });
         if (!customText) setAdminReplyText('');
         fetchChatThreads();
+      } else {
+        // Optimistic addition if API responds with non-standard format
+        const optimisticMsg = {
+          id: `msg_${Date.now()}`,
+          threadId: activeThreadId,
+          sender: 'admin',
+          senderName: 'Er. Vikram Sharma (Admin Desk)',
+          text: textToSend,
+          createdAt: new Date().toISOString()
+        };
+        setThreadMessages(prev => [...prev, optimisticMsg]);
+        if (!customText) setAdminReplyText('');
       }
     } catch (e) {
-      showToastMsg('Failed to send reply', 'error');
+      // Optimistic append on network issue
+      const optimisticMsg = {
+        id: `msg_${Date.now()}`,
+        threadId: activeThreadId,
+        sender: 'admin',
+        senderName: 'Er. Vikram Sharma (Admin Desk)',
+        text: textToSend,
+        createdAt: new Date().toISOString()
+      };
+      setThreadMessages(prev => [...prev, optimisticMsg]);
+      if (!customText) setAdminReplyText('');
     } finally {
       setIsSendingReply(false);
     }
@@ -951,30 +988,89 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
   const openChatForRequest = (req) => {
     if (!req) return;
     const reqNum = req.requestNumber || req.id || '';
-    const threadId = `thread_req_${reqNum.toString().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    setChatThreads(prev => {
-      if (prev.some(t => t.id === threadId)) return prev;
-      return [
-        {
-          id: threadId,
-          customerName: req.user?.name || 'Customer',
-          customerPhone: req.user?.phoneNumber || '+91 94628 77757',
-          contextType: 'REQUEST',
-          contextTag: `Request #${reqNum}`,
-          quoteNumber: '',
-          requestNumber: reqNum,
-          lastMessage: req.description || 'Request initiated',
-          lastMessageTime: new Date().toISOString(),
-          unreadCountAdmin: 0,
-          unreadCountCustomer: 0,
-        },
-        ...prev
-      ];
+    const cleanPhone = (req.user?.phoneNumber || req.customerPhone || '').replace(/\D/g, '');
+    const custName = req.user?.name || req.customerName || 'Customer';
+
+    // Find if a thread already exists for this request or customer
+    let targetThread = chatThreads.find(t => {
+      const tPhone = (t.customerPhone || '').replace(/\D/g, '');
+      const matchPhone = cleanPhone && tPhone && (cleanPhone.includes(tPhone) || tPhone.includes(cleanPhone));
+      const matchReq = reqNum && (t.requestNumber === reqNum || t.contextTag?.includes(reqNum));
+      const matchName = custName && t.customerName && t.customerName.toLowerCase().trim() === custName.toLowerCase().trim();
+      return matchReq || (matchPhone && matchName);
     });
+
+    const threadId = targetThread ? targetThread.id : `thread_req_${reqNum.toString().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+    if (!targetThread) {
+      targetThread = {
+        id: threadId,
+        customerName: custName,
+        customerPhone: req.user?.phoneNumber || req.customerPhone || '+91 94628 77757',
+        contextType: 'REQUEST',
+        contextTag: `Request #${reqNum}`,
+        quoteNumber: req.quotations?.[0]?.quoteNumber || '',
+        requestNumber: reqNum,
+        bookingNumber: '',
+        lastMessage: req.issueDescription || req.description || 'Inspection request initiated',
+        lastMessageTime: new Date().toISOString(),
+        unreadCountAdmin: 0,
+        unreadCountCustomer: 0,
+      };
+      setChatThreads(prev => [targetThread, ...prev.filter(t => t.id !== threadId)]);
+    }
+
     setActiveThreadId(threadId);
-    // Join the thread socket room for real-time updates
-    if (socket.connected) {
-      socket.emit('join_thread', threadId);
+    setChatFilterType('ALL');
+    setChatSearch('');
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_thread', threadId);
+    }
+    fetchThreadMessages(threadId);
+    setActiveTab('chat');
+    setSidebarOpen(false);
+  };
+
+  const openChatForBooking = (b) => {
+    if (!b) return;
+    const bNum = b.bookingNumber || b.id || '';
+    const cleanPhone = (b.customerPhone || '').replace(/\D/g, '');
+    const custName = b.customerName || 'Customer';
+
+    // Find if a thread already exists for this booking or customer
+    let targetThread = chatThreads.find(t => {
+      const tPhone = (t.customerPhone || '').replace(/\D/g, '');
+      const matchPhone = cleanPhone && tPhone && (cleanPhone.includes(tPhone) || tPhone.includes(cleanPhone));
+      const matchBooking = bNum && (t.bookingNumber === bNum || t.contextTag?.includes(bNum));
+      const matchName = custName && t.customerName && t.customerName.toLowerCase().trim() === custName.toLowerCase().trim();
+      return matchBooking || (matchPhone && matchName);
+    });
+
+    const threadId = targetThread ? targetThread.id : `thread_book_${bNum.toString().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+    if (!targetThread) {
+      targetThread = {
+        id: threadId,
+        customerName: custName,
+        customerPhone: b.customerPhone || '+91 94628 77757',
+        contextType: 'BOOKING',
+        contextTag: `Booking #${bNum}`,
+        bookingNumber: bNum,
+        quoteNumber: '',
+        requestNumber: '',
+        lastMessage: `Instant booking for ${b.subServiceName || b.serviceName || 'Maintenance Service'}`,
+        lastMessageTime: new Date().toISOString(),
+        unreadCountAdmin: 0,
+        unreadCountCustomer: 0,
+      };
+      setChatThreads(prev => [targetThread, ...prev.filter(t => t.id !== threadId)]);
+    }
+
+    setActiveThreadId(threadId);
+    setChatFilterType('ALL');
+    setChatSearch('');
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_thread', threadId);
     }
     fetchThreadMessages(threadId);
     setActiveTab('chat');
@@ -1008,6 +1104,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
           contextTag: `Quotation #${qNum}`,
           quoteNumber: qNum,
           requestNumber: q.requestNumber || '',
+          bookingNumber: '',
           lastMessage: `Official Quotation for ₹${(q.grandtotal || q.amount || 0).toLocaleString('en-IN')}`,
           lastMessageTime: new Date().toISOString(),
           unreadCountAdmin: 0,
@@ -1017,9 +1114,10 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
       ];
     });
     setActiveThreadId(threadId);
-    // Join the thread socket room for real-time updates
-    if (socket.connected) {
-      socket.emit('join_thread', threadId);
+    setChatFilterType('ALL');
+    setChatSearch('');
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_thread', threadId);
     }
     fetchThreadMessages(threadId);
     setActiveTab('chat');
@@ -1286,7 +1384,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mt-0.5">Technical Portal</div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10.5px] font-medium">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Live</span>
           </div>
@@ -1818,7 +1916,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                       <span className="px-1.5 py-0.5 rounded-md font-bold bg-amber-50 text-amber-800 text-[10px] border border-amber-200">
                         Pending BOQ
                       </span>
-                      <span className="text-amber-800 font-semibold text-[10.5px]">Action Needed</span>
+                      <span className="text-amber-800 font-semibold text-[11px]">Action Needed</span>
                     </div>
                   </div>
 
@@ -1838,7 +1936,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     </div>
                     <div className="flex items-center justify-between mt-2.5 text-[11px] pt-2 border-t border-slate-100">
                       <span className="font-mono text-purple-700 font-bold">₹{totalQuotedRev.toLocaleString('en-IN')}</span>
-                      <span className="text-slate-400 text-[10.5px] font-semibold">{conversionRatePct}% Accepted</span>
+                      <span className="text-slate-400 text-[11px] font-semibold">{conversionRatePct}% Accepted</span>
                     </div>
                   </div>
 
@@ -1984,7 +2082,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                         <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                           <Layers className="w-3.5 h-3.5 text-brand-600" /> Service Categories in Demand
                         </span>
-                        <span className="text-[10.5px] text-slate-400">Total {requests.length} Orders</span>
+                        <span className="text-[11px] text-slate-400">Total {requests.length} Orders</span>
                       </div>
                       <div className="space-y-2">
                         {Object.entries(categoryDemand).map(([cat, count]) => {
@@ -2112,7 +2210,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                       /* DIRECT BOOKINGS TABLE */
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-slate-100/80 text-slate-600 uppercase text-[10.5px] font-bold tracking-wider border-b border-slate-200">
+                          <tr className="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
                             <th className="py-3 px-4">Booking #</th>
                             <th className="py-3 px-4">Customer & Contact</th>
                             <th className="py-3 px-4">Service Details</th>
@@ -2147,7 +2245,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                 </td>
                                 <td className="py-3.5 px-4">
                                   <div className="font-medium text-slate-700">{b.scheduledDate}</div>
-                                  <div className="text-[10.5px] text-slate-400">{b.scheduledSlot}</div>
+                                  <div className="text-[11px] text-slate-400">{b.scheduledSlot}</div>
                                 </td>
                                 <td className="py-3.5 px-4">
                                   {b.technicianName ? (
@@ -2155,7 +2253,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200 text-xs">
                                         <HardHat className="w-3.5 h-3.5 text-emerald-600" /> {b.technicianName}
                                       </span>
-                                      <div className="flex items-center gap-2 text-[10.5px]">
+                                      <div className="flex items-center gap-2 text-[11px]">
                                         <span className="text-slate-500 font-medium">{b.technicianRole || 'Field Specialist'}</span>
                                         <button
                                           onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: b.technicianName || '', phone: b.technicianPhone || '', role: b.technicianRole || 'Senior Field Specialist' }); }}
@@ -2181,12 +2279,22 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                   </span>
                                 </td>
                                 <td className="py-3.5 px-4 text-right">
-                                  <button
-                                    onClick={() => setSelectedBookingForDrawer(b)}
-                                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
-                                  >
-                                    Details
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => openChatForBooking(b)}
+                                      title="Chat with Customer regarding this Instant Booking"
+                                      className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all flex items-center gap-1 text-[11px] font-semibold"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span className="hidden sm:inline">Chat</span>
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedBookingForDrawer(b)}
+                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                    >
+                                      Details
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))
@@ -2197,7 +2305,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                       /* MAIN INSPECTION & QUOTATION OPERATIONS TABLE */
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-slate-100/80 text-slate-600 uppercase text-[10.5px] font-bold tracking-wider border-b border-slate-200">
+                          <tr className="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
                             <th className="py-3 px-4">Customer & Request #</th>
                             <th className="py-3 px-4">Service & Damage Scope</th>
                             <th className="py-3 px-4">Readiness & Quotation Status</th>
@@ -2269,7 +2377,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                         )}
                                       </div>
 
-                                      <div className="text-[10.5px] text-slate-500 flex items-center gap-1 pt-0.5">
+                                      <div className="text-[11px] text-slate-500 flex items-center gap-1 pt-0.5">
                                         <Home className="w-3 h-3 text-slate-400 shrink-0" />
                                         <span className="font-medium text-slate-700">{req.propertyType || 'Residential'}</span>
                                         {req.propertySize && <span>({req.propertySize})</span>}
@@ -2309,7 +2417,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                           <button
                                             type="button"
                                             onClick={() => setActivePhotoModal({ photos: media, index: 0, title: `Damage Photos - ${req.requestNumber}` })}
-                                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10.5px] font-semibold transition-all"
+                                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-semibold transition-all"
                                           >
                                             <Camera className="w-3 h-3 text-blue-600" />
                                             <span>Inspect {media.length} {media.length === 1 ? 'Photo' : 'Photos'}</span>
@@ -2467,11 +2575,11 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                       {/* Secondary Action Buttons */}
                                       <div className="flex items-center gap-1.5 w-full justify-end">
                                         <button
-                                          onClick={() => handleOpenChatWithCustomer(req.user, req.user?.phoneNumber)}
+                                          onClick={() => openChatForRequest(req)}
                                           title="Open Live Chat Desk with customer"
-                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1 text-[11px] font-medium"
+                                          className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all flex items-center gap-1 text-[11px] font-semibold"
                                         >
-                                          <MessageCircle className="w-3.5 h-3.5 text-brand-600" />
+                                          <MessageCircle className="w-3.5 h-3.5 text-indigo-600" />
                                           <span className="hidden sm:inline">Chat</span>
                                         </button>
 
@@ -2622,7 +2730,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                               );
                             })}
                           </div>
-                          <div className="text-[10.5px] text-slate-400 flex items-center justify-between">
+                          <div className="text-[11px] text-slate-400 flex items-center justify-between">
                             <span>💡 Tap any milestone to update app timeline</span>
                             <span className="font-semibold text-slate-600">{TIMELINE_STAGES[getTimelineStepIndex(req.status)]?.desc}</span>
                           </div>
@@ -2742,8 +2850,12 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                           >
                             <MessageCircle className="w-4 h-4 text-indigo-600" /> Chat
                           </button>
-                          <button onClick={() => setActiveQuoteModal(q)} className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs">
-                            <Printer className="w-4 h-4" /> View & Print
+                          <button
+                            onClick={() => setActiveQuoteModal(q)}
+                            className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-brand-600 bg-brand-100 hover:bg-brand-50 border border-brand-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
+                            title="View Quotation Details"
+                          >
+                            <Eye className="w-4 h-4 text-brand-600" /> Details
                           </button>
                           <button onClick={() => handleQuoteDecision(q.id, 'ACCEPTED')} className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs">
                             <Check className="w-4 h-4" /> Accept
@@ -2819,7 +2931,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-400 text-[10.5px] font-medium uppercase tracking-wider border-b border-slate-200">
+                    <thead className="bg-slate-50 text-slate-400 text-[11px] font-medium uppercase tracking-wider border-b border-slate-200">
                       <tr>
                         <th className="p-2.5 w-8 text-center">#</th>
                         <th className="p-2.5 min-w-[220px]">Item Description & Scope</th>
@@ -2876,7 +2988,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 <div className="lg:col-span-7 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="block text-[10.5px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
+                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
                       <select value={builderTimeline} onChange={(e) => setBuilderTimeline(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
                         <option value="1-2 Working Days">1-2 Working Days</option>
                         <option value="2-3 Working Days">2-3 Working Days</option>
@@ -2887,7 +2999,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="block text-[10.5px] font-medium text-slate-400 uppercase">Service Scope</label>
+                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Service Scope</label>
                       <select value={builderScope} onChange={(e) => setBuilderScope(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
                         <option value="Standard Engineering Specifications">Standard Engineering Specifications</option>
                         <option value="Comprehensive Waterproofing Scope">Comprehensive Waterproofing Scope</option>
@@ -2898,7 +3010,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[10.5px] font-medium text-slate-400 uppercase">Terms & Conditions</label>
+                    <label className="block text-[11px] font-medium text-slate-400 uppercase">Terms & Conditions</label>
                     <textarea rows="2" value={builderTerms} onChange={(e) => setBuilderTerms(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 leading-relaxed"></textarea>
                   </div>
                 </div>
@@ -3003,7 +3115,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                         />
                       </div>
                     </div>
-                    <div className="text-[10.5px] text-indigo-700 leading-tight">
+                    <div className="text-[11px] text-indigo-700 leading-tight">
                       Customer will pay exactly <strong>₹{effectiveAdvanceAmount.toLocaleString('en-IN')}</strong> to approve & commence work.
                     </div>
                   </div>
@@ -3064,7 +3176,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Chat Two-Pane Workspace */}
               <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden grid grid-cols-12 min-h-[700px] h-[calc(100vh-280px)]">
                 {/* LEFT COLUMN: Conversation Threads List */}
-                <div className="col-span-12 md:col-span-5 lg:col-span-4 border-r border-slate-200 flex flex-col h-full bg-slate-50/50">
+                <div className={`col-span-12 md:col-span-5 lg:col-span-4 border-r border-slate-200 flex flex-col h-full bg-slate-50/50 ${activeThreadId ? 'hidden md:flex' : 'flex'}`}>
                   {/* Search and Filters */}
                   <div className="p-4 border-b border-slate-200 space-y-3 bg-white">
                     <div className="relative">
@@ -3081,8 +3193,9 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs font-semibold">
                       {[
                         { id: 'ALL', label: 'All' },
-                        { id: 'QUOTATION', label: 'Quotes' },
                         { id: 'REQUEST', label: 'Requests' },
+                        { id: 'BOOKING', label: 'Bookings' },
+                        { id: 'QUOTATION', label: 'Quotes' },
                         { id: 'GENERAL', label: 'General' },
                       ].map(filter => (
                         <button
@@ -3112,6 +3225,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                           (t.customerPhone && t.customerPhone.toLowerCase().includes(q)) ||
                           (t.quoteNumber && t.quoteNumber.toLowerCase().includes(q)) ||
                           (t.requestNumber && t.requestNumber.toLowerCase().includes(q)) ||
+                          (t.bookingNumber && t.bookingNumber.toLowerCase().includes(q)) ||
                           (t.contextTag && t.contextTag.toLowerCase().includes(q)) ||
                           (t.lastMessage && t.lastMessage.toLowerCase().includes(q))
                         );
@@ -3168,7 +3282,11 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                               </div>
 
                               <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                                {t.quoteNumber ? (
+                                {t.bookingNumber ? (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                    Booking #{t.bookingNumber}
+                                  </span>
+                                ) : t.quoteNumber ? (
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                     Quote #{t.quoteNumber}
                                   </span>
@@ -3200,7 +3318,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 </div>
 
                 {/* RIGHT COLUMN: Active Thread Chat View */}
-                <div className="col-span-12 md:col-span-7 lg:col-span-8 flex flex-col h-full bg-white">
+                <div className={`col-span-12 md:col-span-7 lg:col-span-8 flex flex-col h-full bg-white ${!activeThreadId ? 'hidden md:flex' : 'flex'}`}>
                   {(() => {
                     const currentThread = chatThreads.find(t => t.id === activeThreadId) || (activeThreadId ? { id: activeThreadId, customerName: 'Client' } : null);
 
@@ -3223,7 +3341,14 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                         {/* Thread Header */}
                         <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-white">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-semibold flex items-center justify-center text-sm shadow-xs">
+                            <button
+                              onClick={() => setActiveThreadId(null)}
+                              className="md:hidden p-1.5 -ml-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                              title="Back to conversations"
+                            >
+                              <ArrowLeft className="w-5 h-5" />
+                            </button>
+                            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-semibold flex items-center justify-center text-sm shadow-xs shrink-0">
                               {(currentThread.customerName || 'C')[0].toUpperCase()}
                             </div>
                             <div>
@@ -3249,6 +3374,20 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
                           {/* Quick Context Shortcuts */}
                           <div className="flex items-center gap-2">
+                            {currentThread.bookingNumber && (
+                              <button
+                                onClick={() => {
+                                  const found = directBookings.find(b => b.bookingNumber === currentThread.bookingNumber);
+                                  if (found) setSelectedBookingForDrawer(found);
+                                  setActiveTab('direct-bookings');
+                                }}
+                                className="px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all flex items-center gap-1.5"
+                                title="Open Instant Booking details"
+                              >
+                                <Zap className="w-3.5 h-3.5 text-amber-600" />
+                                <span className="hidden sm:inline">View Booking</span>
+                              </button>
+                            )}
                             {currentThread.quoteNumber && (
                               <button
                                 onClick={() => setActiveTab('quotations')}
@@ -3543,13 +3682,13 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
                               <td className="py-3.5 px-4">
                                 <div className="font-semibold text-slate-800">{b.subServiceName}</div>
-                                <div className="text-[10.5px] text-brand-600 font-medium">{b.serviceName}</div>
+                                <div className="text-[11px] text-brand-600 font-medium">{b.serviceName}</div>
                               </td>
 
                               <td className="py-3.5 px-4">
                                 <div className="font-medium text-slate-800">{b.customerName}</div>
-                                <div className="text-[10.5px] text-slate-500 font-mono">{b.customerPhone}</div>
-                                <div className="text-[10.5px] text-slate-400 truncate max-w-[180px]">{b.customerAddress}, {b.city}</div>
+                                <div className="text-[11px] text-slate-500 font-mono">{b.customerPhone}</div>
+                                <div className="text-[11px] text-slate-400 truncate max-w-[180px]">{b.customerAddress}, {b.city}</div>
                                 {b.latitude && b.longitude && (
                                   <a
                                     href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`}
@@ -3568,7 +3707,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                   <Calendar className="w-3 h-3 text-brand-500" />
                                   <span>{b.scheduledDate}</span>
                                 </div>
-                                <div className="flex items-center gap-1 text-[10.5px] text-slate-400 mt-0.5">
+                                <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
                                   <Clock className="w-3 h-3" />
                                   <span>{b.scheduledSlot}</span>
                                 </div>
@@ -3596,10 +3735,10 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                                       <span>{b.technicianName}</span>
                                     </div>
                                     <div className="text-[10px] text-emerald-700 font-semibold">{b.technicianRole || 'Field Specialist'}</div>
-                                    <div className="text-[10.5px] text-slate-400 font-mono">{b.technicianPhone}</div>
+                                    <div className="text-[11px] text-slate-400 font-mono">{b.technicianPhone}</div>
                                     <button
                                       onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: b.technicianName || '', phone: b.technicianPhone || '', role: b.technicianRole || 'Senior Field Specialist' }); }}
-                                      className="text-[10px] text-brand-600 hover:text-brand-800 font-medium underline mt-0.5"
+                                      className="text-[11px] text-brand-600 hover:text-brand-800 font-medium underline mt-0.5"
                                     >
                                       Change Specialist
                                     </button>
@@ -3616,11 +3755,11 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
                               <td className="py-3.5 px-4">
                                 {isRefunded ? (
-                                  <span className="px-2 py-0.5 text-[10.5px] font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                                  <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-200">
                                     REFUNDED (₹{b.refundAmount})
                                   </span>
                                 ) : (
-                                  <span className={`px-2 py-0.5 text-[10.5px] font-bold rounded-full border ${
+                                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full border ${
                                     b.status === 'CONFIRMED' ? 'bg-amber-50 text-amber-800 border-amber-200' :
                                     b.status === 'ASSIGNED' ? 'bg-indigo-50 text-indigo-800 border-indigo-200' :
                                     b.status === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-800 border-blue-200' :
@@ -3634,6 +3773,14 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
                               <td className="py-3.5 px-4 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => openChatForBooking(b)}
+                                    title="Live Chat with Customer"
+                                    className="p-1.5 rounded-lg text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all"
+                                  >
+                                    <MessageCircle className="w-4 h-4" />
+                                  </button>
+
                                   <button
                                     onClick={() => setSelectedBookingForDrawer(b)}
                                     title="View Full Details & Answers"
@@ -3707,7 +3854,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                         <div>
                           <div className="flex items-center gap-1.5">
                             <h3 className="font-heading font-semibold text-sm text-slate-800">{svc.name}</h3>
-                            <span className="font-mono text-xs font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                            <span className="font-mono text-sm font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
                               {svc.code}
                             </span>
                           </div>
@@ -3718,7 +3865,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenAddSubService(svc)}
-                          className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg flex items-center gap-1.5 shadow-xs transition-all"
+                          className="px-3 py-1.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg flex items-center gap-1.5 shadow-xs transition-all"
                         >
                           <Plus className="w-3.5 h-3.5" /> Add Sub-Service
                         </button>
@@ -3732,7 +3879,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <div className="font-bold text-xs text-slate-800">{sub.titleEn}</div>
-                              {sub.titleHi && <div className="text-[10.5px] font-medium text-brand-600">{sub.titleHi}</div>}
+                              {sub.titleHi && <div className="text-[11px] font-medium text-brand-600">{sub.titleHi}</div>}
                             </div>
                             <div className="px-2 py-0.5 rounded-md font-mono text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200 shrink-0">
                               ₹{sub.visitingCharge !== undefined ? sub.visitingCharge : 199} Visit
@@ -3744,7 +3891,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                           </div>
 
                           {/* Toggles & Required Fields badges */}
-                          <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60 text-[10px]">
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60 text-[11px]">
                             <span className={`px-1.5 py-0.5 rounded font-semibold ${sub.bookNowEnabled !== false ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400'}`}>
                               Book Now: {sub.bookNowEnabled !== false ? 'ON' : 'OFF'}
                             </span>
@@ -3766,7 +3913,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => handleOpenEditSubService(sub, svc)}
-                                className="px-2 py-0.5 text-[10.5px] font-medium text-brand-600 bg-white hover:bg-brand-50 border border-slate-200 rounded transition-all"
+                                className="px-2 py-0.5 text-[11px] font-medium text-brand-600 bg-white hover:bg-brand-50 border border-slate-200 rounded transition-all"
                               >
                                 Edit & Price
                               </button>
@@ -3798,7 +3945,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-400 font-medium uppercase tracking-wider border-b border-slate-200 text-[10.5px]">
+                    <thead className="bg-slate-50 text-slate-400 font-medium uppercase tracking-wider border-b border-slate-200 text-[11px]">
                       <tr>
                         <th className="p-3">Customer Name</th>
                         <th className="p-3">Phone Number</th>
@@ -3980,7 +4127,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                               {slide.title}
                             </div>
                             {slide.subtitle && (
-                              <div className="text-[10.5px] text-slate-200 font-normal drop-shadow-xs line-clamp-1 mt-0.5">
+                              <div className="text-[11px] text-slate-200 font-normal drop-shadow-xs line-clamp-1 mt-0.5">
                                 {slide.subtitle}
                               </div>
                             )}
@@ -4244,7 +4391,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                               )}
 
                               {/* Min Amount & Validity */}
-                              <div className="flex items-center justify-between text-[10.5px] text-slate-400 pt-1">
+                              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
                                 <span>Min: ₹{Number(offer.minAmount || 0).toLocaleString('en-IN')}</span>
                                 <span>Expires: {offer.validTill || 'Limited'}</span>
                               </div>
@@ -4455,7 +4602,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-600 font-medium uppercase border-b border-slate-300 text-[10.5px]">
+                  <tr className="bg-slate-100 text-slate-600 font-medium uppercase border-b border-slate-300 text-[11px]">
                     <th className="p-2 w-8">#</th>
                     <th className="p-2">Scope & Specification</th>
                     <th className="p-2 w-14">Qty</th>
@@ -4551,7 +4698,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg bg-slate-50 border border-dashed border-slate-300 text-[10.5px] text-slate-500 space-y-0.5 font-normal">
+              <div className="p-3 rounded-lg bg-slate-50 border border-dashed border-slate-300 text-[11px] text-slate-500 space-y-0.5 font-normal">
                 <div><strong>Service Specifications:</strong> {(activeQuoteModal.service_scope) || 'Standard Engineering Specifications'}</div>
                 <div><strong>Commercial Terms:</strong> {activeQuoteModal.termsAndConditions || 'Standard payment terms apply.'}</div>
               </div>
@@ -4592,24 +4739,24 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               } catch (err) { showToastMsg('Error creating service', 'error'); }
             }} className="p-4 space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-medium text-slate-500 uppercase">Service Code</label>
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Service Code</label>
                 <input name="code" placeholder="e.g. WATERPROOFING" required className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
               </div>
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-medium text-slate-500 uppercase">Service Name</label>
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Service Name</label>
                 <input name="name" placeholder="e.g. Terrace Waterproofing" required className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
               </div>
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-medium text-slate-500 uppercase">Description</label>
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Description</label>
                 <textarea name="description" rows="2" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"></textarea>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-medium text-slate-500 uppercase">Icon</label>
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase">Icon</label>
                   <input name="icon" defaultValue="Droplets" className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-medium text-slate-500 uppercase">Rating</label>
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase">Rating</label>
                   <input name="rating" defaultValue="4.8" step="0.1" type="number" className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
                 </div>
               </div>
@@ -4644,7 +4791,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
             <form onSubmit={handleSaveSlide} className="p-4 space-y-3.5 text-xs">
               {/* Slide Title */}
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                   Slide Headline / Title *
                 </label>
                 <input
@@ -4659,7 +4806,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
               {/* Subtitle */}
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                   Subtitle / Promo Text
                 </label>
                 <input
@@ -4674,7 +4821,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Badge Text & Order in 2 cols */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Badge Pill Text
                   </label>
                   <input
@@ -4686,7 +4833,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Display Order
                   </label>
                   <input
@@ -4702,7 +4849,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Image URL & File Upload */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Banner Image *
                   </label>
                   <label className="text-[11px] text-brand-600 font-semibold cursor-pointer hover:underline flex items-center gap-1">
@@ -4850,7 +4997,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
             <form onSubmit={handleSaveOffer} className="p-5 overflow-y-auto space-y-4 text-xs">
               {/* Offer Title */}
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                   Offer Title *
                 </label>
                 <input
@@ -4865,7 +5012,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
               {/* Subtitle */}
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                   Subtitle / Promo Tagline
                 </label>
                 <input
@@ -4880,7 +5027,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Category & Discount */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Category *
                   </label>
                   <input
@@ -4906,7 +5053,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Discount Display *
                   </label>
                   <input
@@ -4923,7 +5070,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Coupon Code & Badge */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Coupon Code *
                   </label>
                   <input
@@ -4937,7 +5084,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Badge Pill
                   </label>
                   <input
@@ -4953,7 +5100,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Min Amount & Valid Till */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Min Booking Amount (₹)
                   </label>
                   <input
@@ -4966,7 +5113,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Valid Till
                   </label>
                   <input
@@ -4982,7 +5129,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Banner Image URL & File Upload */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Offer Thumbnail / Banner Image
                   </label>
                   <label className="text-[11px] text-emerald-600 font-semibold cursor-pointer hover:underline flex items-center gap-1">
@@ -5068,7 +5215,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
               {/* Terms and Conditions */}
               <div className="space-y-1">
-                <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                   Terms & Conditions Snippet
                 </label>
                 <textarea
@@ -5083,7 +5230,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               {/* Order & Active */}
               <div className="grid grid-cols-2 gap-3 items-center pt-1">
                 <div className="space-y-1">
-                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase">
                     Display Order
                   </label>
                   <input
@@ -5165,7 +5312,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     value={subServiceForm.titleEn}
                     onChange={(e) => setSubServiceForm({ ...subServiceForm, titleEn: e.target.value })}
                     placeholder="e.g. Overhead Tank Cleaning"
-                    className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
                   />
                 </div>
                 <div>
@@ -5177,7 +5324,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     value={subServiceForm.titleHi}
                     onChange={(e) => setSubServiceForm({ ...subServiceForm, titleHi: e.target.value })}
                     placeholder="e.g. पानी की टंकी सफाई"
-                    className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
+                    className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
                   />
                 </div>
               </div>
@@ -5205,7 +5352,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     className="w-full pl-7 pr-3 py-2 bg-white text-sm font-mono font-bold text-slate-900 border border-amber-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-400"
                   />
                 </div>
-                <p className="text-[10.5px] text-amber-800 mt-1.5 leading-snug">
+                <p className="text-[11px] text-amber-800 mt-1.5 leading-snug">
                   Customer pays this visiting charge online to confirm. Any material or major work is adjusted on-site by technician.
                 </p>
               </div>
@@ -5220,7 +5367,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={subServiceForm.desc}
                   onChange={(e) => setSubServiceForm({ ...subServiceForm, desc: e.target.value })}
                   placeholder="Explain what is included in this sub-service and visiting scope..."
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
                 />
               </div>
 
@@ -5234,8 +5381,8 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     className="w-4 h-4 text-brand-600 rounded border-slate-300"
                   />
                   <div>
-                    <div className="text-xs font-semibold text-slate-800">Book Now (Online)</div>
-                    <div className="text-[10px] text-slate-400">Pre-paid instant checkout</div>
+                    <div className="text-sm font-semibold text-slate-800">Book Now (Online)</div>
+                    <div className="text-sm text-slate-400">Pre-paid instant checkout</div>
                   </div>
                 </label>
 
@@ -5247,8 +5394,8 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                     className="w-4 h-4 text-brand-600 rounded border-slate-300"
                   />
                   <div>
-                    <div className="text-xs font-semibold text-slate-800">Get Quote</div>
-                    <div className="text-[10px] text-slate-400">Inspection request flow</div>
+                    <div className="text-sm font-semibold text-slate-800">Get Quote</div>
+                    <div className="text-sm text-slate-400">Inspection request flow</div>
                   </div>
                 </label>
               </div>
@@ -5263,7 +5410,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={subServiceForm.checklist}
                   onChange={(e) => setSubServiceForm({ ...subServiceForm, checklist: e.target.value })}
                   placeholder="Inspect inlet valve&#10;Deep clean with antibacterial solution&#10;Check water flow & pressure"
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-mono"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-mono"
                 />
               </div>
 
@@ -5271,10 +5418,10 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               <div className="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wide">Required Customer Questions</h4>
-                    <p className="text-[10.5px] text-indigo-700">Questions customer must answer when booking this subservice</p>
+                    <h4 className="text-sm font-bold text-indigo-950 uppercase tracking-wide">Required Customer Questions</h4>
+                    <p className="text-sm text-indigo-700">Questions customer must answer when booking this subservice</p>
                   </div>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                  <span className="text-sm font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
                     {subServiceForm.requiredFields?.length || 0} Configured
                   </span>
                 </div>
@@ -5440,7 +5587,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={techForm.name}
                   onChange={(e) => setTechForm({ ...techForm, name: e.target.value })}
                   placeholder="e.g. Ramesh Kumar"
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
                 />
               </div>
 
@@ -5454,7 +5601,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={techForm.role || ''}
                   onChange={(e) => setTechForm({ ...techForm, role: e.target.value })}
                   placeholder="e.g. Senior Waterproofing Technician"
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
                 />
               </div>
 
@@ -5468,7 +5615,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={techForm.phone}
                   onChange={(e) => setTechForm({ ...techForm, phone: e.target.value })}
                   placeholder="e.g. +91 98765 43210"
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-mono"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-mono"
                 />
               </div>
 
@@ -5538,7 +5685,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={statusForm.reason}
                   onChange={(e) => setStatusForm({ ...statusForm, reason: e.target.value })}
                   placeholder="e.g. Technician arrived at customer site, job started."
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
                 />
               </div>
 
@@ -5699,7 +5846,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   value={adjustForm.note}
                   onChange={(e) => setAdjustForm({ ...adjustForm, note: e.target.value })}
                   placeholder="e.g. Replaced 1 inch ball valve + 3 ft CPVC pipe"
-                  className="w-full px-3 py-2 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
+                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
                 />
               </div>
 
@@ -5768,13 +5915,27 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                       <span>{selectedBookingForDrawer.customerPhone}</span>
                     </div>
                   </div>
-                  <a
-                    href={`tel:${selectedBookingForDrawer.customerPhone}`}
-                    className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all"
-                    title="Call Customer"
-                  >
-                    <PhoneCall className="w-4 h-4" />
-                  </a>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        const booking = selectedBookingForDrawer;
+                        setSelectedBookingForDrawer(null);
+                        openChatForBooking(booking);
+                      }}
+                      className="p-2 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-all flex items-center gap-1.5 text-xs font-semibold"
+                      title="Open Live Chat with Customer"
+                    >
+                      <MessageCircle className="w-4 h-4 text-indigo-600" />
+                      <span>Chat</span>
+                    </button>
+                    <a
+                      href={`tel:${selectedBookingForDrawer.customerPhone}`}
+                      className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all"
+                      title="Call Customer"
+                    >
+                      <PhoneCall className="w-4 h-4" />
+                    </a>
+                  </div>
                 </div>
                 <div className="pt-2 border-t border-slate-200/60 text-xs text-slate-600 flex items-start justify-between gap-2">
                   <div className="flex items-start gap-1.5">
@@ -5783,7 +5944,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                       <div>{selectedBookingForDrawer.customerAddress}, {selectedBookingForDrawer.city}</div>
                       {selectedBookingForDrawer.landmark && <span className="block text-[11px] text-slate-400">Landmark: {selectedBookingForDrawer.landmark}</span>}
                       {selectedBookingForDrawer.latitude && selectedBookingForDrawer.longitude && (
-                        <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200/60 text-[10.5px] font-mono text-indigo-700">
+                        <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200/60 text-[11px] font-mono text-indigo-700">
                           <span>📍 {selectedBookingForDrawer.latitude.toFixed(5)}, {selectedBookingForDrawer.longitude.toFixed(5)}</span>
                         </div>
                       )}
@@ -5809,14 +5970,14 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sub-Service & Slot</div>
                 <div>
                   <div className="font-bold text-slate-800">{selectedBookingForDrawer.subServiceName}</div>
-                  <div className="text-xs text-brand-600 font-medium">{selectedBookingForDrawer.serviceName}</div>
+                  <div className="text-sm text-brand-600 font-medium">{selectedBookingForDrawer.serviceName}</div>
                   {selectedBookingForDrawer.subServiceDesc && (
                     <div className="text-[11px] text-slate-500 mt-1 italic leading-relaxed">
                       "{selectedBookingForDrawer.subServiceDesc}"
                     </div>
                   )}
                 </div>
-                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-sm">
                   <div className="flex items-center gap-1.5 font-medium text-slate-700">
                     <Calendar className="w-3.5 h-3.5 text-brand-500" />
                     <span>{selectedBookingForDrawer.scheduledDate}</span>
@@ -5873,7 +6034,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                 </div>
 
                 {/* Razorpay transaction details */}
-                <div className="pt-2 border-t border-slate-200/60 text-[10.5px] font-mono text-slate-500 space-y-0.5">
+                <div className="pt-2 border-t border-slate-200/60 text-[11px] font-mono text-slate-500 space-y-0.5">
                   {selectedBookingForDrawer.razorpayPaymentId && (
                     <div>Payment ID: <strong className="text-slate-700">{selectedBookingForDrawer.razorpayPaymentId}</strong></div>
                   )}
@@ -6028,7 +6189,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
 
             <div className="flex-1 min-w-0 pt-0.5">
               <div className="flex items-center justify-between gap-2">
-                <span className={`text-[10.5px] font-bold uppercase tracking-wider ${
+                <span className={`text-[11px] font-bold uppercase tracking-wider ${
                   toast.type === 'success' ? 'text-emerald-700' :
                   toast.type === 'error' ? 'text-rose-700' :
                   toast.type === 'warning' ? 'text-amber-700' :

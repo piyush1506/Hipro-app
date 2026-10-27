@@ -59,6 +59,129 @@ function writeNotifications(notifications) {
   }
 }
 
+let admin = null;
+try {
+  admin = require('firebase-admin');
+} catch (e) {
+  console.log('firebase-admin module not loaded yet:', e.message);
+}
+
+let isFirebaseInitialized = false;
+
+function initFirebaseAdmin() {
+  if (!admin) return null;
+  if (isFirebaseInitialized || admin.apps.length > 0) {
+    isFirebaseInitialized = true;
+    return admin;
+  }
+
+  try {
+    let serviceAccount = null;
+
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      } catch (e) {
+        console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT env:', e);
+      }
+    }
+
+    if (!serviceAccount) {
+      const candidates = [
+        path.join(__dirname, '../../firebase-service-account.json'),
+        path.join(__dirname, '../../../firebase-service-account.json'),
+        path.join(__dirname, '../../config/firebase-service-account.json'),
+        path.join(__dirname, '../../../android/app/google-services.json')
+      ];
+      for (const p of candidates) {
+        if (fs.existsSync(p)) {
+          try {
+            serviceAccount = JSON.parse(fs.readFileSync(p, 'utf-8'));
+            if (serviceAccount.project_id && serviceAccount.private_key) {
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (serviceAccount && serviceAccount.private_key) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      isFirebaseInitialized = true;
+      console.log('✅ Firebase Admin SDK initialized with service account');
+      return admin;
+    } else {
+      try {
+        admin.initializeApp({
+          projectId: 'hipro-e3170'
+        });
+        isFirebaseInitialized = true;
+        console.log('✅ Firebase Admin SDK initialized for project hipro-e3170');
+        return admin;
+      } catch (errDef) {
+        console.log('ℹ️ Firebase Admin SDK waiting for service credentials');
+      }
+    }
+  } catch (err) {
+    console.error('Firebase Admin init error:', err);
+  }
+  return null;
+}
+
+// Attempt initial setup
+initFirebaseAdmin();
+
+async function sendPushNotificationToTokens(notification) {
+  try {
+    const fcmAdmin = initFirebaseAdmin();
+    if (!fcmAdmin || !admin.apps.length) return;
+
+    const tokens = readFcmTokens();
+    if (!tokens || tokens.length === 0) return;
+
+    const tokenList = tokens.map(t => t.token).filter(t => t && typeof t === 'string' && t.trim().length > 10);
+    if (tokenList.length === 0) return;
+
+    const payload = {
+      notification: {
+        title: notification.title || '💬 New Message from Hipro',
+        body: notification.description || 'Tap to view message'
+      },
+      data: {
+        type: String(notification.type || 'GENERAL'),
+        threadId: String(notification.threadId || notification.referenceId || ''),
+        referenceId: String(notification.referenceId || notification.threadId || ''),
+        quoteNumber: String(notification.quoteNumber || ''),
+        requestNumber: String(notification.requestNumber || notification.requestId || ''),
+        bookingNumber: String(notification.bookingNumber || ''),
+        title: String(notification.title || ''),
+        body: String(notification.description || '')
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'hipro_notifications_channel',
+          sound: 'default',
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+        }
+      }
+    };
+
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens: tokenList,
+      notification: payload.notification,
+      data: payload.data,
+      android: payload.android
+    });
+
+    console.log(`[FCM Multicast] Sent to ${tokenList.length} devices. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+  } catch (err) {
+    console.error('[FCM Multicast] Error sending notification:', err.message);
+  }
+}
+
 function addNotification(notification, io = null) {
   const list = readNotifications();
   const item = {
@@ -67,11 +190,14 @@ function addNotification(notification, io = null) {
     description: notification.description || '',
     imageUrl: notification.imageUrl || '',
     type: notification.type || 'GENERAL',
-    referenceId: notification.referenceId || '',
+    referenceId: notification.referenceId || notification.threadId || '',
+    threadId: notification.threadId || notification.referenceId || '',
     quoteNumber: notification.quoteNumber || '',
     grandTotal: notification.grandTotal || 0,
-    requestId: notification.requestId || '',
-    projectName: notification.projectName || 'Inspection Project',
+    requestId: notification.requestId || notification.requestNumber || '',
+    requestNumber: notification.requestNumber || notification.requestId || '',
+    bookingNumber: notification.bookingNumber || '',
+    projectName: notification.projectName || 'Technical Consultation',
     location: notification.location || 'Site Location',
     unread: notification.unread !== false,
     timestamp: notification.timestamp || new Date().toISOString()
@@ -86,6 +212,9 @@ function addNotification(notification, io = null) {
       io.emit('new_quotation_alert', item);
     }
   }
+
+  // Dispatch FCM push to mobile devices asynchronously
+  sendPushNotificationToTokens(item).catch(e => console.error('FCM send error:', e));
 
   return item;
 }
@@ -231,4 +360,5 @@ module.exports = router;
 module.exports.addNotification = addNotification;
 module.exports.readNotifications = readNotifications;
 module.exports.readFcmTokens = readFcmTokens;
+module.exports.sendPushNotificationToTokens = sendPushNotificationToTokens;
 

@@ -209,8 +209,10 @@ router.post('/messages', (req, res) => {
           description: snippet,
           type: 'CHAT',
           referenceId: threadId,
+          threadId: threadId,
           quoteNumber: thread.quoteNumber || '',
           requestNumber: thread.requestNumber || '',
+          bookingNumber: thread.bookingNumber || '',
           projectName: thread.contextTag || 'Technical Consultation',
           unread: true,
           timestamp: nowIso
