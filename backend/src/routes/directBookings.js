@@ -341,10 +341,10 @@ router.post('/', async (req, res) => {
       }
     });
 
-    // Real-Time Notification to Admin Panel via Socket.IO
+    // Real-Time Notification to Admin Panel via Socket.IO (targeted to admin room only)
     const io = req.app.get('io');
     if (io) {
-      io.emit('new_direct_booking', {
+      io.to('admin').emit('new_direct_booking', {
         message: `New paid direct booking: ${newBooking.bookingNumber} (${newBooking.subServiceName})`,
         booking: newBooking
       });

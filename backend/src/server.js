@@ -40,6 +40,11 @@ io.on('connection', (socket) => {
       socket.to(`thread_${threadId}`).emit('user_typing', { threadId, senderName, isTyping });
     }
   });
+
+  // Admin: Join admin room for targeted notifications
+  socket.on('join_admin_room', () => {
+    socket.join('admin');
+  });
 });
 
 const PORT = process.env.PORT || 5000;

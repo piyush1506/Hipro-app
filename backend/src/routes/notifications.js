@@ -207,9 +207,9 @@ function addNotification(notification, io = null) {
   writeNotifications(list.slice(0, 100));
 
   if (io) {
-    io.emit('push_notification', item);
+    io.to('admin').emit('push_notification', item);
     if (item.type === 'QUOTATION') {
-      io.emit('new_quotation_alert', item);
+      io.to('admin').emit('new_quotation_alert', item);
     }
   }
 

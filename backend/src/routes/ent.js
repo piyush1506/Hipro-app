@@ -590,10 +590,10 @@ router.post('/bookings', (req, res) => {
     bookings.unshift(newBooking);
     saveBookings(bookings);
 
-    // If socket.io is active, notify admin in real-time
+    // If socket.io is active, notify admin in real-time (targeted to admin room only)
     const io = req.app.get('io');
     if (io) {
-      io.emit('new_ent_booking', {
+      io.to('admin').emit('new_ent_booking', {
         message: `New ENT adventure booked: ${ent.title} in ${ent.city}`,
         booking: newBooking,
       });
@@ -683,7 +683,7 @@ router.patch('/bookings/:id/cancel', (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('ent_booking_updated', {
+      io.to('admin').emit('ent_booking_updated', {
         action: 'CANCELLED',
         booking: bookings[idx],
       });
@@ -769,7 +769,7 @@ router.patch('/admin/bookings/:id/status', (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('ent_booking_updated', {
+      io.to('admin').emit('ent_booking_updated', {
         action: 'STATUS_UPDATED',
         status,
         booking: bookings[idx],
