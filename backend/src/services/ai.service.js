@@ -7,7 +7,7 @@ const HUMAN_REQUEST_PATTERN = /\b(human|agent|real person|customer support|suppo
 /**
  * Execute an async AI call with a strict timeout
  */
-function withTimeout(promise, ms = 12000) {
+function withTimeout(promise, ms = 7000) {
   let timer;
   const timeoutPromise = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(`AI Request timed out after ${ms}ms`)), ms);
@@ -16,7 +16,7 @@ function withTimeout(promise, ms = 12000) {
 }
 
 /**
- * AI Response Router with Automatic Groq Fallback
+ * AI Response Router with Intelligent Provider Selection and Automatic Fallback
  * Strictly Read-Only: Never executes database writes.
  */
 async function generateAIResponse(messages, knowledge, customerContext = null) {
@@ -32,21 +32,30 @@ async function generateAIResponse(messages, knowledge, customerContext = null) {
     };
   }
 
-  // 2. Primary: Google Gemini
-  try {
-    const result = await withTimeout(askGemini(messages, knowledge, customerContext), 12000);
-    return {
-      reply: result.reply || 'How else can I assist you today?',
-      escalate: !!result.escalate,
-      reason: result.reason || null,
-      provider: 'gemini'
-    };
-  } catch (geminiError) {
-    console.warn(`[AI Service] Primary Gemini failed: ${geminiError.message}. Switching to Groq fallback...`);
+  const geminiKey = process.env.GEMINI_API_KEY || '';
+  const isGeminiValid = geminiKey.startsWith('AIzaSy');
+  const groqKey = process.env.GROQ_API_KEY || '';
+  const isGroqValid = groqKey.startsWith('gsk_');
 
-    // 3. Fallback: Groq
+  // 2. Try Gemini first only if a standard Google AI Studio key is provided
+  if (isGeminiValid) {
     try {
-      const groqResult = await withTimeout(askGroq(messages, knowledge, customerContext), 12000);
+      const result = await withTimeout(askGemini(messages, knowledge, customerContext), 6000);
+      return {
+        reply: result.reply || 'How else can I assist you today?',
+        escalate: !!result.escalate,
+        reason: result.reason || null,
+        provider: 'gemini'
+      };
+    } catch (geminiError) {
+      console.warn(`[AI Service] Primary Gemini failed: ${geminiError.message}. Switching to Groq fallback...`);
+    }
+  }
+
+  // 3. Ultra-Fast Groq Engine (Llama 3 / GPT-OSS on Groq LPU - ~15ms response)
+  if (isGroqValid) {
+    try {
+      const groqResult = await withTimeout(askGroq(messages, knowledge, customerContext), 6000);
       return {
         reply: groqResult.reply || 'How else can I assist you today?',
         escalate: !!groqResult.escalate,
@@ -54,18 +63,17 @@ async function generateAIResponse(messages, knowledge, customerContext = null) {
         provider: 'groq'
       };
     } catch (groqError) {
-      console.error(`[AI Service] Groq fallback failed: ${groqError.message}`);
-
-      // 4. Graceful degradation: escalate to human support without losing the message
-      return {
-        reply: "I'm having trouble processing this right now. Let me connect you directly with our support team.",
-        escalate: true,
-        reason: 'AI engine unavailable',
-        provider: 'none'
-      };
+      console.error(`[AI Service] Groq engine failed: ${groqError.message}`);
     }
   }
+
+  // 4. Graceful degradation: escalate to human support without losing the message
+  return {
+    reply: "I'm having trouble connecting to the AI assistant right now. Let me connect you directly with our support team.",
+    escalate: true,
+    reason: 'AI engine unavailable',
+    provider: 'none'
+  };
 }
 
 module.exports = { generateAIResponse };
-

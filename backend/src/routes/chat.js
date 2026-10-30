@@ -2,6 +2,21 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const {
+  createConversation,
+  sendMessage,
+  getConversationMessages,
+  getCustomerConversations,
+  customerHandoff
+} = require('../controllers/chat.controller');
+const { authenticate } = require('../middleware/auth');
+
+// Database-backed AI Chatbot & Customer Support Routes
+router.post('/conversations', authenticate, createConversation);
+router.get('/conversations', authenticate, getCustomerConversations);
+router.get('/conversations/:id/messages', authenticate, getConversationMessages);
+router.post('/message', authenticate, sendMessage);
+router.post('/conversations/:id/handoff', authenticate, customerHandoff);
 
 const CHATS_FILE = path.join(__dirname, '../../uploads/chats.json');
 

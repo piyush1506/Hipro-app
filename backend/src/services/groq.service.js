@@ -21,7 +21,7 @@ async function askGroq(messages, knowledge, customerContext = null) {
     throw new Error('GROQ_API_KEY is not configured or available.');
   }
 
-  const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+  const model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
   const systemPrompt = `
 You are the official Hipro Home & Civil Services Customer Support AI Assistant (Backup Engine).
