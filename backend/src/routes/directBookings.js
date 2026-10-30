@@ -303,6 +303,23 @@ router.post('/', async (req, res) => {
       } catch (err) {}
     }
 
+    const bookingCity = (city || 'Udaipur').trim();
+    // Dynamically query verified partner from PostgreSQL database by city
+    let assignedPartner = await prisma.partner.findFirst({
+      where: {
+        cityName: { equals: bookingCity, mode: 'insensitive' },
+        isActive: true
+      },
+      orderBy: { rating: 'desc' }
+    });
+    // If none specifically found for this city, fallback to highest rated active partner from DB
+    if (!assignedPartner) {
+      assignedPartner = await prisma.partner.findFirst({
+        where: { isActive: true },
+        orderBy: { rating: 'desc' }
+      });
+    }
+
     const newBooking = await prisma.directBooking.create({
       data: {
         bookingNumber,
@@ -316,7 +333,7 @@ router.post('/', async (req, res) => {
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         customerAddress: customerAddress.trim(),
-        city: (city || 'Dehradun').trim(),
+        city: bookingCity,
         pincode: pincode ? pincode.trim() : null,
         landmark: landmark ? landmark.trim() : null,
         latitude: latitude ? parseFloat(latitude) : null,
@@ -327,7 +344,14 @@ router.post('/', async (req, res) => {
         onlinePaidAmount,
         additionalWorkAmount: 0.0,
         totalAmount,
-        status: 'CONFIRMED',
+        status: assignedPartner ? 'ASSIGNED' : 'CONFIRMED',
+        technicianId: assignedPartner ? assignedPartner.id : null,
+        technicianName: assignedPartner ? assignedPartner.name : null,
+        technicianPhone: assignedPartner ? assignedPartner.phone : null,
+        technicianRole: assignedPartner ? assignedPartner.role : 'Field Service Specialist',
+        technicianPhoto: assignedPartner ? assignedPartner.photo : null,
+        technicianRating: assignedPartner ? assignedPartner.rating : 4.9,
+        assignedAt: assignedPartner ? new Date() : null,
         paymentStatus: 'PAID',
         paymentMethod: 'ONLINE',
         razorpayPaymentId: razorpayPaymentId || null,
