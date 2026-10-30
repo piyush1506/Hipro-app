@@ -119,7 +119,7 @@ async function sendMessage(req, res) {
     }
 
     // 3. If a human agent is currently handling this conversation, do NOT invoke AI
-    if (conversation.status === 'HUMAN_ACTIVE' || conversation.status === 'WAITING_FOR_AGENT') {
+    if (conversation.status === 'HUMAN_ACTIVE') {
       return res.json({
         success: true,
         mode: conversation.status,
