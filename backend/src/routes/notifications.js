@@ -60,19 +60,32 @@ function writeNotifications(notifications) {
 }
 
 let admin = null;
+let getMessaging = null;
 try {
   admin = require('firebase-admin');
+  try {
+    ({ getMessaging } = require('firebase-admin/messaging'));
+  } catch (_) {}
 } catch (e) {
   console.log('firebase-admin module not loaded yet:', e.message);
 }
 
 let isFirebaseInitialized = false;
 
+function getAdminApps() {
+  if (!admin) return [];
+  if (typeof admin.getApps === 'function') {
+    return admin.getApps();
+  }
+  return Array.isArray(admin.apps) ? admin.apps : [];
+}
+
 function initFirebaseAdmin() {
   if (!admin) return null;
-  if (isFirebaseInitialized || admin.apps.length > 0) {
+  const existingApps = getAdminApps();
+  if (isFirebaseInitialized || existingApps.length > 0) {
     isFirebaseInitialized = true;
-    return admin;
+    return existingApps[0] || admin;
   }
 
   try {
@@ -106,22 +119,22 @@ function initFirebaseAdmin() {
     }
 
     if (serviceAccount && serviceAccount.private_key) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+      const app = admin.initializeApp({
+        credential: admin.credential ? admin.credential.cert(serviceAccount) : (admin.cert ? admin.cert(serviceAccount) : undefined)
       });
       isFirebaseInitialized = true;
       console.log('✅ Firebase Admin SDK initialized with service account');
-      return admin;
+      return app;
     } else {
       try {
-        admin.initializeApp({
-          projectId: 'hipro-e3170'
+        const app = admin.initializeApp({
+          projectId: process.env.FIREBASE_PROJECT_ID || 'hipro-e3170'
         });
         isFirebaseInitialized = true;
         console.log('✅ Firebase Admin SDK initialized for project hipro-e3170');
-        return admin;
+        return app;
       } catch (errDef) {
-        console.log('ℹ️ Firebase Admin SDK waiting for service credentials');
+        console.log('ℹ️ Firebase Admin SDK waiting for service credentials:', errDef.message);
       }
     }
   } catch (err) {
@@ -135,8 +148,9 @@ initFirebaseAdmin();
 
 async function sendPushNotificationToTokens(notification) {
   try {
-    const fcmAdmin = initFirebaseAdmin();
-    if (!fcmAdmin || !admin.apps.length) return;
+    const fcmApp = initFirebaseAdmin();
+    const apps = getAdminApps();
+    if (!fcmApp && apps.length === 0) return;
 
     const tokens = readFcmTokens();
     if (!tokens || tokens.length === 0) return;
@@ -169,7 +183,19 @@ async function sendPushNotificationToTokens(notification) {
       }
     };
 
-    const response = await admin.messaging().sendEachForMulticast({
+    let messaging = null;
+    if (getMessaging) {
+      messaging = getMessaging(fcmApp || apps[0]);
+    } else if (typeof admin.messaging === 'function') {
+      messaging = admin.messaging();
+    }
+
+    if (!messaging || typeof messaging.sendEachForMulticast !== 'function') {
+      console.warn('[FCM Multicast] Messaging client not available');
+      return;
+    }
+
+    const response = await messaging.sendEachForMulticast({
       tokens: tokenList,
       notification: payload.notification,
       data: payload.data,
