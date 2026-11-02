@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import AdminApp from './AdminApp.jsx';
 import VendorPanel from './VendorPanel.jsx';
@@ -9,20 +9,15 @@ function AppRoot() {
   const [authState, setAuthState] = useState(() => {
     if (typeof window === 'undefined') return { isAuthenticated: false, role: null };
     
-    const hash = window.location.hash;
     const token = localStorage.getItem('hipro_auth_token');
     const savedRole = localStorage.getItem('hipro_user_role');
 
-    // URL hash overrides for instant demo navigation
-    if (hash === '#login') return { isAuthenticated: false, role: null };
-    if (hash === '#vendor') return { isAuthenticated: true, role: 'VENDOR' };
-    if (hash === '#admin') return { isAuthenticated: true, role: 'ADMIN' };
-
+    // Strict Security: Unauthenticated sessions are ALWAYS redirected to Login Page.
+    // No URL hash bypasses (#admin or #vendor) are allowed without a verified JWT token.
     if (token && savedRole) {
       return { isAuthenticated: true, role: savedRole };
     }
 
-    // Default to LoginPage if unauthenticated
     return { isAuthenticated: false, role: null };
   });
 
@@ -31,11 +26,6 @@ function AppRoot() {
       isAuthenticated: true,
       role
     });
-    if (role === 'VENDOR') {
-      window.location.hash = '#vendor';
-    } else {
-      window.location.hash = '#admin';
-    }
   };
 
   const handleLogout = () => {
@@ -43,7 +33,7 @@ function AppRoot() {
     localStorage.removeItem('hipro_user_role');
     localStorage.removeItem('hipro_user');
     localStorage.removeItem('hipro_vendor');
-    window.location.hash = '#login';
+    window.location.hash = '';
     setAuthState({
       isAuthenticated: false,
       role: null
@@ -51,15 +41,19 @@ function AppRoot() {
   };
 
   const handleSwitchToVendor = () => {
-    localStorage.setItem('hipro_user_role', 'VENDOR');
-    window.location.hash = '#vendor';
-    setAuthState({ isAuthenticated: true, role: 'VENDOR' });
+    // Only allow role switching if authenticated
+    if (localStorage.getItem('hipro_auth_token')) {
+      localStorage.setItem('hipro_user_role', 'VENDOR');
+      setAuthState({ isAuthenticated: true, role: 'VENDOR' });
+    }
   };
 
   const handleSwitchToAdmin = () => {
-    localStorage.setItem('hipro_user_role', 'ADMIN');
-    window.location.hash = '#admin';
-    setAuthState({ isAuthenticated: true, role: 'ADMIN' });
+    // Only allow if authenticated
+    if (localStorage.getItem('hipro_auth_token')) {
+      localStorage.setItem('hipro_user_role', 'ADMIN');
+      setAuthState({ isAuthenticated: true, role: 'ADMIN' });
+    }
   };
 
   // Render Login Page if not authenticated
@@ -67,7 +61,7 @@ function AppRoot() {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // Render Vendor & Operator Portal if role is VENDOR
+  // Render Vendor & Operator Portal if verified role is VENDOR
   if (authState.role === 'VENDOR') {
     return (
       <VendorPanel
@@ -77,7 +71,7 @@ function AppRoot() {
     );
   }
 
-  // Render Super Admin Console
+  // Render Super Admin Console if verified role is ADMIN
   return (
     <AdminApp
       onSwitchToCustomerApp={() => {

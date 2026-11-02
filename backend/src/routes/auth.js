@@ -351,9 +351,16 @@ router.post('/vendor/login', async (req, res) => {
 
       const cleanInput = (phone || email || '').toLowerCase().replace(/\D/g, '');
       vendor = PRESET_OPERATORS.find(p =>
-        (p.phone && p.phone.replace(/\D/g, '').includes(cleanInput.slice(-10))) ||
-        (email && p.name.toLowerCase().includes(email.toLowerCase()))
-      ) || PRESET_OPERATORS[0];
+        (cleanInput.length >= 10 && p.phone && p.phone.replace(/\D/g, '').includes(cleanInput.slice(-10))) ||
+        (email && p.name.toLowerCase() === email.toLowerCase())
+      );
+    }
+
+    if (!vendor) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access Denied: No vendor or operator is registered with this contact number. Contact Hipro to onboard.'
+      });
     }
 
     const token = jwt.sign(
