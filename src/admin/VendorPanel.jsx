@@ -93,10 +93,120 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     },
   ];
 
-  const [selectedVendorId, setSelectedVendorId] = useState('v_adv_01');
-  const vendorProfile = DEMO_VENDORS.find(v => v.id === selectedVendorId) || DEMO_VENDORS[0];
+  const [selectedVendorId, setSelectedVendorId] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hipro_vendor');
+      if (saved) {
+        const v = JSON.parse(saved);
+        const match = DEMO_VENDORS.find(
+          item => item.id === v.id ||
+                  (v.phone && item.phone && item.phone.replace(/\D/g, '').includes(v.phone.replace(/\D/g, ''))) ||
+                  (v.email && item.email && item.email.toLowerCase() === v.email.toLowerCase())
+        );
+        if (match) return match.id;
+      }
+    } catch (e) {}
+    return 'v_adv_01';
+  });
 
-  const [adventureBookings, setAdventureBookings] = useState([]);
+  const vendorProfile = DEMO_VENDORS.find(v => v.id === selectedVendorId) || DEMO_VENDORS[0];
+  const isAdventure = (vendorProfile.category || '').toLowerCase().includes('adventure');
+
+  // Fallback demo adventure bookings when backend is offline
+  const DEFAULT_ADVENTURE_BOOKINGS = [
+    {
+      id: 'ent_bk_101',
+      bookingCode: 'ENT-SKY-821',
+      experienceTitle: 'Tandem Paragliding High Flight',
+      category: 'Air Sports',
+      city: 'Dehradun',
+      vendorId: 'v_adv_01',
+      vendorName: 'Captain Arvind Negi',
+      vendorBusiness: 'Himalayan Sky Gliders & Air Safari',
+      vendorPhone: '+91 98290 88801',
+      travelerName: 'Amit Sharma',
+      travelerPhone: '+91 94628 77757',
+      travelDate: '16 Nov 2026',
+      timeSlot: '09:00 AM (Morning Breeze)',
+      guests: 2,
+      price: 2700,
+      totalAmount: 5400,
+      paymentStatus: 'PAID',
+      status: 'CONFIRMED',
+      reportingPoint: 'Maldevta Adventure Base Camp, Raipur Road, Dehradun',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'ent_bk_102',
+      bookingCode: 'ENT-SKY-822',
+      experienceTitle: 'Motorized Paramotor Sunset Safari',
+      category: 'Air Sports',
+      city: 'Dehradun',
+      vendorId: 'v_adv_01',
+      vendorName: 'Captain Arvind Negi',
+      vendorBusiness: 'Himalayan Sky Gliders & Air Safari',
+      vendorPhone: '+91 98290 88801',
+      travelerName: 'Rohit Gupta',
+      travelerPhone: '+91 98290 11223',
+      travelDate: '17 Nov 2026',
+      timeSlot: '04:30 PM (Sunset Flight)',
+      guests: 1,
+      price: 3200,
+      totalAmount: 3200,
+      paymentStatus: 'PAID',
+      status: 'CHECKED_IN',
+      reportingPoint: 'Maldevta Adventure Base Camp, Raipur Road, Dehradun',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'ent_bk_103',
+      bookingCode: 'ENT-DES-419',
+      experienceTitle: 'Sunset Camel Safari & Thar Dunes',
+      category: 'Desert Safari',
+      city: 'Jaisalmer',
+      vendorId: 'v_adv_02',
+      vendorName: 'Fateh Singh Bhati',
+      vendorBusiness: 'Thar Royal Desert Safari & Camps',
+      vendorPhone: '+91 94141 77702',
+      travelerName: 'Pooja Rawat',
+      travelerPhone: '+91 98290 33344',
+      travelDate: '18 Nov 2026',
+      timeSlot: '04:30 PM (Evening Combo)',
+      guests: 3,
+      price: 1600,
+      totalAmount: 4800,
+      paymentStatus: 'PAID',
+      status: 'CONFIRMED',
+      reportingPoint: 'Hipro Desert Camp Milestone, Sam Sand Dunes Road, Jaisalmer',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'ent_bk_104',
+      bookingCode: 'ENT-RFT-305',
+      experienceTitle: 'Marine Drive to Shivpuri River Rafting',
+      category: 'Water Sports',
+      city: 'Rishikesh',
+      vendorId: 'v_adv_03',
+      vendorName: 'Rakesh Rawat',
+      vendorBusiness: 'Ganga White Water Adventure Club',
+      vendorPhone: '+91 98370 66603',
+      travelerName: 'Vikrant Mehta',
+      travelerPhone: '+91 97110 55443',
+      travelDate: '19 Nov 2026',
+      timeSlot: '10:00 AM (Rapid Run)',
+      guests: 4,
+      price: 1200,
+      totalAmount: 4800,
+      paymentStatus: 'PAID',
+      status: 'CONFIRMED',
+      reportingPoint: 'Shivpuri Adventure Beach, Badrinath Highway, Rishikesh',
+      createdAt: new Date().toISOString()
+    }
+  ];
+
+  const [adventureBookings, setAdventureBookings] = useState(() => {
+    return DEFAULT_ADVENTURE_BOOKINGS.filter(b => b.vendorId === 'v_adv_01');
+  });
   const [adventureSearch, setAdventureSearch] = useState('');
   const [adventureStatusFilter, setAdventureStatusFilter] = useState('ALL');
 
@@ -110,16 +220,27 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     fetchAdventureBookings();
   }, [selectedVendorId]);
 
+  useEffect(() => {
+    if (isAdventure && (activeTab === 'requests' || activeTab === 'quotes' || activeTab === 'assigned')) {
+      setActiveTab('adventure');
+    } else if (!isAdventure && activeTab === 'adventure') {
+      setActiveTab('requests');
+    }
+  }, [selectedVendorId, isAdventure]);
+
   const fetchAdventureBookings = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/ent/vendor/bookings?vendorId=${selectedVendorId}`);
       const data = await res.json();
-      if (data.success && Array.isArray(data.bookings)) {
+      if (data.success && Array.isArray(data.bookings) && data.bookings.length > 0) {
         setAdventureBookings(data.bookings);
+        return;
       }
     } catch (e) {
-      console.error('Failed to fetch adventure bookings:', e);
+      console.warn('API error, loading default bookings for operator:', e);
     }
+    const filtered = DEFAULT_ADVENTURE_BOOKINGS.filter(b => b.vendorId === selectedVendorId || selectedVendorId === 'ALL');
+    setAdventureBookings(filtered.length > 0 ? filtered : DEFAULT_ADVENTURE_BOOKINGS);
   };
 
   const handleUpdateAdventureStatus = async (bookingId, status) => {
@@ -365,99 +486,126 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto text-xs">
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendor Dashboard</div>
-
-            <button
-              onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'dashboard'
-                  ? 'bg-brand-600 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' ? 'text-white' : 'text-slate-500'}`} />
-                <span>My Dashboard</span>
+          {/* ADVENTURE & SPORTS OPERATOR MENU */}
+          {isAdventure ? (
+            <div className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-bold text-rose-600 uppercase tracking-wider flex items-center justify-between">
+                <span>Adventure Operations</span>
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
               </div>
-            </button>
 
-            <button
-              onClick={() => { setActiveTab('requests'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'requests'
-                  ? 'bg-brand-600 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-white' : 'text-slate-500'}`} />
-                <span>Customer Requests</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'requests' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {vendorRequests.length}
-              </span>
-            </button>
+              <button
+                onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'dashboard'
+                    ? 'bg-rose-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Compass className={`w-4 h-4 ${activeTab === 'dashboard' ? 'text-white' : 'text-rose-600'}`} />
+                  <span>Operator Dashboard</span>
+                </div>
+              </button>
 
-            <button
-              onClick={() => { setActiveTab('quotes'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'quotes'
-                  ? 'bg-brand-600 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Receipt className={`w-4 h-4 ${activeTab === 'quotes' ? 'text-white' : 'text-slate-500'}`} />
-                <span>My Quotations</span>
+              <button
+                onClick={() => { setActiveTab('adventure'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'adventure'
+                    ? 'bg-rose-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Ticket className={`w-4 h-4 ${activeTab === 'adventure' ? 'text-white' : 'text-rose-600'}`} />
+                  <span>Adventure Passes & Leads</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'adventure' ? 'bg-white/30 text-white' : 'bg-rose-100 text-rose-700'
+                }`}>
+                  {adventureBookings.length}
+                </span>
+              </button>
+            </div>
+          ) : (
+            /* HOME & CIVIL SERVICES CONTRACTOR MENU */
+            <div className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Service Operations
               </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'quotes' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {vendorQuotes.length}
-              </span>
-            </button>
 
-            <button
-              onClick={() => { setActiveTab('assigned'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'assigned'
-                  ? 'bg-brand-600 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Briefcase className={`w-4 h-4 ${activeTab === 'assigned' ? 'text-white' : 'text-slate-500'}`} />
-                <span>Assigned Jobs</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'assigned' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {assignedJobs.length}
-              </span>
-            </button>
+              <button
+                onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'dashboard'
+                    ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' ? 'text-white' : 'text-slate-500'}`} />
+                  <span>Service Dashboard</span>
+                </div>
+              </button>
 
-            <button
-              onClick={() => { setActiveTab('adventure'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'adventure'
-                  ? 'bg-danger-600 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Compass className={`w-4 h-4 ${activeTab === 'adventure' ? 'text-white' : 'text-danger-500'}`} />
-                <span>Adventure Passes & Leads</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'adventure' ? 'bg-white/30 text-white' : 'bg-danger-50 text-danger-700'
-              }`}>
-                {adventureBookings.length}
-              </span>
-            </button>
-          </div>
+              <button
+                onClick={() => { setActiveTab('requests'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'requests'
+                    ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-white' : 'text-slate-500'}`} />
+                  <span>Customer Requests</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'requests' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {vendorRequests.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('quotes'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'quotes'
+                    ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Receipt className={`w-4 h-4 ${activeTab === 'quotes' ? 'text-white' : 'text-slate-500'}`} />
+                  <span>My Quotations</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'quotes' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {vendorQuotes.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('assigned'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'assigned'
+                    ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Briefcase className={`w-4 h-4 ${activeTab === 'assigned' ? 'text-white' : 'text-slate-500'}`} />
+                  <span>Assigned Jobs</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'assigned' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {assignedJobs.length}
+                </span>
+              </button>
+            </div>
+          )}
 
           <div className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Support</div>
@@ -465,7 +613,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
               onClick={() => { setActiveTab('support'); setSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
                 activeTab === 'support'
-                  ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                  ? (isAdventure ? 'bg-rose-600 text-white font-semibold shadow-xs' : 'bg-brand-600 text-white font-semibold shadow-xs')
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
               }`}
             >
@@ -480,7 +628,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         <div className="p-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative">
-              <div className="w-8 h-8 rounded-xl bg-accent-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              <div className={`w-8 h-8 rounded-xl ${isAdventure ? 'bg-rose-600' : 'bg-accent-600'} text-white flex items-center justify-center font-bold text-xs shadow-xs`}>
                 {vendorProfile.name.charAt(0)}
               </div>
               <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
@@ -520,10 +668,14 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Vendor Portal</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                  isAdventure ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                }`}>
+                  {isAdventure ? 'Adventure & Sports Operator' : 'Service Contractor'}
+                </span>
                 <span className="text-slate-300">/</span>
                 <h1 className="font-heading font-bold text-base text-slate-900 capitalize leading-tight">
-                  {activeTab === 'dashboard' ? 'My Dashboard' :
+                  {activeTab === 'dashboard' ? (isAdventure ? 'Operator Dashboard' : 'Service Dashboard') :
                     activeTab === 'requests' ? 'Customer Requests' :
                     activeTab === 'quotes' ? 'My Quotations' :
                     activeTab === 'assigned' ? 'Assigned Jobs' :
@@ -540,15 +692,25 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                 value={selectedVendorId}
                 onChange={(e) => {
                   setSelectedVendorId(e.target.value);
-                  showToastMsg(`Switched to ${DEMO_VENDORS.find(v => v.id === e.target.value)?.name}`, 'info');
+                  const found = DEMO_VENDORS.find(v => v.id === e.target.value);
+                  showToastMsg(`Switched to ${found?.name} (${found?.category})`, 'info');
                 }}
                 className="text-xs font-semibold text-slate-800 bg-white px-2.5 py-1 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-brand-500 shadow-xs"
               >
-                {DEMO_VENDORS.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.businessName})
-                  </option>
-                ))}
+                <optgroup label="🪂 Adventure & Sports Operators">
+                  {DEMO_VENDORS.filter(v => v.category === 'Adventure').map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.businessName})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="🛠️ Home & Civil Services Providers">
+                  {DEMO_VENDORS.filter(v => v.category !== 'Adventure').map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.businessName})
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -565,15 +727,192 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
 
         <main className="flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
 
-          {/* DASHBOARD TAB */}
-          {activeTab === 'dashboard' && (
+          {/* ADVENTURE OPERATOR DASHBOARD TAB */}
+          {activeTab === 'dashboard' && isAdventure && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-rose-500/10 via-amber-500/5 to-transparent p-6 rounded-2xl border border-rose-200 shadow-xs">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold uppercase tracking-wider mb-2">
+                      <Compass className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Authorized Adventure & Sports Operator</span>
+                    </div>
+                    <h2 className="font-heading text-2xl font-bold tracking-tight text-slate-900">
+                      Welcome back, {vendorProfile.name}
+                    </h2>
+                    <p className="text-slate-600 text-sm font-normal mt-1 max-w-2xl">
+                      You are connected as the licensed operator for <span className="font-bold text-slate-900">{vendorProfile.businessName}</span>. Manage traveler passes, monitor guest check-ins, and prepare base camp dispatches.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right hidden sm:block bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-200">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Activity Category</div>
+                      <div className="font-bold text-slate-900">{vendorProfile.specialization}</div>
+                    </div>
+                    <div className="text-right hidden sm:block bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-200">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base Camp</div>
+                      <div className="font-bold text-slate-900">{vendorProfile.city}</div>
+                    </div>
+                    <div className="text-right hidden sm:block bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-200">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operator Rating</div>
+                      <div className="font-bold text-amber-600 flex items-center justify-end gap-1">
+                        <span>★</span>
+                        <span>{vendorProfile.rating}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Adventure KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-rose-50/70 border border-rose-200 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Assigned Passes</span>
+                    <Ticket className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <div className="font-heading font-bold text-2xl text-slate-900 mt-2">{adventureBookings.length}</div>
+                  <div className="text-[10px] text-rose-600 font-medium mt-1">Total bookings assigned</div>
+                </div>
+                <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Confirmed Arrivals</span>
+                    <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
+                    {adventureBookings.filter(b => (b.status || '').toUpperCase() === 'CONFIRMED').length}
+                  </div>
+                  <div className="text-[10px] text-blue-600 font-medium mt-1">Awaiting base camp arrival</div>
+                </div>
+                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Total Travelers</span>
+                    <Users className="w-4 h-4 text-emerald-500" />
+                  </div>
+                  <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
+                    {adventureBookings.reduce((sum, b) => sum + (Number(b.guests) || 1), 0)}
+                  </div>
+                  <div className="text-[10px] text-emerald-600 font-medium mt-1">Scheduled guests count</div>
+                </div>
+                <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Booking Revenue</span>
+                    <Banknote className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
+                    ₹{adventureBookings.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-[10px] text-amber-600 font-medium mt-1">Total confirmed pass value</div>
+                </div>
+              </div>
+
+              {/* Quick Actions & Adventure Operations */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-xs">
+                  <h3 className="font-heading font-bold text-sm text-slate-900 mb-4 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-rose-500" />
+                    <span>Operator Quick Actions</span>
+                  </h3>
+                  <div className="space-y-2.5">
+                    <button
+                      onClick={() => { setActiveTab('adventure'); }}
+                      className="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center justify-between transition-all shadow-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Ticket className="w-4 h-4" />
+                        <span>View Customer Passes & Leads</span>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('adventure'); }}
+                      className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-between transition-all"
+                    >
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4 text-emerald-600" />
+                        <span>Check-In Arrived Guests</span>
+                      </div>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                    <button
+                      onClick={() => { setActiveTab('support'); }}
+                      className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-between transition-all"
+                    >
+                      <div className="flex items-center gap-2">
+                        <MessageCircle className="w-4 h-4 text-blue-600" />
+                        <span>Chat with Super Admin Desk</span>
+                      </div>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-xs">
+                  <h3 className="font-heading font-bold text-sm text-slate-900 mb-4 flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-rose-500" />
+                    <span>Operator Profile</span>
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Business / Club</span>
+                      <span className="text-xs font-semibold text-slate-800">{vendorProfile.businessName}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Experience Type</span>
+                      <span className="text-xs font-semibold text-slate-800">{vendorProfile.specialization}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Base Camp / City</span>
+                      <span className="text-xs font-semibold text-slate-800">{vendorProfile.city}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Emergency Contact</span>
+                      <span className="text-xs font-semibold text-slate-800 font-mono">{vendorProfile.phone}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Base Pass Rate</span>
+                      <span className="text-xs font-semibold text-slate-800">₹{vendorProfile.minCharge} / person</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-xs">
+                  <h3 className="font-heading font-bold text-sm text-slate-900 mb-4 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-rose-500" />
+                    <span>How Adventure Operations Work</span>
+                  </h3>
+                  <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold flex-shrink-0 flex items-center justify-center mt-0.5">1</span>
+                      <span><strong className="text-slate-800">Traveler Books Online:</strong> Customer selects your adventure activity, slot time, and completes advance payment.</span>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold flex-shrink-0 flex items-center justify-center mt-0.5">2</span>
+                      <span><strong className="text-slate-800">Direct Lead Dispatch:</strong> Booking details (guest count, slot time, traveler phone) are dispatched instantly to your console.</span>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold flex-shrink-0 flex items-center justify-center mt-0.5">3</span>
+                      <span><strong className="text-slate-800">Base Camp Check-in:</strong> Verify traveler booking pass upon arrival and dispatch activity safely.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* HOME & CIVIL SERVICES CONTRACTOR DASHBOARD TAB */}
+          {activeTab === 'dashboard' && !isAdventure && (
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold uppercase tracking-wider mb-2">
+                      <HardHat className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Certified Service Contractor</span>
+                    </div>
                     <h2 className="font-heading text-2xl font-bold tracking-tight text-slate-900">Welcome back, {vendorProfile.name}</h2>
                     <p className="text-slate-500 text-sm font-normal">
-                      You are connected as a vendor for {vendorProfile.businessName}. View customer repair requests, submit quotations, and get assigned jobs.
+                      You are connected as a verified contractor for <span className="font-bold text-slate-800">{vendorProfile.businessName}</span>. View customer repair requests, submit quotations, and get assigned jobs.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -910,40 +1249,65 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
             <div className="space-y-5">
               <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-heading font-semibold text-base text-slate-800">Support Desk</h2>
-                  <p className="text-[11px] text-slate-400">Chat with the Super Admin desk for any questions about customer requests or quotations.</p>
+                  <h2 className="font-heading font-semibold text-base text-slate-800">
+                    {isAdventure ? 'Adventure Operations Desk' : 'Service Support Desk'}
+                  </h2>
+                  <p className="text-[11px] text-slate-400">
+                    {isAdventure
+                      ? 'Direct communication channel between Adventure Operator and Super Admin Operations Desk.'
+                      : 'Chat with the Super Admin desk for any questions about customer repair requests or quotations.'}
+                  </p>
                 </div>
               </div>
               <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col h-[600px]">
                 <div className="p-4 border-b border-slate-200/50 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-brand-600" />
-                    <span className="font-semibold text-slate-800">Super Admin Desk</span>
+                    <Shield className={`w-4 h-4 ${isAdventure ? 'text-rose-600' : 'text-brand-600'}`} />
+                    <span className="font-semibold text-slate-800">
+                      {isAdventure ? 'Super Admin Adventure Control Desk' : 'Super Admin Technical Desk'}
+                    </span>
                   </div>
                   <span className="text-[10px] font-bold text-success-600 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse"></span> Admin Online
+                    <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse"></span> Online
                   </span>
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto bg-slate-50 space-y-3">
-                  <div className="flex justify-start">
-                    <div className="bg-brand-600 text-white px-4 py-2 rounded-2xl rounded-br-none text-sm max-w-[80%]">
-                      Hello {vendorProfile.name}! I'm the Super Admin Desk. Share customer requests here and I'll connect you with vendors who can quote.
-                    </div>
-                  </div>
-                  <div className="flex justify-start">
-                    <div className="bg-slate-200 text-slate-800 px-4 py-2 rounded-2xl rounded-bl-none text-sm max-w-[80%]">
-                      I have a water leakage repair request from Bhilwara. Would you like to submit a quotation?
-                    </div>
-                  </div>
+                  {isAdventure ? (
+                    <>
+                      <div className="flex justify-start">
+                        <div className="bg-rose-600 text-white px-4 py-2.5 rounded-2xl rounded-br-none text-sm max-w-[80%] shadow-xs">
+                          Hello {vendorProfile.name}! This is the Hipro Adventure Central Desk. Your operator profile for <strong>{vendorProfile.businessName}</strong> is verified and active.
+                        </div>
+                      </div>
+                      <div className="flex justify-start">
+                        <div className="bg-white border border-slate-200 text-slate-800 px-4 py-2.5 rounded-2xl rounded-bl-none text-sm max-w-[80%] shadow-xs">
+                          Travelers booking your activity slots on the Hipro portal will have their passes dispatched directly to your console. For any weather updates or slot rescheduling, message us directly here.
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-start">
+                        <div className="bg-brand-600 text-white px-4 py-2.5 rounded-2xl rounded-br-none text-sm max-w-[80%] shadow-xs">
+                          Hello {vendorProfile.name}! I'm the Super Admin Desk. We share verified customer repair requests here for your quotations.
+                        </div>
+                      </div>
+                      <div className="flex justify-start">
+                        <div className="bg-white border border-slate-200 text-slate-800 px-4 py-2.5 rounded-2xl rounded-bl-none text-sm max-w-[80%] shadow-xs">
+                          We have reviewed your profile for {vendorProfile.businessName}. Submit your best quotations to win customer jobs.
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="p-3 border-t border-slate-200/50">
                   <form onSubmit={(e) => { e.preventDefault(); }} className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Type a message to Super Admin..."
+                      placeholder={isAdventure ? "Message Adventure Central Desk..." : "Type a message to Super Admin..."}
                       className="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
-                    <button className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold transition-all">
+                    <button className={`px-4 py-2 rounded-xl ${isAdventure ? 'bg-rose-600 hover:bg-rose-700' : 'bg-brand-600 hover:bg-brand-700'} text-white text-sm font-bold transition-all shadow-xs`}>
                       Send
                     </button>
                   </form>
