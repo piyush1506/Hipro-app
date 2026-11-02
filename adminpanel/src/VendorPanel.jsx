@@ -13,7 +13,10 @@ import {
   Edit, Edit2, Edit3, LogOut, CreditCard, Banknote, Briefcase
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? '' : 'https://app.hindustanprojects.in');
+const API_BASE = import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? ''
+    : 'https://app.hindustanprojects.in');
 
 export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
