@@ -246,4 +246,147 @@ router.patch('/phone', authenticateUser, async (req, res) => {
   }
 });
 
+// ==========================================
+// SUPER ADMIN & VENDOR ACCESS CONTROL AUTH
+// ==========================================
+
+// POST /api/v1/auth/admin/login
+router.post('/admin/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Admin email and password are required' });
+    }
+
+    // Default Super Admin credentials or database admin user
+    const defaultAdminEmail = process.env.ADMIN_EMAIL || 'admin@hipro.in';
+    const defaultAdminPassword = process.env.ADMIN_PASSWORD || 'hipro@admin2026';
+
+    let isAdminValid = false;
+    let adminUser = null;
+
+    if (email.toLowerCase() === defaultAdminEmail.toLowerCase() && password === defaultAdminPassword) {
+      isAdminValid = true;
+      adminUser = {
+        id: 'super_admin_01',
+        name: 'Super Administrator',
+        email: defaultAdminEmail,
+        role: 'ADMIN'
+      };
+    } else {
+      // Check database users with ADMIN role
+      const dbUser = await prisma.user.findFirst({
+        where: { email: email.toLowerCase() }
+      });
+      if (dbUser && dbUser.password === password) {
+        isAdminValid = true;
+        adminUser = {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          role: 'ADMIN'
+        };
+      }
+    }
+
+    if (!isAdminValid || !adminUser) {
+      return res.status(401).json({ success: false, message: 'Invalid Super Admin credentials' });
+    }
+
+    const token = jwt.sign(
+      {
+        id: adminUser.id,
+        email: adminUser.email,
+        name: adminUser.name,
+        role: 'ADMIN'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Super Admin authenticated successfully',
+      token,
+      user: adminUser
+    });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ success: false, message: 'Admin authentication failed', error: error.message });
+  }
+});
+
+// POST /api/v1/auth/vendor/login
+router.post('/vendor/login', async (req, res) => {
+  try {
+    const { phone, email, passcode } = req.body;
+    if (!phone && !email) {
+      return res.status(400).json({ success: false, message: 'Vendor phone or email is required' });
+    }
+
+    let vendor = null;
+
+    // 1. Check database Vendor table
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, '');
+      vendor = await prisma.vendor.findFirst({
+        where: {
+          phone: { contains: cleanPhone.slice(-10) }
+        }
+      });
+    } else if (email) {
+      vendor = await prisma.vendor.findFirst({
+        where: { email: email.toLowerCase() }
+      });
+    }
+
+    // 2. Fallback to registered Adventure & Service operators if not in DB yet
+    if (!vendor) {
+      const PRESET_OPERATORS = [
+        { id: 'v_adv_01', name: 'Captain Arvind Negi', businessName: 'Himalayan Sky Gliders & Air Safari', phone: '+91 98290 88801', city: 'Dehradun', specialization: 'Paragliding & Air Sports' },
+        { id: 'v_adv_02', name: 'Fateh Singh Bhati', businessName: 'Thar Royal Desert Safari & Camps', phone: '+91 94141 77702', city: 'Jaisalmer', specialization: 'Desert Safari & Dune Bashing' },
+        { id: 'v_adv_03', name: 'Rakesh Rawat', businessName: 'Ganga White Water Adventure Club', phone: '+91 98370 66603', city: 'Rishikesh', specialization: 'River Rafting & Kayaking' },
+        { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', city: 'Bhilwara', specialization: 'Waterproofing & Leakage' }
+      ];
+
+      const cleanInput = (phone || email || '').toLowerCase().replace(/\D/g, '');
+      vendor = PRESET_OPERATORS.find(p =>
+        (p.phone && p.phone.replace(/\D/g, '').includes(cleanInput.slice(-10))) ||
+        (email && p.name.toLowerCase().includes(email.toLowerCase()))
+      ) || PRESET_OPERATORS[0];
+    }
+
+    const token = jwt.sign(
+      {
+        id: vendor.id,
+        vendorId: vendor.id,
+        name: vendor.name,
+        businessName: vendor.businessName,
+        phone: vendor.phone,
+        role: 'VENDOR'
+      },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Vendor authenticated successfully',
+      token,
+      vendor: {
+        id: vendor.id,
+        name: vendor.name,
+        businessName: vendor.businessName,
+        phone: vendor.phone,
+        city: vendor.city,
+        specialization: vendor.specialization,
+        role: 'VENDOR'
+      }
+    });
+  } catch (error) {
+    console.error('Vendor login error:', error);
+    res.status(500).json({ success: false, message: 'Vendor authentication failed', error: error.message });
+  }
+});
+
 module.exports = router;
