@@ -15,7 +15,7 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? '' : 'https://app.hindustanprojects.in');
 
-export default function VendorPanel({ onSwitchToSuperAdmin }) {
+export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState(null);
   const [vendorRequests, setVendorRequests] = useState([]);
@@ -487,13 +487,24 @@ export default function VendorPanel({ onSwitchToSuperAdmin }) {
               <div className="text-[10px] text-slate-400 truncate">{vendorProfile.businessName}</div>
             </div>
           </div>
-          <button
-            onClick={() => onSwitchToSuperAdmin ? onSwitchToSuperAdmin() : null}
-            title="Switch to Super Admin"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all"
-          >
-            <Shield className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onSwitchToSuperAdmin ? onSwitchToSuperAdmin() : null}
+              title="Switch to Super Admin"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all"
+            >
+              <Shield className="w-3.5 h-3.5" />
+            </button>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Log Out of Vendor Portal"
+                className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-all"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 

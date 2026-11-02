@@ -8,6 +8,8 @@ import {
   UploadCloud, Sparkles, ArrowRight
 } from 'lucide-react';
 import AdminApp from './admin/AdminApp.jsx';
+import VendorPanel from './admin/VendorPanel.jsx';
+import LoginPage from './admin/LoginPage.jsx';
 
 // The 8 Primary Construction & Maintenance Categories with Subcategories
 
@@ -130,6 +132,8 @@ export default function App() {
       const hash = window.location.hash;
       const path = window.location.pathname;
       if (hash === '#client') return 'client';
+      if (hash === '#login') return 'login';
+      if (hash === '#vendor' || path.includes('/vendor')) return 'vendor';
       if (hash === '#admin' || path.includes('/admin')) return 'admin';
     }
     return 'admin'; // Defaults to Admin Panel as requested
@@ -140,7 +144,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
 
   // Dynamic Categories from Backend API
-  const [categoriesList, setCategoriesList] = useState(CATEGORIES);
+  const [categoriesList, setCategoriesList] = useState([]);
+  const [entAdventures, setEntAdventures] = useState([]);
+  const [entCities, setEntCities] = useState(['All']);
+  const [entCategories, setEntCategories] = useState(['All']);
+
+  // Active adventure experience
+  const [activeEntAdventure, setActiveEntAdventure] = useState(null);
 
   // Active Category clicked from Home page
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]);
@@ -166,8 +176,13 @@ export default function App() {
     }
   });
 
+  // Adventure filtering state
+  const [entFilterCity, setEntFilterCity] = useState('All');
+  const [entFilterCategory, setEntFilterCategory] = useState('All');
+
   // Fetch Services & SubServices dynamically from Backend API on mount
   useEffect(() => {
+    // Fetch services from backend
     fetch('http://localhost:5000/api/v1/services')
       .then(res => res.json())
       .then(data => {
@@ -210,6 +225,58 @@ export default function App() {
       .catch(err => {
         console.log('Backend offline or loading defaults:', err);
       });
+
+    // Fetch adventure experiences from backend
+    fetch('http://localhost:5000/api/v1/ent')
+      .then(res => res.json())
+      .then(data => {
+        const adventures = data.data || data || [];
+        if (adventures.length > 0) {
+          setEntAdventures(adventures);
+          // Extract unique cities and categories for filtering
+          const citiesSet = new Set(['All', ...adventures.map(a => a.city).filter(c => c)]);
+          const categoriesSet = new Set(['All', ...adventures.map(a => a.category).filter(c => c)]);
+          setEntCities(['All', ...citiesSet].sort());
+          setEntCategories(['All', ...categoriesSet].sort());
+        }
+      })
+      .catch(err => {
+        console.log('Adventure backend offline or loading defaults:', err);
+      });
+
+    // Animate counter numbers on mount
+    useEffect(() => {
+      const animateCounter = (element, target) => {
+        const start = 0;
+        const end = target;
+        const duration = 1000;
+        const startTime = performance.now();
+        
+        const animate = (currentTime) => {
+          const elapsed = currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easeOut = 1 - Math.pow(1 - progress, 3);
+          const current = Math.round(start + (end - start) * easeOut);
+          element.textContent = current >= end ? end : current;
+          
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          }
+        };
+        
+        requestAnimationFrame(animate);
+      };
+
+      const requestsEl = document.getElementById('kpi-requests');
+      const quotesEl = document.getElementById('kpi-quotes');
+      const bookingsEl = document.getElementById('kpi-bookings');
+      const valueEl = document.getElementById('kpi-value');
+
+      if (requestsEl) animateCounter(requestsEl, allBackendRequests.length);
+      if (quotesEl) animateCounter(quotesEl, allBackendRequests.filter(r => r.quotations?.[0]?.status === 'ACCEPTED').length);
+      if (bookingsEl) animateCounter(bookingsEl, allBackendRequests.filter(r => r.directBookings?.length > 0).length);
+      if (valueEl) animateCounter(valueEl, allBackendRequests.reduce((sum, r) => sum + (r.quotations?.[0]?.grandtotal || 0), 0));
+    }, [allBackendRequests]);
 
     // Auto-fetch existing requests from Neon backend
     loadAdminRequests();
@@ -549,6 +616,13 @@ export default function App() {
     photos: ['/images/patch_damage.svg']
   };
 
+  // Filtered adventure experiences based on city and category filters
+  const filteredEntAdventures = entAdventures.filter((adventure) => {
+    const cityMatch = entFilterCity === 'All' || adventure.city === entFilterCity;
+    const categoryMatch = entFilterCategory === 'All' || adventure.category === entFilterCategory;
+    return cityMatch && categoryMatch;
+  });
+
   // Handle local image file upload for current subservice
   const handleUploadPhoto = (e) => {
     const file = e.target.files?.[0];
@@ -575,6 +649,16 @@ export default function App() {
   };
 
   const showBottomNav = ['home', 'my_bookings', 'projects', 'profile'].includes(currentScreen);
+
+  if (viewMode === 'login') {
+    return <LoginPage onLoginSuccess={(role) => setViewMode(role === 'VENDOR' ? 'vendor' : 'admin')} />;
+  }
+  if (viewMode === 'vendor') {
+    return <VendorPanel onSwitchToSuperAdmin={() => setViewMode('admin')} onLogout={() => setViewMode('login')} />;
+  }
+  if (viewMode === 'admin') {
+    return <AdminApp onSwitchToCustomerApp={() => setViewMode('client')} onSwitchToVendor={() => setViewMode('vendor')} onLogout={() => setViewMode('login')} />;
+  }
 
   return (
     <div className="simulator-container">
@@ -668,6 +752,12 @@ export default function App() {
                     <span style={{ position: 'absolute', top: '5px', right: '5px', width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444' }} />
                   )}
                 </button>
+                <button
+                  onClick={() => setCurrentScreen('adventure_catalog'), setActiveEntAdventure(null)}
+                  style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#10B981', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginLeft: '8px' }}
+                >
+                  <Compass size={16} color="#fff" /> {entAdventures.length > 0 ? adventures.length : 0}
+                </button>
               </div>
 
               {/* Brand Header */}
@@ -677,6 +767,110 @@ export default function App() {
                 </h1>
                 <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '500', marginTop: '2px' }}>
                   Construction &nbsp;|&nbsp; Architecture &nbsp;|&nbsp; Engineering
+                </div>
+              </div>
+
+              {/* Animated KPI Counters */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '12px',
+                padding: '12px 16px'
+              }}>
+                <div style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                  textAlign: 'center',
+                  minHeight: '80px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  <div 
+                    style={{ 
+                      fontSize: '28px', 
+                      fontWeight: '700', 
+                      color: '#0B2545', 
+                      marginBottom: '4px',
+                      transition: 'all 0.3s ease'
+                    }} 
+                    id="kpi-requests"
+                  >{allBackendRequests.length}</div>
+                  <div style={{ fontSize: '10px', color: '#64748B' }}>Total Requests</div>
+                </div>
+
+                <div style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                  textAlign: 'center',
+                  minHeight: '80px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  <div 
+                    style={{ 
+                      fontSize: '28px', 
+                      fontWeight: '700', 
+                      color: '#10B981', 
+                      marginBottom: '4px',
+                      transition: 'all 0.3s ease'
+                    }} 
+                    id="kpi-quotes"
+                  >{allBackendRequests.filter(r => r.quotations?.[0]?.status === 'ACCEPTED').length}</div>
+                  <div style={{ fontSize: '10px', color: '#64748B' }}>Accepted Quotes</div>
+                </div>
+
+                <div style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                  textAlign: 'center',
+                  minHeight: '80px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  <div 
+                    style={{ 
+                      fontSize: '28px', 
+                      fontWeight: '700', 
+                      color: '#3B82F6', 
+                      marginBottom: '4px',
+                      transition: 'all 0.3s ease'
+                    }} 
+                    id="kpi-bookings"
+                  >{allBackendRequests.filter(r => r.directBookings?.length > 0).length}</div>
+                  <div style={{ fontSize: '10px', color: '#64748B' }}>Direct Bookings</div>
+                </div>
+
+                <div style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                  textAlign: 'center',
+                  minHeight: '80px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  <div 
+                    style={{ 
+                      fontSize: '28px', 
+                      fontWeight: '700', 
+                      color: '#8B5CF6', 
+                      marginBottom: '4px',
+                      transition: 'all 0.3s ease'
+                    }} 
+                    id="kpi-value"
+                  >0</div>
+                  <div style={{ fontSize: '10px', color: '#64748B' }}>Total Value (₹)</div>
                 </div>
               </div>
 
@@ -737,64 +931,223 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CATEGORIES SECTION (ICON ON TOP, TEXT BELOW INSTEAD OF FULL) */}
-              <div style={{ padding: '0 16px 12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '15px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
-                  Categories
-                </span>
-                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
-                  {categoriesList.length} Services
-                </span>
-              </div>
+              {/* ADVENTURE EXPERIENCES SECTION - Dynamic from Backend */}
+              {entAdventures.length > 0 && (
+                <>
+                <div style={{ padding: '0 16px 12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '15px', fontWeight: '800', color: '#0B2545', fontFamily: 'Outfit' }}>
+                    Adventures
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>
+                    {entAdventures.length} Experiences
+                  </span>
+                </div>
 
-              {/* 4-Column Category Grid: Icon with text below */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '16px 8px',
-                padding: '0 16px 22px 16px'
-              }}>
-                {categoriesList.map((cat) => (
-                  <div
-                    key={cat.id}
-                    onClick={() => handleCategoryClick(cat)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '7px',
-                      cursor: 'pointer',
-                      textAlign: 'center'
-                    }}
-                  >
-                    <div style={{
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '16px',
-                      background: cat.bg,
-                      color: cat.color,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-                      border: '1px solid rgba(0,0,0,0.04)',
-                      transition: 'transform 0.15s ease'
-                    }}>
-                      <cat.icon size={26} strokeWidth={2.2} />
+                {/* Filter chips for adventures */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  {entCities.map((city) => (
+                    <button
+                      key={city}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        color: entFilterCity === city ? '#fff' : '#0B2545',
+                        background: entFilterCity === city ? '#0B2545' : '#E5E7EB',
+                        border: 'none',
+                        borderRadius: '20px',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s'
+                      }}
+                      onClick={() => setEntFilterCity(city)}
+                    >
+                      {city}
+                    </button>
+                  ))}
+                  {entCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        color: entFilterCategory === cat ? '#fff' : '#64748B',
+                        background: entFilterCategory === cat ? '#0B2545' : '#F3F4F6',
+                        border: 'none',
+                        borderRadius: '20px',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s'
+                      }}
+                      onClick={() => setEntFilterCategory(cat)}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 4-Column Adventure Grid: Card with title, price, category */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '12px',
+                  padding: '0 16px 22px 16px'
+                }}>
+                  {filteredEntAdventures.map((adventure) => (
+                    <div
+                      key={adventure.id}
+                      onClick={() => { setCurrentScreen('adventure_detail'); setActiveEntAdventure(adventure); }}
+                      style={{
+                        background: '#fff',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                        transition: 'transform 0.15s ease',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <img
+                        src={adventure.imageUrl || '/images/placeholder-adventure.jpg'}
+                        alt={adventure.title}
+                        style={{ width: '100%', height: '140px', objectFit: 'cover' }}
+                      />
+                      <div style={{ padding: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#0B2545', marginBottom: '4px' }}>
+                          {adventure.title}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>
+                          {adventure.city}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: '700', color: '#059669' }}>
+                              ₹{adventure.startingPrice?.toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#64748B' }}>
+                              {adventure.discountBadge || ''}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#64748B' }}>
+                            {adventure.duration}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      color: '#0B2545',
-                      lineHeight: '1.25',
-                      textAlign: 'center',
-                      maxWidth: '75px'
-                    }}>
-                      {cat.shortTitle || cat.title}
-                    </span>
+                  ))}
+                </div>
+                </>
+              )}
+              {activeEntAdventure && (
+                <div className="fade-in-slide">
+                  <div className="subscreen-top-header">
+                    <button className="back-btn" onClick={() => setCurrentScreen('home')}>
+                      <ArrowLeft size={18} />
+                    </button>
+                    <div className="subscreen-title">{activeEntAdventure.title}</div>
+                    <div style={{ width: '24px' }} />
                   </div>
-                ))}
-              </div>
+
+                  <div style={{ padding: '16px' }}>
+                    <img
+                      src={activeEntAdventure.imageUrl || '/images/placeholder-adventure.jpg'}
+                      alt={activeEntAdventure.title}
+                      style={{ width: '100%', height: '250px', objectFit: 'cover', borderRadius: '12px', marginBottom: '16px' }}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '16px' }}>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>City</div>
+                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#0B2545' }}>{activeEntAdventure.city}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Duration</div>
+                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#059669' }}>{activeEntAdventure.duration}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '12px', marginBottom: '16px' }}>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Tagline</div>
+                      <div style={{ fontSize: '15px', color: '#0B2545' }}>{activeEntAdventure.tagline}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Starting Price</div>
+                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#059669' }}>{'₹' + (activeEntAdventure.startingPrice?.toLocaleString('en-IN') || '0')}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Discount</div>
+                        <div style={{ fontSize: '14px', color: '#059669' }}>{activeEntAdventure.discountBadge || 'N/A'}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Inclusions</div>
+                      <div style={{ fontSize: '14px', color: '#0B2545' }}>
+                        {activeEntAdventure.inclusions?.map((inc, i) => (
+                          <div key={i} style={{ marginBottom: '4px' }}>
+                            • {inc}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Reporting Point</div>
+                      <div style={{ fontSize: '14px', color: '#0B2545', wordBreak: 'break-all' }}>{activeEntAdventure.reportingPoint}</div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Safety Guidelines</div>
+                      <div style={{ fontSize: '13px', color: '#DC2626' }}>
+        {activeEntAdventure.safetyGuidelines?.map((guid, i) => (
+          <div key={i} style={{ marginBottom: '4px' }}>
+            ✅ {guid}
+          </div>
+        ))}
+      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button
+                        onClick={() => setCurrentScreen('home')}
+                        style={{
+                          flex: 1,
+                          background: '#F3F4F6',
+                          color: '#0B2545',
+                          border: 'none',
+                          padding: '10px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Back to Catalog
+                      </button>
+                      <button
+                        onClick={() => window.open(activeEntAdventure.imageUrl || '/images/placeholder-adventure.jpg', '_blank')}
+                        style={{
+                          flex: 1,
+                          background: '#10B981',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '10px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Book Now
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeEntAdventure === null && entAdventures.length > 0 && (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#64748B' }}>
+                  Tap an adventure card to view details
+                </div>
+              )}
 
               {/* Featured Project Showcase Card */}
               <div style={{ padding: '0 16px 20px 16px' }}>
@@ -1739,7 +2092,7 @@ export default function App() {
 
       </div>
 
-      {/* ================= 💬 EXPERT CHAT BOTTOM SHEET / MODAL ================= */}
+  {/* ================= 💬 EXPERT CHAT BOTTOM SHEET / MODAL ================= */}
       {activeChat && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(7, 25, 48, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', maxWidth: '420px', width: '100%', height: '75vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.3)' }}>

@@ -11,12 +11,12 @@ import {
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3
+  Edit, Edit2, Edit3, LogOut
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? '' : 'https://app.hindustanprojects.in');
 
-export default function AdminApp({ onSwitchToCustomerApp }) {
+export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -2611,13 +2611,33 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
               <div className="text-[10px] text-slate-400 truncate">Online & Synced</div>
             </div>
           </div>
-          <button
-            onClick={() => fetchAllData(true)}
-            title="Sync Database"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => fetchAllData(true)}
+              title="Sync Database"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            {onSwitchToVendor && (
+              <button
+                onClick={onSwitchToVendor}
+                title="Switch to Vendor Portal"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 transition-all"
+              >
+                <HardHat className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Log Out of Super Admin"
+                className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-all"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 
