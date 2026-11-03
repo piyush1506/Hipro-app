@@ -50,6 +50,7 @@ model user {
     phoneNumber    String?          @unique
     email          String?          @unique
     password       String?
+    role           String           @default("USER") // USER, ADMIN, VENDOR
     googleId       String?          @unique
     photoUrl       String?
     authProvider   String?          @default("local")
@@ -356,9 +357,26 @@ model SupportKnowledge {
 }
 
 // ==========================================
+// SUPER ADMIN & SYSTEM CREDENTIALS
+// ==========================================
+
+model Admin {
+    id         String   @id @default(uuid())
+    name       String   @default("Super Administrator")
+    email      String   @unique
+    password   String   // Hashed / verified password
+    role       String   @default("ADMIN") // ADMIN, SUPER_ADMIN
+    phone      String?
+    isActive   Boolean  @default(true)
+    created_at DateTime @default(now())
+    updated_at DateTime @updatedAt
+
+    @@index([email])
+}
+
+// ==========================================
 // VENDOR MANAGEMENT SYSTEM
-// Local contractors who receive customer requests
-// and submit quotations for repair work
+// Local contractors and adventure operators
 // ==========================================
 
 model Vendor {
@@ -367,6 +385,8 @@ model Vendor {
     businessName    String
     phone           String   @unique
     email           String?   @unique
+    password        String?  // Optional vendor password
+    passcode        String?  @default("123456") // 6-digit security PIN
     city            String
     category        String   @default("Services") // "Services" | "Adventure"
     specialization  String   // e.g. "Waterproofing", "Civil Construction", "Painting", "Paragliding"

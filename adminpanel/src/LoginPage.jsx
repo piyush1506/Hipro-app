@@ -51,7 +51,11 @@ export default function LoginPage({ onLoginSuccess }) {
       const res = await fetch(`${API_BASE}/api/v1/auth/vendor/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: vendorContact.trim(), email: vendorContact.trim() }),
+        body: JSON.stringify({
+          phone: vendorContact.trim(),
+          email: vendorContact.trim(),
+          passcode: vendorPasscode.trim()
+        }),
       });
       const data = await res.json();
 

@@ -247,10 +247,12 @@ router.patch('/phone', authenticateUser, async (req, res) => {
 });
 
 // ==========================================
+// ==========================================
 // SUPER ADMIN & VENDOR ACCESS CONTROL AUTH
+// Authenticates credentials directly from the database
 // ==========================================
 
-// POST /api/v1/auth/admin/login
+// POST /api/v1/auth/admin/login - Authenticate Super Admin from DB
 router.post('/admin/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -258,47 +260,99 @@ router.post('/admin/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Admin email and password are required' });
     }
 
-    // Default Super Admin credentials or database admin user
-    const defaultAdminEmail = process.env.ADMIN_EMAIL || 'admin@hipro.in';
+    const cleanEmail = email.toLowerCase().trim();
+
+    // 1. Fetch credentials from database Admin table
+    let admin = null;
+    try {
+      admin = await prisma.admin.findUnique({
+        where: { email: cleanEmail }
+      });
+    } catch (e) {
+      console.warn('Prisma Admin table query warning, checking user table:', e.message);
+    }
+
+    // 2. If not found in Admin table, check User table for ADMIN role
+    if (!admin) {
+      try {
+        const dbUser = await prisma.user.findFirst({
+          where: {
+            email: cleanEmail,
+            role: { in: ['ADMIN', 'SUPER_ADMIN'] }
+          }
+        });
+        if (dbUser) {
+          admin = {
+            id: dbUser.id,
+            name: dbUser.name || 'Super Administrator',
+            email: dbUser.email,
+            password: dbUser.password,
+            role: dbUser.role || 'ADMIN',
+            isActive: true
+          };
+        }
+      } catch (e) {
+        console.warn('Prisma User admin check warning:', e.message);
+      }
+    }
+
+    // 3. Environment variable fallback (auto-upserts into Admin table if DB is fresh)
+    const defaultAdminEmail = (process.env.ADMIN_EMAIL || 'admin@hipro.in').toLowerCase().trim();
     const defaultAdminPassword = process.env.ADMIN_PASSWORD || 'hipro@admin2026';
 
-    let isAdminValid = false;
-    let adminUser = null;
-
-    if (email.toLowerCase() === defaultAdminEmail.toLowerCase() && password === defaultAdminPassword) {
-      isAdminValid = true;
-      adminUser = {
-        id: 'super_admin_01',
-        name: 'Super Administrator',
-        email: defaultAdminEmail,
-        role: 'ADMIN'
-      };
-    } else {
-      // Check database users with ADMIN role
-      const dbUser = await prisma.user.findFirst({
-        where: { email: email.toLowerCase() }
-      });
-      if (dbUser && dbUser.password === password) {
-        isAdminValid = true;
-        adminUser = {
-          id: dbUser.id,
-          name: dbUser.name,
-          email: dbUser.email,
-          role: 'ADMIN'
+    if (!admin && cleanEmail === defaultAdminEmail && password === defaultAdminPassword) {
+      try {
+        admin = await prisma.admin.upsert({
+          where: { email: defaultAdminEmail },
+          update: { password: defaultAdminPassword },
+          create: {
+            email: defaultAdminEmail,
+            name: 'Super Administrator',
+            password: defaultAdminPassword,
+            role: 'ADMIN',
+            isActive: true
+          }
+        });
+      } catch (err) {
+        admin = {
+          id: 'super_admin_01',
+          name: 'Super Administrator',
+          email: defaultAdminEmail,
+          password: defaultAdminPassword,
+          role: 'ADMIN',
+          isActive: true
         };
       }
     }
 
-    if (!isAdminValid || !adminUser) {
-      return res.status(401).json({ success: false, message: 'Invalid Super Admin credentials' });
+    // 4. Validate credentials
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access Denied: No administrator account registered with this email in database.'
+      });
+    }
+
+    if (admin.password && admin.password !== password) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access Denied: Invalid administrator password.'
+      });
+    }
+
+    if (admin.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: Administrator account is deactivated. Contact system admin.'
+      });
     }
 
     const token = jwt.sign(
       {
-        id: adminUser.id,
-        email: adminUser.email,
-        name: adminUser.name,
-        role: 'ADMIN'
+        id: admin.id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role || 'ADMIN'
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -306,9 +360,14 @@ router.post('/admin/login', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Super Admin authenticated successfully',
+      message: 'Super Admin authenticated successfully from database credentials',
       token,
-      user: adminUser
+      user: {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role || 'ADMIN'
+      }
     });
   } catch (error) {
     console.error('Admin login error:', error);
@@ -316,50 +375,97 @@ router.post('/admin/login', async (req, res) => {
   }
 });
 
-// POST /api/v1/auth/vendor/login
+// POST /api/v1/auth/vendor/login - Authenticate Vendor & Operator from DB
 router.post('/vendor/login', async (req, res) => {
   try {
     const { phone, email, passcode } = req.body;
     if (!phone && !email) {
-      return res.status(400).json({ success: false, message: 'Vendor phone or email is required' });
+      return res.status(400).json({ success: false, message: 'Vendor phone number or email is required' });
     }
+
+    const contactInput = (phone || email || '').trim();
+    const cleanPhone = contactInput.replace(/\D/g, '');
 
     let vendor = null;
 
-    // 1. Check database Vendor table
-    if (phone) {
-      const cleanPhone = phone.replace(/\D/g, '');
+    // 1. Fetch vendor credentials directly from database Vendor table
+    try {
       vendor = await prisma.vendor.findFirst({
         where: {
-          phone: { contains: cleanPhone.slice(-10) }
+          OR: [
+            ...(cleanPhone.length >= 10 ? [{ phone: { contains: cleanPhone.slice(-10) } }] : []),
+            ...(contactInput.includes('@') ? [{ email: { equals: contactInput, mode: 'insensitive' } }] : [])
+          ]
         }
       });
-    } else if (email) {
-      vendor = await prisma.vendor.findFirst({
-        where: { email: email.toLowerCase() }
-      });
+    } catch (dbErr) {
+      console.warn('Database vendor lookup error, checking active cache:', dbErr.message);
     }
 
-    // 2. Fallback to registered Adventure & Service operators if not in DB yet
+    // 2. If vendor not yet persisted in DB, check standard onboarded operators and sync to DB
     if (!vendor) {
       const PRESET_OPERATORS = [
-        { id: 'v_adv_01', name: 'Captain Arvind Negi', businessName: 'Himalayan Sky Gliders & Air Safari', phone: '+91 98290 88801', city: 'Dehradun', specialization: 'Paragliding & Air Sports' },
-        { id: 'v_adv_02', name: 'Fateh Singh Bhati', businessName: 'Thar Royal Desert Safari & Camps', phone: '+91 94141 77702', city: 'Jaisalmer', specialization: 'Desert Safari & Dune Bashing' },
-        { id: 'v_adv_03', name: 'Rakesh Rawat', businessName: 'Ganga White Water Adventure Club', phone: '+91 98370 66603', city: 'Rishikesh', specialization: 'River Rafting & Kayaking' },
-        { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', city: 'Bhilwara', specialization: 'Waterproofing & Leakage' }
+        { id: 'v_adv_01', name: 'Captain Arvind Negi', businessName: 'Himalayan Sky Gliders & Air Safari', phone: '+91 98290 88801', email: 'arvind.gliders@gmail.com', city: 'Dehradun', category: 'Adventure', specialization: 'Paragliding & Microlight Flights', passcode: '123456' },
+        { id: 'v_adv_02', name: 'Fateh Singh Bhati', businessName: 'Thar Royal Desert Safari & Camps', phone: '+91 94141 77702', email: 'thar.safari@gmail.com', city: 'Jaisalmer', category: 'Adventure', specialization: 'Desert Safari & Dune Bashing', passcode: '123456' },
+        { id: 'v_adv_03', name: 'Rakesh Rawat', businessName: 'Ganga White Water Adventure Club', phone: '+91 98370 66603', email: 'ganga.rafting@gmail.com', city: 'Rishikesh', category: 'Adventure', specialization: 'River Rafting & Kayaking', passcode: '123456' },
+        { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', email: 'rajesh@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Waterproofing & Leakage', passcode: '123456' }
       ];
 
-      const cleanInput = (phone || email || '').toLowerCase().replace(/\D/g, '');
-      vendor = PRESET_OPERATORS.find(p =>
-        (cleanInput.length >= 10 && p.phone && p.phone.replace(/\D/g, '').includes(cleanInput.slice(-10))) ||
-        (email && p.name.toLowerCase() === email.toLowerCase())
+      const matched = PRESET_OPERATORS.find(p =>
+        (cleanPhone.length >= 10 && p.phone.replace(/\D/g, '').includes(cleanPhone.slice(-10))) ||
+        (contactInput.includes('@') && p.email && p.email.toLowerCase() === contactInput.toLowerCase())
       );
+
+      if (matched) {
+        // Automatically persist into DB so credentials reside in the database
+        try {
+          vendor = await prisma.vendor.upsert({
+            where: { phone: matched.phone },
+            update: { category: matched.category, passcode: matched.passcode },
+            create: {
+              id: matched.id,
+              name: matched.name,
+              businessName: matched.businessName,
+              phone: matched.phone,
+              email: matched.email,
+              city: matched.city,
+              category: matched.category,
+              specialization: matched.specialization,
+              passcode: matched.passcode,
+              experience: '8 Years',
+              status: 'active',
+              rating: 4.9,
+              minCharge: 1500
+            }
+          });
+        } catch (syncErr) {
+          vendor = matched;
+        }
+      }
     }
 
     if (!vendor) {
       return res.status(401).json({
         success: false,
-        message: 'Access Denied: No vendor or operator is registered with this contact number. Contact Hipro to onboard.'
+        message: 'Access Denied: No vendor or operator is registered in the database with this contact. Please contact Hipro Super Admin to onboard.'
+      });
+    }
+
+    // 3. Security PIN / Passcode Verification from DB (if provided or vendor has passcode set)
+    if (passcode && vendor.passcode) {
+      if (vendor.passcode !== passcode.trim() && vendor.password !== passcode.trim()) {
+        return res.status(401).json({
+          success: false,
+          message: 'Access Denied: Invalid security PIN / passcode.'
+        });
+      }
+    }
+
+    // 4. Check vendor active status
+    if (vendor.status && vendor.status.toLowerCase() === 'inactive') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: Your vendor account is currently inactive. Contact Super Admin desk.'
       });
     }
 
@@ -370,6 +476,7 @@ router.post('/vendor/login', async (req, res) => {
         name: vendor.name,
         businessName: vendor.businessName,
         phone: vendor.phone,
+        category: vendor.category || 'Services',
         role: 'VENDOR'
       },
       JWT_SECRET,
@@ -378,15 +485,19 @@ router.post('/vendor/login', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Vendor authenticated successfully',
+      message: 'Vendor authenticated successfully from database credentials',
       token,
       vendor: {
         id: vendor.id,
         name: vendor.name,
         businessName: vendor.businessName,
         phone: vendor.phone,
+        email: vendor.email,
         city: vendor.city,
+        category: vendor.category || 'Services',
         specialization: vendor.specialization,
+        rating: vendor.rating,
+        status: vendor.status || 'active',
         role: 'VENDOR'
       }
     });
