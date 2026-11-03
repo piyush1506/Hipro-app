@@ -111,6 +111,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     phone: '',
     email: '',
     city: 'Bhilwara',
+    category: 'Services',
     specialization: 'General Repair',
     experience: '3+ Years',
     status: 'active',
@@ -132,12 +133,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (data.success && Array.isArray(data.vendors)) {
         setVendors(data.vendors);
       } else {
-        // Fallback demo vendors if backend not available
+        // Fallback demo vendors if backend not available (Services & Adventure)
         setVendors([
-          { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', email: 'rajesh@example.com', city: 'Bhilwara', specialization: 'Waterproofing & Leakage', experience: '8 Years', status: 'active', rating: 4.8, minCharge: '1000', imageUrl: '' },
-          { id: 'v_2', name: 'Sunita Verma', businessName: 'Sunita Civil Works', phone: '+91 98765 43211', email: 'sunita@example.com', city: 'Bhilwara', specialization: 'Civil Construction & Masonry', experience: '6 Years', status: 'active', rating: 4.6, minCharge: '800', imageUrl: '' },
-          { id: 'v_3', name: 'Mohan Lal', businessName: 'Mohan Painting & Finishing', phone: '+91 98765 43212', email: 'mohan@example.com', city: 'Bhilwara', specialization: 'Painting & Wall Repair', experience: '5 Years', status: 'active', rating: 4.4, minCharge: '600', imageUrl: '' },
-          { id: 'v_4', name: 'Arjun Singh', businessName: 'Arjun Structural Solutions', phone: '+91 98765 43213', email: 'arjun@example.com', city: 'Bhilwara', specialization: 'Structural Analysis', experience: '10 Years', status: 'active', rating: 4.9, minCharge: '1500', imageUrl: '' },
+          { id: 'v_adv_01', name: 'Captain Arvind Negi', businessName: 'Himalayan Sky Gliders & Air Safari', phone: '+91 98290 88801', email: 'arvind.gliders@gmail.com', city: 'Dehradun', category: 'Adventure', specialization: 'Paragliding & Microlight Flights', experience: '12 Years', status: 'active', rating: 4.9, minCharge: '2500', imageUrl: '' },
+          { id: 'v_adv_02', name: 'Fateh Singh Bhati', businessName: 'Thar Royal Desert Safari & Camps', phone: '+91 94141 77702', email: 'thar.safari@gmail.com', city: 'Jaisalmer', category: 'Adventure', specialization: 'Desert Safari & Dune Bashing', experience: '10 Years', status: 'active', rating: 4.9, minCharge: '1800', imageUrl: '' },
+          { id: 'v_adv_03', name: 'Rakesh Rawat', businessName: 'Ganga White Water Adventure Club', phone: '+91 98370 66603', email: 'ganga.rafting@gmail.com', city: 'Rishikesh', category: 'Adventure', specialization: 'River Rafting & Kayaking', experience: '14 Years', status: 'active', rating: 5.0, minCharge: '1200', imageUrl: '' },
+          { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', email: 'rajesh@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Waterproofing & Leakage', experience: '8 Years', status: 'active', rating: 4.8, minCharge: '1000', imageUrl: '' },
+          { id: 'v_2', name: 'Sunita Verma', businessName: 'Sunita Civil Works', phone: '+91 98765 43211', email: 'sunita@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Civil Construction & Masonry', experience: '6 Years', status: 'active', rating: 4.6, minCharge: '800', imageUrl: '' },
+          { id: 'v_3', name: 'Mohan Lal', businessName: 'Mohan Painting & Finishing', phone: '+91 98765 43212', email: 'mohan@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Painting & Wall Repair', experience: '5 Years', status: 'active', rating: 4.4, minCharge: '600', imageUrl: '' },
+          { id: 'v_4', name: 'Arjun Singh', businessName: 'Arjun Structural Solutions', phone: '+91 98765 43213', email: 'arjun@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Structural Analysis', experience: '10 Years', status: 'active', rating: 4.9, minCharge: '1500', imageUrl: '' },
         ]);
       }
     } catch (e) {
@@ -3981,70 +3985,106 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-brand-600" />
                       <h3 className="font-heading font-bold text-sm text-slate-800">
-                        Vendor Categories
+                        Vendor Category Filter
                       </h3>
                     </div>
                     <span className="text-[11px] text-slate-400">
-                      Filter verified contractors by domain specialization
+                      Filter verified contractors by domain category and specialization
                     </span>
                   </div>
 
-                  {/* Category Cards Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+                  {/* Primary Domain Category Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => setVendorCategoryFilter('ALL')}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
                         vendorCategoryFilter === 'ALL'
                           ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">All Domains</div>
-                      <div className="mt-2 flex items-baseline justify-between">
-                        <span className="font-bold text-xs truncate">All Vendors</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          vendorCategoryFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {vendors.length}
-                        </span>
-                      </div>
+                      <span>All Domains</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        vendorCategoryFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {vendors.length}
+                      </span>
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => setVendorCategoryFilter('Services')}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+                        vendorCategoryFilter === 'Services'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      <span>🛠️ Home & Civil Services</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        vendorCategoryFilter === 'Services' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {vendors.filter(v => (v.category || '').toLowerCase() === 'services' || !(v.category || '').toLowerCase().includes('adventure')).length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setVendorCategoryFilter('Adventure')}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+                        vendorCategoryFilter === 'Adventure'
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                          : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                      }`}
+                    >
+                      <span>🪂 Adventure & Sports Operators</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        vendorCategoryFilter === 'Adventure' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700'
+                      }`}>
+                        {vendors.filter(v => (v.category || '').toLowerCase().includes('adventure')).length}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Specific Specialization Pills Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                     {[
                       { id: 'waterproofing', name: 'Waterproofing', match: 'waterproof', color: '#0284c7' },
                       { id: 'civil', name: 'Civil & Masonry', match: 'civil', color: '#6366f1' },
                       { id: 'plumbing', name: 'Plumbing', match: 'plumb', color: '#0d9488' },
                       { id: 'electrical', name: 'Electrical', match: 'electr', color: '#eab308' },
                       { id: 'painting', name: 'Painting', match: 'paint', color: '#ec4899' },
-                      { id: 'renovation', name: 'Renovation', match: 'reno', color: '#8b5cf6' },
-                      { id: 'adventure', name: 'Adventure Ops', match: 'adventure', color: '#e11d48' },
+                      { id: 'paragliding', name: 'Paragliding', match: 'paragliding', color: '#f43f5e' },
+                      { id: 'safari', name: 'Desert Safari', match: 'safari', color: '#f97316' },
+                      { id: 'rafting', name: 'River Rafting', match: 'rafting', color: '#06b6d4' },
                     ].map(cat => {
                       const count = vendors.filter(v =>
-                        (v.specialization || '').toLowerCase().includes(cat.match)
+                        (v.specialization || '').toLowerCase().includes(cat.match) ||
+                        (v.category || '').toLowerCase().includes(cat.match)
                       ).length;
-                      const isSelected = vendorCategoryFilter === cat.match;
+                      const isSelected = vendorCategoryFilter.toLowerCase() === cat.match.toLowerCase();
 
                       return (
                         <button
                           key={cat.id}
                           type="button"
                           onClick={() => setVendorCategoryFilter(isSelected ? 'ALL' : cat.match)}
-                          className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
                             isSelected
-                              ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                              : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
+                              ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
                             <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
                               isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                             }`}>
                               {count}
                             </span>
                           </div>
-                          <div className="mt-2 font-bold text-xs truncate">
+                          <div className="mt-1.5 font-bold text-xs truncate">
                             {cat.name}
                           </div>
                         </button>
@@ -4061,7 +4101,9 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-brand-600" />
                       <span className="font-semibold text-slate-700 text-sm">
-                        {vendorCategoryFilter === 'ALL' ? 'Connected Local Vendors' : `Vendors (${vendorCategoryFilter})`}
+                        {vendorCategoryFilter === 'ALL'
+                          ? 'Connected Vendors'
+                          : `Vendors (Filtered: ${vendorCategoryFilter})`}
                       </span>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
                         {vendors.filter(v => {
@@ -4069,11 +4111,21 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             (v.name || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.businessName || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.city || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
+                            (v.category || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.specialization || '').toLowerCase().includes(globalSearch.toLowerCase());
-                          const matchesCategory = vendorCategoryFilter === 'ALL' ||
-                            (v.specialization || '').toLowerCase().includes(vendorCategoryFilter.toLowerCase());
+
+                          let matchesCategory = true;
+                          if (vendorCategoryFilter !== 'ALL') {
+                            const filterLower = vendorCategoryFilter.toLowerCase();
+                            matchesCategory =
+                              (v.category || '').toLowerCase() === filterLower ||
+                              (v.category || '').toLowerCase().includes(filterLower) ||
+                              (v.specialization || '').toLowerCase().includes(filterLower);
+                          }
+
                           const matchesCity = vendorCityFilter === 'ALL' ||
                             (v.city || '').toLowerCase() === vendorCityFilter.toLowerCase();
+
                           return matchesSearch && matchesCategory && matchesCity;
                         }).length}
                       </span>
@@ -4109,7 +4161,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
                           <th className="py-3 px-4 font-semibold text-slate-700">Vendor & Business</th>
                           <th className="py-3 px-4 font-semibold text-slate-700">Contact</th>
-                          <th className="py-3 px-4 font-semibold text-slate-700">Category / Specialization</th>
+                          <th className="py-3 px-4 font-semibold text-slate-700">Category & Domain</th>
                           <th className="py-3 px-4 font-semibold text-slate-700">City & Experience</th>
                           <th className="py-3 px-4 font-semibold text-slate-700">Rating</th>
                           <th className="py-3 px-4 font-semibold text-slate-700 text-right">Status</th>
@@ -4122,17 +4174,31 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             (v.name || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.businessName || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.city || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
+                            (v.category || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.specialization || '').toLowerCase().includes(globalSearch.toLowerCase());
-                          const matchesCategory = vendorCategoryFilter === 'ALL' ||
-                            (v.specialization || '').toLowerCase().includes(vendorCategoryFilter.toLowerCase());
+
+                          let matchesCategory = true;
+                          if (vendorCategoryFilter !== 'ALL') {
+                            const filterLower = vendorCategoryFilter.toLowerCase();
+                            matchesCategory =
+                              (v.category || '').toLowerCase() === filterLower ||
+                              (v.category || '').toLowerCase().includes(filterLower) ||
+                              (v.specialization || '').toLowerCase().includes(filterLower);
+                          }
+
                           const matchesCity = vendorCityFilter === 'ALL' ||
                             (v.city || '').toLowerCase() === vendorCityFilter.toLowerCase();
+
                           return matchesSearch && matchesCategory && matchesCity;
                         }).map(vendor => (
                           <tr key={vendor.id} className="hover:bg-slate-50/60 transition-all">
                             <td className="py-4 px-4">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm overflow-hidden">
+                                <div className={`w-10 h-10 rounded-xl ${
+                                  (vendor.category || '').toLowerCase().includes('adventure')
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-brand-100 text-brand-700'
+                                } flex items-center justify-center font-bold text-sm overflow-hidden`}>
                                   {vendor.name.charAt(0)}
                                 </div>
                                 <div>
@@ -4148,9 +4214,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               <div className="text-[10px] text-slate-400 mt-0.5">{vendor.email}</div>
                             </td>
                             <td className="py-4 px-4">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200">
-                                {vendor.specialization}
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                  (vendor.category || '').toLowerCase().includes('adventure')
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}>
+                                  {(vendor.category || '').toLowerCase().includes('adventure') ? '🪂 Adventure' : '🛠️ Services'}
+                                </span>
+                                <span className="text-slate-600 font-medium text-xs">
+                                  {vendor.specialization}
+                                </span>
+                              </div>
                             </td>
                             <td className="py-4 px-4">
                               <div className="text-slate-700 font-medium">{vendor.city}</div>
@@ -4522,23 +4597,49 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vendor Category *</label>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Domain Category *</label>
                           <select
-                            name="specialization"
-                            value={vendorForm.specialization}
-                            onChange={(e) => setVendorForm(prev => ({ ...prev, specialization: e.target.value }))}
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-medium"
+                            name="category"
+                            value={vendorForm.category || 'Services'}
+                            onChange={(e) => {
+                              const newCat = e.target.value;
+                              setVendorForm(prev => ({
+                                ...prev,
+                                category: newCat,
+                                specialization: newCat === 'Adventure' ? 'Paragliding & Microlight Flights' : 'Waterproofing & Leakage'
+                              }));
+                            }}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-semibold"
                           >
+                            <option value="Services">🛠️ Home & Civil Services</option>
+                            <option value="Adventure">🪂 Adventure & Sports Operator</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Specialization *</label>
+                        <select
+                          name="specialization"
+                          value={vendorForm.specialization}
+                          onChange={(e) => setVendorForm(prev => ({ ...prev, specialization: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-medium"
+                        >
+                          <optgroup label="🛠️ Services Specializations">
                             <option value="Waterproofing & Leakage">Waterproofing & Leakage</option>
                             <option value="Civil Construction & Masonry">Civil Construction & Masonry</option>
                             <option value="Plumbing & Sanitation">Plumbing & Sanitation</option>
                             <option value="Electrical & Wiring">Electrical & Wiring</option>
                             <option value="Painting & Finishing">Painting & Finishing</option>
                             <option value="Renovation & Carpentry">Renovation & Carpentry</option>
-                            <option value="Adventure & Tour Operators">Adventure & Tour Operators</option>
                             <option value="General Maintenance">General Maintenance</option>
-                          </select>
-                        </div>
+                          </optgroup>
+                          <optgroup label="🪂 Adventure Specializations">
+                            <option value="Paragliding & Microlight Flights">Paragliding & Microlight Flights</option>
+                            <option value="Desert Safari & Dune Bashing">Desert Safari & Dune Bashing</option>
+                            <option value="River Rafting & Kayaking">River Rafting & Kayaking</option>
+                            <option value="Trekking & Mountain Expeditions">Trekking & Mountain Expeditions</option>
+                          </optgroup>
+                        </select>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">

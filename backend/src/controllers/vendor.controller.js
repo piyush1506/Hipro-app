@@ -14,7 +14,7 @@ const VENDOR_CATEGORIES = [
   { id: 'painting', name: 'Painting & Finishing', slug: 'painting', icon: 'Sparkles', color: '#ec4899' },
   { id: 'renovation', name: 'Renovation & Carpentry', slug: 'renovation', icon: 'Home', color: '#8b5cf6' },
   { id: 'adventure', name: 'Adventure & Tour Operators', slug: 'adventure', icon: 'Compass', color: '#e11d48' },
-  { id: 'general', name: 'General Maintenance & Repair', slug: 'general', icon: 'Layers', color: '#64748b' },
+  { id: 'general', name: 'General Maintenance & Repair', slug: 'general', icon:'Layers', color: '#64748b' },
 ];
 
 // GET /api/v1/vendors/categories - List categories with active vendor count
@@ -42,9 +42,19 @@ const getVendors = async (req, res) => {
     const { city, specialization, category, status, search } = req.query;
     const where = {};
     if (city) where.city = city;
+    
     if (category && category.toLowerCase() !== 'all') {
-      where.category = { equals: category, mode: 'insensitive' };
+      const catLower = category.toLowerCase();
+      if (catLower === 'adventure' || catLower === 'services') {
+        where.category = { equals: category, mode: 'insensitive' };
+      } else {
+        where.OR = [
+          { category: { contains: category, mode: 'insensitive' } },
+          { specialization: { contains: category, mode: 'insensitive' } }
+        ];
+      }
     }
+    
     if (specialization && specialization.toLowerCase() !== 'all') {
       where.specialization = { contains: specialization, mode: 'insensitive' };
     }
