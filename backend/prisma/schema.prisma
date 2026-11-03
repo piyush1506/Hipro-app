@@ -105,7 +105,15 @@ model ServiceRequest {
     technicianPhone  String?
     technicianRole   String?
 
+    // Vendor Assignment (Multi-panel vendor system)
+    vendorId           String?
+    vendor             Vendor?   @relation("VendorAssignedJobs", fields: [vendorId], references: [id], onDelete: SetNull)
+    assignedVendorName String?
+    assignedQuotePrice Float?
+    assignedBy         String?
+
     quotations       Quotation[]
+    vendorQuotes     VendorQuote[]
 
     created_at       DateTime     @default(now())  
     updated_at       DateTime     @default(now()) @updatedAt
@@ -345,4 +353,57 @@ model SupportKnowledge {
     updatedAt DateTime @updatedAt
 
     @@index([isActive])
+}
+
+// ==========================================
+// VENDOR MANAGEMENT SYSTEM
+// Local contractors who receive customer requests
+// and submit quotations for repair work
+// ==========================================
+
+model Vendor {
+    id              String   @id @default(uuid())
+    name            String
+    businessName    String
+    phone           String   @unique
+    email           String?   @unique
+    city            String
+    category        String   @default("Services") // "Services" | "Adventure"
+    specialization  String   // e.g. "Waterproofing", "Civil Construction", "Painting", "Paragliding"
+    experience      String   // e.g. "8 Years"
+    status          String   @default("active") // active, inactive, busy
+    rating          Float    @default(0.0)
+    minCharge       Float    @default(0.0)
+    imageUrl        String?
+    created_at      DateTime @default(now())
+    updated_at      DateTime @updatedAt
+
+    vendorQuotes    VendorQuote[]
+    assignedJobs    ServiceRequest[] @relation("VendorAssignedJobs")
+
+    @@index([category])
+    @@index([city])
+    @@index([specialization])
+    @@index([status])
+}
+
+// Vendor Quotations - quotes submitted by vendors for customer requests
+model VendorQuote {
+    id               String   @id @default(uuid())
+    requestId        String
+    request          ServiceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+    vendorId         String
+    vendor           Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+    vendorName       String
+    vendorBusiness   String?
+    quotePrice       Float
+    notes            String?
+    estimatedTimeline String  @default("1-2 Working Days")
+    status           String   @default("submitted") // submitted, accepted, rejected, assigned
+    submittedBy      String?
+    createdAt        DateTime @default(now())
+
+    @@index([requestId])
+    @@index([vendorId])
+    @@index([status])
 }
