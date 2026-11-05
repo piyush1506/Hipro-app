@@ -108,13 +108,15 @@ model ServiceRequest {
 
     // Vendor Assignment (Multi-panel vendor system)
     vendorId           String?
-    vendor             Vendor?   @relation("VendorAssignedJobs", fields: [vendorId], references: [id], onDelete: SetNull)
+    cityId             String?      // City this request belongs to (multi-city routing)
+    vendor             Vendor?      @relation("VendorAssignedJobs", fields: [vendorId], references: [id], onDelete: SetNull)
     assignedVendorName String?
     assignedQuotePrice Float?
     assignedBy         String?
 
     quotations       Quotation[]
     vendorQuotes     VendorQuote[]
+    sharedVendors    VendorSharedRequest[]
 
     created_at       DateTime     @default(now())  
     updated_at       DateTime     @default(now()) @updatedAt
@@ -379,6 +381,12 @@ model Admin {
 // Local contractors and adventure operators
 // ==========================================
 
+enum VendorCapacity {
+    SMALL
+    MEDIUM
+    LARGE
+}
+
 model Vendor {
     id              String   @id @default(uuid())
     name            String
@@ -386,25 +394,40 @@ model Vendor {
     phone           String   @unique
     email           String?   @unique
     password        String?  // Optional vendor password
-    passcode        String?  @default("123456") // 6-digit security PIN
+    passcode        String?  // 6-digit security PIN (hashed)
     city            String
+    cityId          String?  // Links vendor to a specific city for multi-city routing
     category        String   @default("Services") // "Services" | "Adventure"
     specialization  String   // e.g. "Waterproofing", "Civil Construction", "Painting", "Paragliding"
     experience      String   // e.g. "8 Years"
     status          String   @default("active") // active, inactive, busy
+    capacity        VendorCapacity @default(SMALL) // Work capability: SMALL | MEDIUM | LARGE
+    maxConcurrentJobs Int      @default(5)        // Max active jobs vendor can handle at once
+    currentJobCount   Int        @default(0)      // Current active assigned jobs
     rating          Float    @default(0.0)
     minCharge       Float    @default(0.0)
     imageUrl        String?
+
+    // Document Verification Fields
+    aadhaarNumber     String?   // Aadhaar number
+    aadhaarUrl        String?   // Uploaded Aadhaar document URL
+    panNumber         String?   // PAN number
+    panUrl            String?   // Uploaded PAN document URL
+    bankPassbookUrl   String?   // Uploaded bank passbook URL
+    documentsVerified Boolean   @default(false) // Admin verification status
+
     created_at      DateTime @default(now())
     updated_at      DateTime @updatedAt
 
     vendorQuotes    VendorQuote[]
     assignedJobs    ServiceRequest[] @relation("VendorAssignedJobs")
+    sharedRequests  VendorSharedRequest[]
 
     @@index([category])
     @@index([city])
     @@index([specialization])
     @@index([status])
+    @@index([documentsVerified])
 }
 
 // Vendor Quotations - quotes submitted by vendors for customer requests
@@ -423,6 +446,26 @@ model VendorQuote {
     submittedBy      String?
     createdAt        DateTime @default(now())
 
+    @@index([requestId])
+    @@index([vendorId])
+    @@index([status])
+}
+
+
+// VendorSharedRequest - Binds customer inspection requests to explicitly selected vendors
+// Strictly enforces data isolation to prevent cross-vendor data breaching
+model VendorSharedRequest {
+    id          String         @id @default(uuid())
+    requestId   String
+    request     ServiceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+    vendorId    String
+    vendor      Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+    sharedAt    DateTime       @default(now())
+    sharedBy    String?        @default("Super Admin")
+    notes       String?        // Admin instructions / dispatch notes
+    status      String         @default("PENDING") // PENDING, QUOTED, DECLINED, ASSIGNED
+
+    @@unique([requestId, vendorId])
     @@index([requestId])
     @@index([vendorId])
     @@index([status])

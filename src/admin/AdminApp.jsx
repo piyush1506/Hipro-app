@@ -1,23 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import {
-  LayoutDashboard, ClipboardList, Receipt, Calculator,
+  LayoutDashboard, ClipboardList, Briefcase, FileText, Share2, CheckSquare, Square, Receipt, Calculator,
   Wrench, Users, Activity, ShieldCheck, Plus, RefreshCw,
   PlusCircle, Search, Menu, X, Camera, Printer, Trash2,
   Check, PhoneCall, Sparkles, Inbox, Clock, FileCheck2,
   CheckCircle2, GitPullRequest, Zap, ArrowRight, ArrowLeft, MapPin,
-  Calendar, Home, User, Phone, Info, Send, RotateCcw,
-  Server, Database, AlertCircle, Droplets, Image, Layers,
+  Calendar, Home, User, Phone, Mail, Info, Send, RotateCcw,
+  Server, Database, AlertCircle, Droplets, Image, Layers, Scale,
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut
+  Edit, Edit2, Edit3, LogOut, Video, Play
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? ''
-    : 'https://app.hindustanprojects.in');
+const API_BASE = (typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' || 
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname.startsWith('192.168.') ||
+  window.location.hostname.startsWith('10.') ||
+  window.location.hostname.endsWith('.local')
+))
+  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000')
+  : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
 export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -26,6 +31,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [quotations, setQuotations] = useState([]);
   const [services, setServices] = useState([]);
   const [users, setUsers] = useState([]);
+  const [userDetailModalOpen, setUserDetailModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userBookings, setUserBookings] = useState([]);
+  const [userBookingsLoading, setUserBookingsLoading] = useState(false);
+  const [viewUserDetail, setViewUserDetail] = useState(false);
   const [slides, setSlides] = useState([]);
   const [entCategories, setEntCategories] = useState([]);
   const [entExperiences, setEntExperiences] = useState([]);
@@ -85,7 +95,13 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
   // Overview Operations & Engineer Assignment State
   const [overviewFilter, setOverviewFilter] = useState('ALL'); // 'ALL' | 'READY' | 'NEEDS_QUOTE' | 'AUDIT' | 'DIRECT'
+  const [overviewCityFilter, setOverviewCityFilter] = useState('ALL'); // 'ALL' | 'Bhilwara' | 'Udaipur' | 'Dehradun' | 'Rishikesh' | 'Jaipur' | 'Jaisalmer'
+  const [overviewActiveSection, setOverviewActiveSection] = useState('requests'); // 'requests' | 'bookings' | 'quotations' | 'vendors'
   const [overviewSearch, setOverviewSearch] = useState('');
+  const [quotationFilterStatus, setQuotationFilterStatus] = useState('ALL'); // 'ALL' | 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  const [quotationSearch, setQuotationSearch] = useState('');
+  const [quotationDeskTab, setQuotationDeskTab] = useState('customer'); // 'customer' | 'vendor'
+  const [userSearch, setUserSearch] = useState('');
   const [assigningEngineerReqId, setAssigningEngineerReqId] = useState(null);
   const [assignedEngineers, setAssignedEngineers] = useState(() => {
     try {
@@ -98,6 +114,12 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
   const [partners, setPartners] = useState([]);
 
+  // Inspection Requests Tab Filter & Loading State
+  const [requestsCityFilter, setRequestsCityFilter] = useState('ALL');
+  const [requestsStatusFilter, setRequestsStatusFilter] = useState('ALL');
+  const [requestsSearch, setRequestsSearch] = useState('');
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+
   // ==================== VENDOR MULTI-PANEL MANAGEMENT STATE ====================
   // Super Admin: Connected local vendors who receive customer requests & submit quotations
   const [vendors, setVendors] = useState([]);
@@ -105,12 +127,16 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [editingVendor, setEditingVendor] = useState(null);
   const [vendorCategoryFilter, setVendorCategoryFilter] = useState('ALL');
   const [vendorCityFilter, setVendorCityFilter] = useState('ALL');
+  const [categoryPills, setCategoryPills] = useState([]);
+  const [domainTabs, setDomainTabs] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [vendorForm, setVendorForm] = useState({
     name: '',
     businessName: '',
     phone: '',
     email: '',
     city: 'Bhilwara',
+    category: 'Services',
     specialization: 'General Repair',
     experience: '3+ Years',
     status: 'active',
@@ -125,23 +151,319 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [showVendorPanel, setShowVendorPanel] = useState(false); // toggle vendor-facing view
   const [assignedVendor, setAssignedVendor] = useState(null); // final assigned vendor (min price)
 
+  // ==================== VENDOR COMPARISON & QUOTATION TRACKING STATE ====================
+  const [vendorComparisonMode, setVendorComparisonMode] = useState(false);
+  const [selectedVendorsForComparison, setSelectedVendorsForComparison] = useState([]);
+  const [vendorQuotesHistory, setVendorQuotesHistory] = useState([]);
+  const [vendorPerformanceStats, setVendorPerformanceStats] = useState({});
+  const [viewVendorDetail, setViewVendorDetail] = useState(false);
+  const [selectedVendorDetail, setSelectedVendorDetail] = useState(null);
+  const [vendorDetailLoading, setVendorDetailLoading] = useState(false);
+  const [vendorDetailTab, setVendorDetailTab] = useState('overview'); // 'overview' | 'kyc' | 'jobs' | 'quotes' | 'shared'
+  const [isVerifyingKYC, setIsVerifyingKYC] = useState(false);
+  const [isUpdatingVendorStatus, setIsUpdatingVendorStatus] = useState(false);
+
+  const handleOpenVendorDetail = async (vendor) => {
+    if (!vendor) return;
+    setActiveTab('vendors');
+    setSelectedVendorDetail(vendor);
+    setViewVendorDetail(true);
+    setVendorDetailTab('overview');
+    setVendorDetailLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/vendors/${vendor.id}`);
+      const data = await res.json();
+      if (data.success && data.vendor) {
+        setSelectedVendorDetail(data.vendor);
+      }
+    } catch (e) {
+      console.error('Failed to load full vendor detail:', e);
+    } finally {
+      setVendorDetailLoading(false);
+    }
+  };
+
+  const handleToggleVendorKYCStatus = async (vendorId, currentVerified) => {
+    setIsVerifyingKYC(true);
+    try {
+      const nextStatus = !currentVerified;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/${vendorId}/verify-kyc`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentsVerified: nextStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Vendor KYC ${nextStatus ? 'Verified & Approved' : 'marked Unverified'}!`, 'success');
+        setSelectedVendorDetail(prev => prev ? { ...prev, documentsVerified: nextStatus } : prev);
+        setVendors(prev => prev.map(v => v.id === vendorId ? { ...v, documentsVerified: nextStatus } : v));
+      } else {
+        showToastMsg(data.message || 'Failed to update KYC status', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Network error updating KYC status', 'error');
+    } finally {
+      setIsVerifyingKYC(false);
+    }
+  };
+
+  const handleQuickUpdateVendorStatus = async (vendorId, newStatus) => {
+    setIsUpdatingVendorStatus(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/vendors/${vendorId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Vendor status updated to ${newStatus.toUpperCase()}`, 'success');
+        setSelectedVendorDetail(prev => prev ? { ...prev, status: newStatus } : prev);
+        setVendors(prev => prev.map(v => v.id === vendorId ? { ...v, status: newStatus } : v));
+      } else {
+        showToastMsg(data.message || 'Failed to update vendor status', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Network error updating vendor status', 'error');
+    } finally {
+      setIsUpdatingVendorStatus(false);
+    }
+  };
+  const [priorityVendors, setPriorityVendors] = useState([]);
+
+  // ==================== REQUEST SHARING & VENDOR QUOTATION MODAL STATE ====================
+  const [shareVendorModalOpen, setShareVendorModalOpen] = useState(false);
+  const [shareModalRequest, setShareModalRequest] = useState(null);
+  const [selectedShareVendorIds, setSelectedShareVendorIds] = useState([]);
+  const [shareDispatchNotes, setShareDispatchNotes] = useState('');
+  const [shareVendorCityFilter, setShareVendorCityFilter] = useState('ALL');
+  const [shareVendorSearch, setShareVendorSearch] = useState('');
+  const [isSharingDispatching, setIsSharingDispatching] = useState(false);
+
+  const [vendorQuotesModalOpen, setVendorQuotesModalOpen] = useState(false);
+  const [quotesModalRequest, setQuotesModalRequest] = useState(null);
+  const [quotesModalList, setQuotesModalList] = useState([]);
+  const [isLoadingQuotesModal, setIsLoadingQuotesModal] = useState(false);
+  const [isAssigningFromQuotes, setIsAssigningFromQuotes] = useState(false);
+
+  const handleOpenShareVendorsModal = (req) => {
+    setShareModalRequest(req);
+    const alreadySharedIds = (req.sharedVendors || []).map(s => s.vendorId);
+    setSelectedShareVendorIds(alreadySharedIds);
+    setShareDispatchNotes('');
+    setShareVendorCityFilter('ALL');
+    setShareVendorSearch('');
+    setShareVendorModalOpen(true);
+  };
+
+  const handleToggleSelectVendor = (vendorId) => {
+    setSelectedShareVendorIds(prev => 
+      prev.includes(vendorId) ? prev.filter(id => id !== vendorId) : [...prev, vendorId]
+    );
+  };
+
+  const handleSelectAllCityVendors = (cityVendors) => {
+    const allIds = cityVendors.map(v => v.id);
+    const areAllSelected = allIds.every(id => selectedShareVendorIds.includes(id));
+    if (areAllSelected) {
+      setSelectedShareVendorIds(prev => prev.filter(id => !allIds.includes(id)));
+    } else {
+      setSelectedShareVendorIds(prev => Array.from(new Set([...prev, ...allIds])));
+    }
+  };
+
+  const handleDispatchShareVendors = async () => {
+    if (!shareModalRequest) return;
+    if (selectedShareVendorIds.length === 0) {
+      showToastMsg('Please select at least one vendor to share this request.', 'warning');
+      return;
+    }
+    setIsSharingDispatching(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/requests/${shareModalRequest.id}/share-vendors`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          vendorIds: selectedShareVendorIds,
+          notes: shareDispatchNotes,
+          sharedBy: 'Super Admin'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Request #${shareModalRequest.requestNumber} shared with ${selectedShareVendorIds.length} vendor(s)!`, 'success');
+        setShareVendorModalOpen(false);
+        setShareModalRequest(null);
+        await fetchRequests();
+      } else {
+        showToastMsg(data.message || 'Failed to share request with vendors', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Network error while sharing request', 'error');
+    } finally {
+      setIsSharingDispatching(false);
+    }
+  };
+
+  const handleOpenVendorQuotesModal = async (req) => {
+    setQuotesModalRequest(req);
+    setQuotesModalList(req.vendorQuotes || []);
+    setVendorQuotesModalOpen(true);
+    setIsLoadingQuotesModal(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/requests/${req.id}/vendor-quotes`, { headers });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.quotes)) {
+        setQuotesModalList(data.quotes);
+      }
+    } catch (err) {
+      console.error('Failed to load vendor quotes:', err);
+    } finally {
+      setIsLoadingQuotesModal(false);
+    }
+  };
+
+  const handleAssignVendorFromQuote = async (quote) => {
+    if (!quotesModalRequest) return;
+    setIsAssigningFromQuotes(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/requests/${quotesModalRequest.id}/assign-vendor`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          vendorId: quote.vendorId,
+          quoteId: quote.id,
+          quotePrice: quote.quotePrice,
+          vendorName: quote.vendorName || quote.vendor?.businessName || quote.vendor?.name,
+          assignedBy: 'Super Admin'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Project #${quotesModalRequest.requestNumber} awarded to ${quote.vendorName || quote.vendor?.businessName || 'vendor'} for ₹${quote.quotePrice.toLocaleString('en-IN')}!`, 'success');
+        setVendorQuotesModalOpen(false);
+        setQuotesModalRequest(null);
+        await fetchRequests();
+      } else {
+        showToastMsg(data.message || 'Failed to assign project', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Network error while assigning project', 'error');
+    } finally {
+      setIsAssigningFromQuotes(false);
+    }
+  }; // Priority vendor IDs for customer assignment
+
   const fetchVendors = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/vendors`);
       const data = await res.json();
       if (data.success && Array.isArray(data.vendors)) {
         setVendors(data.vendors);
+        await fetchCategories();
+        await fetchVendorQuotesHistory();
       } else {
-        // Fallback demo vendors if backend not available
+        // Fallback demo vendors if backend not available (Services & Adventure)
         setVendors([
-          { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', email: 'rajesh@example.com', city: 'Bhilwara', specialization: 'Waterproofing & Leakage', experience: '8 Years', status: 'active', rating: 4.8, minCharge: '1000', imageUrl: '' },
-          { id: 'v_2', name: 'Sunita Verma', businessName: 'Sunita Civil Works', phone: '+91 98765 43211', email: 'sunita@example.com', city: 'Bhilwara', specialization: 'Civil Construction & Masonry', experience: '6 Years', status: 'active', rating: 4.6, minCharge: '800', imageUrl: '' },
-          { id: 'v_3', name: 'Mohan Lal', businessName: 'Mohan Painting & Finishing', phone: '+91 98765 43212', email: 'mohan@example.com', city: 'Bhilwara', specialization: 'Painting & Wall Repair', experience: '5 Years', status: 'active', rating: 4.4, minCharge: '600', imageUrl: '' },
-          { id: 'v_4', name: 'Arjun Singh', businessName: 'Arjun Structural Solutions', phone: '+91 98765 43213', email: 'arjun@example.com', city: 'Bhilwara', specialization: 'Structural Analysis', experience: '10 Years', status: 'active', rating: 4.9, minCharge: '1500', imageUrl: '' },
+          { id: 'v_adv_01', name: 'Captain Arvind Negi', businessName: 'Himalayan Sky Gliders & Air Safari', phone: '+91 98290 88801', email: 'arvind.gliders@gmail.com', city: 'Dehradun', category: 'Adventure', specialization: 'Paragliding & Microlight Flights', experience: '12 Years', status: 'active', rating: 4.9, minCharge: '2500', imageUrl: '' },
+          { id: 'v_adv_02', name: 'Fateh Singh Bhati', businessName: 'Thar Royal Desert Safari & Camps', phone: '+91 94141 77702', email: 'thar.safari@gmail.com', city: 'Jaisalmer', category: 'Adventure', specialization: 'Desert Safari & Dune Bashing', experience: '10 Years', status: 'active', rating: 4.9, minCharge: '1800', imageUrl: '' },
+          { id: 'v_adv_03', name: 'Rakesh Rawat', businessName: 'Ganga White Water Adventure Club', phone: '+91 98370 66603', email: 'ganga.rafting@gmail.com', city: 'Rishikesh', category: 'Adventure', specialization: 'River Rafting & Kayaking', experience: '14 Years', status: 'active', rating: 5.0, minCharge: '1200', imageUrl: '' },
+          { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', email: 'rajesh@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Waterproofing & Leakage', experience: '8 Years', status: 'active', rating: 4.8, minCharge: '1000', imageUrl: '' },
+          { id: 'v_2', name: 'Sunita Verma', businessName: 'Sunita Civil Works', phone: '+91 98765 43211', email: 'sunita@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Civil Construction & Masonry', experience: '6 Years', status: 'active', rating: 4.6, minCharge: '800', imageUrl: '' },
+          { id: 'v_3', name: 'Mohan Lal', businessName: 'Mohan Painting & Finishing', phone: '+91 98765 43212', email: 'mohan@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Painting & Wall Repair', experience: '5 Years', status: 'active', rating: 4.4, minCharge: '600', imageUrl: '' },
+          { id: 'v_4', name: 'Arjun Singh', businessName: 'Arjun Structural Solutions', phone: '+91 98765 43213', email: 'arjun@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Structural Analysis', experience: '10 Years', status: 'active', rating: 4.9, minCharge: '1500', imageUrl: '' },
         ]);
+        await fetchVendorQuotesHistory();
       }
     } catch (e) {
       console.error('Failed to fetch vendors:', e);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      const res = await fetch(`${API_BASE}/api/v1/vendors/categories`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.categories)) {
+        setCategoryPills(data.categories);
+
+        // Build dynamic domain tabs from categories
+        const serviceCats = data.categories.filter(c => (c.category || '').toLowerCase() !== 'adventure');
+        const adventureCats = data.categories.filter(c => (c.category || '').toLowerCase() === 'adventure');
+
+        setDomainTabs([
+          { id: 'ALL', name: 'All Domains', count: vendors.length, color: '#0f172a' },
+          {
+            id: 'Services',
+            name: 'Home & Civil Services',
+            count: serviceCats.reduce((s, c) => s + (c.vendorCount || 0), 0),
+            color: '#3b82f6',
+          },
+          {
+            id: 'Adventure',
+            name: 'Adventure & Sports Operators',
+            count: adventureCats.reduce((s, c) => s + (c.vendorCount || 0), 0),
+            color: '#f43f5e',
+          },
+        ]);
+      }
+    } catch (e) {
+      console.error('Failed to fetch categories:', e);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  const fetchVendorQuotesHistory = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/quotes`, { headers });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.quotes)) {
+        setVendorQuotesHistory(data.quotes);
+        // Calculate performance stats per vendor
+        const stats = {};
+        data.quotes.forEach(q => {
+          const vid = q.vendorId;
+          if (!stats[vid]) {
+            stats[vid] = { totalQuotes: 0, totalValue: 0, assignedCount: 0, avgRating: 0 };
+          }
+          stats[vid].totalQuotes++;
+          stats[vid].totalValue += q.quotePrice || 0;
+          if (q.status === 'assigned' || q.status === 'accepted') {
+            stats[vid].assignedCount++;
+          }
+        });
+        // Merge with vendor data for final stats
+        const finalStats = {};
+        vendors.forEach(v => {
+          finalStats[v.id] = {
+            ...stats[v.id],
+            vendorName: v.name,
+            businessName: v.businessName,
+            category: v.category,
+            city: v.city,
+            specialization: v.specialization,
+            rating: v.rating,
+            status: v.status,
+          };
+        });
+        setVendorPerformanceStats(finalStats);
+      }
+    } catch (e) {
+      console.error('Failed to fetch vendor quotes history:', e);
     }
   };
 
@@ -162,7 +484,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         showToastMsg(editingVendor ? 'Vendor updated successfully!' : 'New vendor connected successfully!', 'success');
         setVendorModalOpen(false);
         setEditingVendor(null);
-        setVendorForm({ name: '', businessName: '', phone: '', email: '', city: 'Bhilwara', specialization: 'General Repair', experience: '3+ Years', status: 'active', rating: 4.5, minCharge: '500', imageUrl: '' });
+        setVendorForm({ name: '', businessName: '', phone: '', email: '', city: 'Bhilwara', category: 'Services', specialization: 'General Repair', experience: '3+ Years', status: 'active', rating: 4.5, minCharge: '500', imageUrl: '' });
         fetchVendors();
       } else {
         showToastMsg(data.message || 'Failed to save vendor', 'error');
@@ -205,6 +527,21 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     }
   };
 
+  // Toggle Priority Vendor - priority vendors get preference when assigning to customer quotations
+  const handleToggleVendorPriority = (vendorId) => {
+    setPriorityVendors(prev => {
+      const isPriority = prev.includes(vendorId);
+      const updated = isPriority
+        ? prev.filter(id => id !== vendorId)
+        : [...prev, vendorId];
+      showToastMsg(
+        isPriority ? 'Removed from Priority Vendors' : 'Added to Priority Vendors',
+        isPriority ? 'info' : 'success'
+      );
+      return updated;
+    });
+  };
+
   // Local input states for vendor quote collection (per vendor)
   const [vendorQuoteInputs, setVendorQuoteInputs] = useState({}); // { vendorId: { price, notes, timeline } }
 
@@ -234,7 +571,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendor-quotes`, {
+      const res = await fetch(`${API_BASE}/api/v1/vendors/quotes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -277,6 +614,9 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          vendorId,
+          vendorName: vendor.name,
+          quotePrice: quote ? quote.quotePrice : 0,
           assignedVendorId: vendorId,
           assignedVendorName: vendor.name,
           assignedQuotePrice: quote ? quote.quotePrice : 0,
@@ -320,7 +660,12 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     color: p.cityName === 'Bhilwara' ? 'bg-warning-100 text-warning-700 border-warning-200' : 'bg-primary-100 text-primary-700 border-primary-200'
   }));
 
-  const handleAssignEngineer = (requestId, engineerName) => {
+  const handleAssignEngineer = async (requestId, engineer) => {
+    const engineerName = typeof engineer === 'string' ? engineer : (engineer?.name || 'Assigned Engineer');
+    const engineerPhone = typeof engineer === 'object' ? (engineer?.phone || '') : '';
+    const engineerRole = typeof engineer === 'object' ? (engineer?.badge || engineer?.role || 'Lead Inspection Engineer') : 'Lead Inspection Engineer';
+
+    // 1. Optimistic local state & localStorage update
     setAssignedEngineers(prev => {
       const updated = { ...prev, [requestId]: engineerName };
       try {
@@ -329,13 +674,35 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       return updated;
     });
     setAssigningEngineerReqId(null);
-    showToastMsg(`Assigned to ${engineerName}`, 'success');
+
+    // 2. Persist to backend database via PATCH /api/v1/requests/:id/assign
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/requests/${requestId}/assign`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          technicianName: engineerName,
+          technicianPhone: engineerPhone,
+          technicianRole: engineerRole
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Assigned to ${engineerName}`, 'success');
+        fetchRequests(true);
+      } else {
+        showToastMsg(data.message || `Assigned locally to ${engineerName}`, 'info');
+      }
+    } catch (err) {
+      showToastMsg(`Assigned locally to ${engineerName} (offline sync)`, 'info');
+    }
   };
 
   // Live Chat Desk State
   const socketRef = useRef(null);
   const [chatThreads, setChatThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
+  const activeThreadIdRef = useRef(null); // Ref to avoid stale closure in socket handlers
   const [threadMessages, setThreadMessages] = useState([]);
   const [adminReplyText, setAdminReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
@@ -387,6 +754,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     setActiveTab('chat');
     setSidebarOpen(false);
   };
+
+  // Keep ref in sync so socket handlers always read current activeThreadId
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
 
   // Slides State
   const [slideModalOpen, setSlideModalOpen] = useState(false);
@@ -496,34 +868,80 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [isEditingModalAdvance, setIsEditingModalAdvance] = useState(false);
   const [modalNewAdvanceAmt, setModalNewAdvanceAmt] = useState('');
 
-  // Initial Fetch
+  // Initial Fetch & Active Real-Time Polling
   useEffect(() => {
     fetchAllData();
-    const interval = setInterval(() => fetchStats(true), 60000);
+    // Poll telemetry and inspection requests every 10 seconds silently
+    const interval = setInterval(() => {
+      fetchStats(true);
+      fetchRequests(true);
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
+  // Instant refresh when user switches window / tab back to Admin Panel
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchRequests(true);
+      fetchStats(true);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Auto-fetch data whenever switching to the inspection requests tab
+  useEffect(() => {
+    if (activeTab === 'requests') {
+      fetchRequests();
+    }
+  }, [activeTab]);
+
+
+  // Chat connection status
+  const [socketConnected, setSocketConnected] = useState(false);
 
   // Real-Time Chat Socket & Event Listeners
   useEffect(() => {
     fetchChatThreads();
-    // Connect to Socket.io server
-    // Use VITE_SOCKET_URL env var if set, otherwise construct from location/API_BASE
+
+    // Get auth token for socket authentication
+    const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+
+    // Connect to Socket.io server with authentication
     const socketBase = import.meta.env.VITE_SOCKET_URL || 
-      (typeof window !== 'undefined' ? 
-        (window.location.protocol + '//' + window.location.hostname + ':5000') 
-        : 'http://localhost:5000');
+      (API_BASE ? API_BASE : (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000' : ''));
     const socket = io(socketBase, {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      auth: { token }
     });
     socketRef.current = socket;
 
-    // Join thread room when socket connects
+    // Connection status
     socket.on('connect', () => {
+      setSocketConnected(true);
       socket.emit('join_admin_room');
       // Re-join active thread room if one was selected
-      if (activeThreadId) {
-        socket.emit('join_thread', activeThreadId);
+      const currentThreadId = activeThreadIdRef.current;
+      if (currentThreadId) {
+        socket.emit('join_thread', currentThreadId);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      setSocketConnected(false);
+    });
+
+    socket.on('connect_error', (err) => {
+      setSocketConnected(false);
+      console.error('Socket connection error:', err.message);
+    });
+
+    socket.on('reconnect', () => {
+      setSocketConnected(true);
+      socket.emit('join_admin_room');
+      const currentThreadId = activeThreadIdRef.current;
+      if (currentThreadId) {
+        socket.emit('join_thread', currentThreadId);
       }
     });
 
@@ -532,20 +950,28 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (payload.thread) {
         setChatThreads(prev => prev.map(t => t.id === payload.thread.id ? payload.thread : t));
       }
-      if (activeThreadId && payload.thread?.id === activeThreadId) {
-        fetchThreadMessages(activeThreadId);
+      const currentThreadId = activeThreadIdRef.current;
+      if (currentThreadId && payload.thread?.id === currentThreadId) {
+        fetchThreadMessages(currentThreadId);
       }
     });
 
     socket.on('new_message', (msg) => {
-      // Add message to the specific thread if it matches, or if no active thread (first new message)
+      const currentThreadId = activeThreadIdRef.current;
+      // Avoid adding our own sent message twice (already added via optimistic or HTTP response)
       setThreadMessages(prev => {
-        if (activeThreadId && msg.threadId !== activeThreadId) return prev;
+        if (currentThreadId && msg.threadId !== currentThreadId) return prev;
         if (prev.some(m => m.id === msg.id)) return prev;
         return [...prev, msg];
       });
+      // Update thread list with the latest message
+      setChatThreads(prev => prev.map(t =>
+        t.id === msg.threadId
+          ? { ...t, lastMessage: msg.text, lastMessageTime: msg.createdAt, unreadCountAdmin: (t.id !== currentThreadId) ? (t.unreadCountAdmin || 0) + 1 : 0 }
+          : t
+      ));
       // Auto-switch to new thread if no thread was active
-      if (!activeThreadId) {
+      if (!currentThreadId) {
         setActiveThreadId(msg.threadId);
         fetchThreadMessages(msg.threadId);
       }
@@ -570,6 +996,33 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (act.eventType === 'ADDED_TO_CART') {
         showToastMsg(`🛒 ${act.customerName || 'Customer'} added ${act.subServiceName || 'an item'} to cart (${act.city || 'Udaipur'})`, 'info');
       }
+    });
+
+    // Real-Time Socket Listeners for Inspection Requests from Mobile App & Web
+    socket.on('new_request', (newReq) => {
+      if (!newReq || !newReq.id) return;
+      setRequests(prev => {
+        const filtered = prev.filter(r => r.id !== newReq.id && r.requestNumber !== newReq.requestNumber);
+        return [newReq, ...filtered];
+      });
+      fetchStats(true);
+      showToastMsg(`🔔 New Inspection Request: ${newReq.requestNumber} (${newReq.servicecode})`, 'info');
+    });
+
+    socket.on('request_updated', (updatedReq) => {
+      if (!updatedReq || !updatedReq.id) return;
+      setRequests(prev => prev.map(r => r.id === updatedReq.id ? { ...r, ...updatedReq } : r));
+      fetchStats(true);
+    });
+
+    socket.on('request_status_updated', () => {
+      fetchRequests(true);
+      fetchStats(true);
+    });
+
+    socket.on('stats_updated', () => {
+      fetchStats(true);
+      fetchRequests(true);
     });
 
     return () => {
@@ -1005,12 +1458,112 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     } catch (e) { console.error(e); }
   };
 
-  const fetchRequests = async () => {
+  const isVideoMedia = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    return Boolean(url.match(/\.(mp4|webm|ogg|mov)$/i) || url.includes('/videos/'));
+  };
+
+  const fetchRequests = async (quiet = false) => {
+    if (!quiet && requests.length === 0) setIsLoadingRequests(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/requests`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/requests`, { headers });
       const data = await res.json();
-      if (data.success) setRequests(data.data || []);
-    } catch (e) { console.error(e); }
+      const list = data && (Array.isArray(data.data) ? data.data : (Array.isArray(data.requests) ? data.requests : (Array.isArray(data) ? data : null)));
+      if (data && data.success && list) {
+        // Sort newest requests first so latest customer submissions from app appear at the top
+        const sorted = [...list].sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
+        setRequests(sorted);
+      } else {
+        console.warn('Fetch requests returned non-success:', data);
+        if (!quiet && data && data.message) {
+          showToastMsg(data.message, 'error');
+        }
+      }
+    } catch (e) {
+      console.error('Fetch requests error:', e);
+      if (!quiet) showToastMsg('Failed to connect to inspection requests server', 'error');
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  };
+
+  const handleCreateTestRequest = async (cityName = 'Udaipur') => {
+    try {
+      const isUdaipur = (cityName || '').toLowerCase().includes('udaipur');
+      const testReqData = {
+        customerName: isUdaipur ? 'Dr. Arvind Rathore' : 'Pooja Singhal',
+        customerPhone: isUdaipur ? '9829012345' : '9414188822',
+        servicecode: isUdaipur ? 'Waterproofing & Leakage' : 'Civil Construction & Masonry',
+        subServiceCode: isUdaipur ? 'Roof & Terrace Waterproofing' : 'Structural Wall Crack Repair',
+        issueDescription: isUdaipur
+          ? 'Severe rainwater leakage from terrace into master bedroom ceiling. Cracks visible on exterior parapet wall. Need thermal inspection and BOQ estimate.'
+          : 'Diagonal wall cracks near beam junction on first floor. Need senior civil engineer audit and repair quotation.',
+        urgency: isUdaipur ? 'HIGH' : 'NORMAL',
+        status: isUdaipur ? 'SUBMITTED' : 'AUDIT_SCHEDULED',
+        propertyType: isUdaipur ? 'Residential Villa (3-Storey)' : 'Commercial Complex',
+        propertySize: isUdaipur ? '3,200 sq ft' : '4,500 sq ft',
+        location: `${isUdaipur ? 'Udaipur' : 'Bhilwara'}, Rajasthan`,
+        addressline: isUdaipur ? 'Villa #14, Sahelion Ki Bari Road, Fatehpura, Udaipur' : 'Shop 12-14, City Centre Mall, Gandhi Nagar, Bhilwara',
+        preferredDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        preferredTime: isUdaipur ? 'Morning (10:00 AM - 01:00 PM)' : 'Afternoon (02:00 PM - 05:00 PM)',
+        damageImages: [
+          'https://ik.imagekit.io/hiproapp/inspections/scaled_17812_1793864757978_D5eu_e1dw.jpg',
+          'https://ik.imagekit.io/hiproapp/inspections/scaled_17809_1793864761078_v6Ynpc1xp.jpg'
+        ]
+      };
+      const res = await fetch(`${API_BASE}/api/v1/requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testReqData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Test inspection request created for ${isUdaipur ? 'Udaipur' : 'Bhilwara'}!`, 'success');
+        fetchRequests();
+        fetchStats();
+      } else {
+        showToastMsg(data.message || 'Failed to create test request', 'error');
+      }
+    } catch (e) {
+      showToastMsg('Error creating test request', 'error');
+    }
+  };
+
+  const handleAssignVendorDirect = async (requestId, vendorId) => {
+    if (!requestId || !vendorId) return;
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor) return;
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/requests/${requestId}/assign-vendor`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          vendorId,
+          vendorName: vendor.name,
+          quotePrice: 0,
+          assignedVendorId: vendorId,
+          assignedVendorName: vendor.name,
+          assignedQuotePrice: 0,
+          assignedBy: 'Super Admin',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Assigned to ${vendor.name} (${vendor.businessName})`, 'success');
+        fetchRequests();
+      } else {
+        showToastMsg(data.message || 'Failed to assign vendor', 'error');
+      }
+    } catch (e) {
+      showToastMsg(`Assigned to ${vendor.name}`, 'success');
+      fetchRequests();
+    }
   };
 
   const fetchQuotations = async () => {
@@ -1391,6 +1944,9 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (data.success) {
         showToastMsg(`Status updated to ${statusForm.status}`, 'success');
         setStatusModalBooking(null);
+        if (selectedBookingForDrawer && (selectedBookingForDrawer.id === statusModalBooking.id || selectedBookingForDrawer.bookingNumber === statusModalBooking.bookingNumber)) {
+          setSelectedBookingForDrawer(data.booking || { ...selectedBookingForDrawer, status: statusForm.status });
+        }
         fetchDirectBookings();
         fetchDirectBookingStats();
       } else {
@@ -1418,6 +1974,9 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (data.success) {
         showToastMsg(data.message || 'Refund processed successfully!', 'success');
         setRefundModalBooking(null);
+        if (selectedBookingForDrawer && (selectedBookingForDrawer.id === refundModalBooking.id || selectedBookingForDrawer.bookingNumber === refundModalBooking.bookingNumber)) {
+          setSelectedBookingForDrawer(data.booking || { ...selectedBookingForDrawer, refundStatus: 'PROCESSED', paymentStatus: 'REFUNDED' });
+        }
         fetchDirectBookings();
         fetchDirectBookingStats();
       } else {
@@ -1431,13 +1990,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const handleAdjustAdditionalCharge = async (e) => {
     e.preventDefault();
     if (!adjustChargeModalBooking) return;
+    const additionalWorkAmount = parseFloat(adjustForm.additionalAmount);
+    if (isNaN(additionalWorkAmount) || additionalWorkAmount < 0) {
+      showToastMsg('Please enter a valid additional work amount', 'error');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/v1/direct-bookings/${adjustChargeModalBooking.id}/additional-work`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          additionalWorkAmount: parseFloat(adjustForm.additionalAmount) || 0,
-          note: adjustForm.note,
+          additionalWorkAmount,
+          note: adjustForm.note ? adjustForm.note.trim() : 'Additional work performed on site',
           updatedBy: 'Admin Desk'
         })
       });
@@ -1445,7 +2009,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (data.success) {
         showToastMsg(data.message || 'Charges adjusted successfully', 'success');
         setAdjustChargeModalBooking(null);
+        if (selectedBookingForDrawer && (selectedBookingForDrawer.id === adjustChargeModalBooking.id || selectedBookingForDrawer.bookingNumber === adjustChargeModalBooking.bookingNumber)) {
+          setSelectedBookingForDrawer(data.booking || { ...selectedBookingForDrawer, additionalWorkAmount, totalAmount: (selectedBookingForDrawer.visitingCharge || 0) + additionalWorkAmount });
+        }
         fetchDirectBookings();
+        fetchDirectBookingStats();
       } else {
         showToastMsg(data.message || 'Failed to adjust charges', 'error');
       }
@@ -1570,6 +2138,22 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       }
     } catch (err) {
       showToastMsg('Error saving service category', 'error');
+    }
+  };
+
+  const handleDeleteService = async (serviceId) => {
+    if (!window.confirm('Are you sure you want to delete this entire service category and all its sub-services?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/services/${serviceId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg('Service category deleted successfully', 'success');
+        fetchServices();
+      } else {
+        showToastMsg(data.message || 'Failed to delete service category', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Error deleting service category', 'error');
     }
   };
 
@@ -1818,6 +2402,39 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     } catch (e) { console.error(e); }
   };
 
+  const fetchUserDetail = async (userId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/users/${userId}`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setSelectedUser(data.data);
+        setViewUserDetail(true);
+        fetchUserBookings(userId);
+      }
+    } catch (e) {
+      console.error('Fetch user detail error:', e);
+      showToastMsg('Failed to load user details', 'error');
+    }
+  };
+
+  const fetchUserBookings = async (userId) => {
+    setUserBookingsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/users/${userId}/bookings`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setUserBookings(data.data);
+      } else {
+        setUserBookings([]);
+      }
+    } catch (e) {
+      console.error('Fetch user bookings error:', e);
+      setUserBookings([]);
+    } finally {
+      setUserBookingsLoading(false);
+    }
+  };
+
   const fetchChatThreads = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/chat/threads`);
@@ -1827,6 +2444,16 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         if (!activeThreadId && data.data.length > 0) {
           setActiveThreadId(data.data[0].id);
           fetchThreadMessages(data.data[0].id);
+          // Mark the auto-selected thread as read
+          try {
+            await fetch(`${API_BASE}/api/v1/chat/threads/${data.data[0].id}/read`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reader: 'admin' })
+            });
+          } catch (e) {
+            console.error('Mark thread as read error:', e);
+          }
         }
       }
     } catch (e) {
@@ -2018,27 +2645,39 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const openChatForQuotation = (q) => {
     if (!q) return;
     const qNum = q.quoteNumber || q.id || '';
-    const threadId = `thread_quote_${qNum.toString().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    setChatThreads(prev => {
-      if (prev.some(t => t.id === threadId)) return prev;
-      return [
-        {
-          id: threadId,
-          customerName: q.customerName || q.request?.user?.name || q.user?.name || 'Customer',
-          customerPhone: q.customerPhone || q.request?.user?.phoneNumber || q.user?.phoneNumber || '+91 94628 77757',
-          contextType: 'QUOTATION',
-          contextTag: `Quotation #${qNum}`,
-          quoteNumber: qNum,
-          requestNumber: q.requestNumber || '',
-          bookingNumber: '',
-          lastMessage: `Official Quotation for ₹${(q.grandtotal || q.amount || 0).toLocaleString('en-IN')}`,
-          lastMessageTime: new Date().toISOString(),
-          unreadCountAdmin: 0,
-          unreadCountCustomer: 0,
-        },
-        ...prev
-      ];
+    const cleanPhone = (q.customerPhone || q.request?.user?.phoneNumber || q.user?.phoneNumber || '').replace(/\D/g, '');
+    const reqNum = q.request?.requestNumber || q.requestNumber || '';
+    const custName = q.customerName || q.request?.user?.name || q.user?.name || 'Customer';
+
+    // Search for existing chat thread matching customerPhone, requestNumber, or quoteNumber
+    let targetThread = chatThreads.find(t => {
+      const tPhone = (t.customerPhone || '').replace(/\D/g, '');
+      const matchPhone = cleanPhone && tPhone && (cleanPhone.includes(tPhone) || tPhone.includes(cleanPhone));
+      const matchReq = reqNum && (t.requestNumber === reqNum || t.contextTag?.includes(reqNum));
+      const matchQuote = qNum && (t.quoteNumber === qNum || t.contextTag?.includes(qNum));
+      return matchQuote || matchReq || matchPhone;
     });
+
+    const threadId = targetThread ? targetThread.id : `thread_quote_${qNum.toString().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+    if (!targetThread) {
+      targetThread = {
+        id: threadId,
+        customerName: custName,
+        customerPhone: q.customerPhone || q.request?.user?.phoneNumber || q.user?.phoneNumber || '+91 94628 77757',
+        contextType: 'QUOTATION',
+        contextTag: `Quotation #${qNum}`,
+        quoteNumber: qNum,
+        requestNumber: reqNum,
+        bookingNumber: '',
+        lastMessage: `Official Quotation for ₹${(q.grandtotal || q.amount || 0).toLocaleString('en-IN')}`,
+        lastMessageTime: new Date().toISOString(),
+        unreadCountAdmin: 0,
+        unreadCountCustomer: 0,
+      };
+      setChatThreads(prev => [targetThread, ...prev.filter(t => t.id !== threadId)]);
+    }
+
     setActiveThreadId(threadId);
     setChatFilterType('ALL');
     setChatSearch('');
@@ -2114,19 +2753,38 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
   const handleStartQuote = (req) => {
     setBuilderRequestId(req.id);
-    if (req.servicecode?.includes('WATER') || req.servicecode?.includes('LEAK')) {
+    const code = (req.servicecode || '').toUpperCase();
+    if (code.includes('WATER') || code.includes('LEAK')) {
       setLineItems([
         { item: 'Thermal Moisture Scanning & Surface Tracing', qty: 1, unit: 'Lumpsum', rate: 950 },
         { item: 'High-Pressure Hydrophobic PU Injection Grouting', qty: 20, unit: 'Running Ft', rate: 220 },
         { item: 'Elastomeric 3-Layer Waterproof Membrane Application', qty: 150, unit: 'Sq Ft', rate: 65 }
       ]);
-    } else if (req.servicecode?.includes('TILE')) {
+      setBuilderScope('Comprehensive Waterproofing Scope');
+    } else if (code.includes('TILE') || code.includes('FLOOR')) {
       setLineItems([
         { item: 'Damaged Tile Demolition & Debris Disposal', qty: 40, unit: 'Sq Ft', rate: 35 },
         { item: 'Polymer Modified Adhesive & Tile Laying', qty: 40, unit: 'Sq Ft', rate: 95 },
         { item: 'Epoxy Anti-Stain Tile Grouting', qty: 40, unit: 'Sq Ft', rate: 45 }
       ]);
+      setBuilderScope('Tile & Floor Restoration Scope');
+    } else if (code.includes('CIVIL') || code.includes('CONSTRUCT') || code.includes('MASON')) {
+      setLineItems([
+        { item: 'Structural Crack Stitching & Rebar Treatment', qty: 25, unit: 'Running Ft', rate: 280 },
+        { item: 'Polymer Modified Structural Repair Mortar', qty: 5, unit: 'Bags', rate: 1250 },
+        { item: 'High-Strength Micro-Concrete Grouting', qty: 1, unit: 'Lumpsum', rate: 4500 }
+      ]);
+      setBuilderScope('Structural Patchwork Scope');
+    } else {
+      setLineItems([
+        { item: `${req.servicecode || 'Standard'} Remedial Work & Surface Prep`, qty: 1, unit: 'Lumpsum', rate: 2500 }
+      ]);
+      setBuilderScope('Standard Maintenance Scope');
     }
+    setMatCost(0);
+    setLabCost(0);
+    setDiscount(0);
+    setCustomAdvanceAmt(null);
     setActiveTab('builder');
   };
 
@@ -2166,9 +2824,17 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
   // Calculations
   const lineItemsTotal = lineItems.reduce((acc, li) => acc + ((parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)), 0);
-  const effectiveMatCost = (matCost === 0 && labCost === 0 && lineItemsTotal > 0) ? Math.round(lineItemsTotal * 0.55) : matCost;
-  const effectiveLabCost = (matCost === 0 && labCost === 0 && lineItemsTotal > 0) ? Math.round(lineItemsTotal * 0.45) : labCost;
-  const subtotal = (effectiveMatCost + effectiveLabCost > 0) ? (effectiveMatCost + effectiveLabCost) : lineItemsTotal;
+  let effectiveMatCost = matCost;
+  let effectiveLabCost = labCost;
+  if (matCost === 0 && labCost === 0 && lineItemsTotal > 0) {
+    effectiveMatCost = Math.round(lineItemsTotal * 0.55);
+    effectiveLabCost = Math.round(lineItemsTotal * 0.45);
+  } else if (matCost > 0 && labCost === 0 && lineItemsTotal > 0) {
+    effectiveLabCost = Math.max(0, lineItemsTotal - matCost);
+  } else if (labCost > 0 && matCost === 0 && lineItemsTotal > 0) {
+    effectiveMatCost = Math.max(0, lineItemsTotal - labCost);
+  }
+  const subtotal = lineItemsTotal > 0 ? lineItemsTotal : (effectiveMatCost + effectiveLabCost);
   const taxableAmount = Math.max(0, subtotal - discount);
   const gstAmount = Math.round(taxableAmount * (taxRate / 100));
   const grandTotal = taxableAmount + gstAmount;
@@ -2381,7 +3047,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             </button>
 
             <button
-              onClick={() => { setActiveTab('requests'); setSidebarOpen(false); }}
+              onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
                 activeTab === 'requests'
                   ? 'bg-slate-900 text-white font-semibold shadow-xs'
@@ -2395,7 +3061,27 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'requests' ? 'bg-white/20 text-white' : 'bg-warning-50 text-warning-700 border border-warning-200'
               }`}>
-                {stats ? (stats.statusCounts.SUBMITTED + stats.statusCounts.ESTIMATING) : 0}
+                {requests.length > 0 ? requests.length : (stats ? (stats.statusCounts.SUBMITTED + stats.statusCounts.ESTIMATING) : 0)}
+              </span>
+            </button>
+
+            {/* HIGH PRIORITY: VENDOR NETWORK - Assign vendors to customer quotations */}
+            <button
+              onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'vendors'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-accent-400' : 'text-accent-600'}`} />
+                <span>Vendor Network</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-accent-50 text-accent-700 border border-accent-200'
+              }`}>
+                {vendors.length}
               </span>
             </button>
 
@@ -2556,30 +3242,6 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             </button>
           </div>
 
-          {/* Section 3B: VENDOR MANAGEMENT */}
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendor Network</div>
-
-            <button
-              onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'vendors'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-accent-400' : 'text-accent-600'}`} />
-                <span>Connected Vendors</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {vendors.length}
-              </span>
-            </button>
-          </div>
-
           {/* Section 4: SYSTEM */}
           <div className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</div>
@@ -2720,37 +3382,69 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         {/* DYNAMIC TAB BODY */}
         <main className="flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
 
-          {/* OVERVIEW TAB */}
+          {/* OVERVIEW TAB - EXECUTIVE COMMAND CENTER */}
           {activeTab === 'overview' && (() => {
-            // Derived Analytics Computations
-            const acceptedQuotes = quotations.filter(q => (q.status || '').toUpperCase() === 'ACCEPTED');
-            const totalAcceptedRev = (stats?.acceptedValue || 0) || acceptedQuotes.reduce((s, q) => s + (q.grandtotal || 0), 0);
-            const totalQuotedRev = (stats?.totalQuotedValue || 0) || quotations.reduce((s, q) => s + (q.grandtotal || 0), 0);
+            // 1. Dynamic Multi-City Filtering
+            const availableCities = ['ALL', 'Bhilwara', 'Udaipur', 'Dehradun', 'Rishikesh', 'Jaipur', 'Jaisalmer'];
 
-            // Customers Ready for Service Execution (Accepted Quotations)
-            const readyRequests = requests.filter(r =>
-              (r.status || '').toUpperCase() === 'ACCEPTED' ||
-              r.quotations?.some(q => (q.status || '').toUpperCase() === 'ACCEPTED')
-            );
+            const isCityMatch = (cityVal) => {
+              if (overviewCityFilter === 'ALL') return true;
+              const str = typeof cityVal === 'string' ? cityVal : (cityVal?.name || '');
+              return str.toLowerCase().includes(overviewCityFilter.toLowerCase());
+            };
 
-            // Requests Needing Quotation
-            const needsQuoteRequests = requests.filter(r =>
-              ['SUBMITTED', 'ESTIMATING'].includes((r.status || '').toUpperCase()) &&
-              (!r.quotations || r.quotations.length === 0 || !r.quotations.some(q => ['QUOTED', 'ACCEPTED'].includes((q.status || '').toUpperCase())))
-            );
+            const filteredByCityRequests = requests.filter(r => isCityMatch(r.city || r.location));
+            const filteredByCityBookings = directBookings.filter(b => isCityMatch(b.city));
+            const filteredByCityVendors = vendors.filter(v => isCityMatch(v.city));
+            const filteredByCityLeads = customerLeads.filter(l => isCityMatch(l.city));
+            const filteredByCityQuotes = quotations.filter(q => {
+              const linkedReq = requests.find(r => r.id === q.requestId || r.requestNumber === q.requestNumber || r.id === q.request?.id);
+              return isCityMatch(linkedReq?.city || linkedReq?.location || q.city);
+            });
 
-            // Audit Scheduled Requests
-            const auditScheduledRequests = requests.filter(r =>
+            // 2. Financial & Pipeline Computations
+            const acceptedQuotes = filteredByCityQuotes.filter(q => (q.status || '').toUpperCase() === 'ACCEPTED');
+            const totalAcceptedRev = acceptedQuotes.reduce((s, q) => s + (q.grandtotal || q.amount || 0), 0);
+            const totalQuotedRev = filteredByCityQuotes.reduce((s, q) => s + (q.grandtotal || q.amount || 0), 0);
+            const conversionRatePct = filteredByCityQuotes.length > 0 ? Math.round((acceptedQuotes.length / filteredByCityQuotes.length) * 100) : 0;
+            const avgQuoteTicket = acceptedQuotes.length > 0 ? Math.round(totalAcceptedRev / acceptedQuotes.length) : (filteredByCityQuotes.length > 0 ? Math.round(totalQuotedRev / filteredByCityQuotes.length) : 0);
+
+            // Inspection Requests breakdown (synchronized with quotations desk)
+            const readyRequests = filteredByCityRequests.filter(r => {
+              const q = r.quotations?.[0] || quotations.find(item => item.requestId === r.id || item.requestNumber === r.requestNumber || item.requestId === r.requestNumber);
+              return (r.status || '').toUpperCase() === 'ACCEPTED' || (q && (q.status || '').toUpperCase() === 'ACCEPTED');
+            });
+            const needsQuoteRequests = filteredByCityRequests.filter(r => {
+              const q = r.quotations?.[0] || quotations.find(item => item.requestId === r.id || item.requestNumber === r.requestNumber || item.requestId === r.requestNumber);
+              return ['SUBMITTED', 'ESTIMATING'].includes((r.status || '').toUpperCase()) && (!q || !['QUOTED', 'ACCEPTED'].includes((q.status || '').toUpperCase()));
+            });
+            const auditScheduledRequests = filteredByCityRequests.filter(r =>
               (r.status || '').toUpperCase() === 'AUDIT_SCHEDULED' ||
               (r.status || '').toUpperCase() === 'SITE_AUDIT' ||
               r.requiresSiteAudit
             );
+            const completedRequests = filteredByCityRequests.filter(r => (r.status || '').toUpperCase() === 'COMPLETED');
 
-            const directBookingsRev = directBookings.reduce((s, b) => s + (b.totalAmount || b.onlinePaidAmount || 199), 0);
-            const conversionRatePct = quotations.length > 0 ? Math.round((acceptedQuotes.length / quotations.length) * 100) : 100;
+            // Instant Bookings breakdown
+            const directBookingsRev = filteredByCityBookings.reduce((s, b) => s + (b.totalAmount || b.onlinePaidAmount || 199), 0);
+            const confirmedBookings = filteredByCityBookings.filter(b => ['CONFIRMED', 'PAID'].includes((b.status || '').toUpperCase()));
+            const assignedBookings = filteredByCityBookings.filter(b => (b.status || '').toUpperCase() === 'ASSIGNED' || b.technicianName);
+            const completedBookings = filteredByCityBookings.filter(b => (b.status || '').toUpperCase() === 'COMPLETED');
+
+            // Vendor breakdown
+            const activeVendors = filteredByCityVendors.filter(v => v.status === 'active');
+            const serviceVendors = filteredByCityVendors.filter(v => (v.category || 'Services') === 'Services');
+            const adventureVendors = filteredByCityVendors.filter(v => v.category === 'Adventure');
+            const avgVendorRating = filteredByCityVendors.length > 0
+              ? (filteredByCityVendors.reduce((acc, v) => acc + (v.rating || 4.5), 0) / filteredByCityVendors.length).toFixed(1)
+              : '4.8';
+
+            // Customer Telemetry / Active Carts
+            const activeCartLeads = filteredByCityLeads.filter(l => l.hasActiveCart);
+            const totalCartValue = activeCartLeads.reduce((s, l) => s + (l.cartTotal || 0), 0);
 
             // Category Demand Breakdown
-            const categoryDemand = requests.reduce((acc, r) => {
+            const categoryDemand = filteredByCityRequests.reduce((acc, r) => {
               const code = (r.servicecode || 'General Repair').trim();
               let name = 'Waterproofing & Leakage';
               if (code.toLowerCase().includes('civil') || code.toLowerCase().includes('construct') || code.toLowerCase().includes('slab') || code.toLowerCase().includes('wall')) {
@@ -2768,386 +3462,478 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
               return acc;
             }, {});
 
-            // Filter Operations List
-            const filteredRequests = requests.filter(req => {
-              const q = req.quotations?.[0] || quotations.find(item => item.requestId === req.id);
+            // Filtered lists for active section
+            const searchLower = overviewSearch.toLowerCase().trim();
+            const displayRequests = filteredByCityRequests.filter(req => {
+              const q = req.quotations?.[0] || quotations.find(item => item.requestId === req.id || item.requestNumber === req.requestNumber || item.requestId === req.requestNumber);
               const isReady = (req.status || '').toUpperCase() === 'ACCEPTED' || (q && (q.status || '').toUpperCase() === 'ACCEPTED');
               const isNeedsQuote = ['SUBMITTED', 'ESTIMATING'].includes((req.status || '').toUpperCase()) && (!q || !['QUOTED', 'ACCEPTED'].includes((q.status || '').toUpperCase()));
-              const isAudit = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || req.requiresSiteAudit;
+              const isAudit = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
 
               if (overviewFilter === 'READY' && !isReady) return false;
               if (overviewFilter === 'NEEDS_QUOTE' && !isNeedsQuote) return false;
               if (overviewFilter === 'AUDIT' && !isAudit) return false;
 
-              if (overviewSearch.trim()) {
-                const s = overviewSearch.toLowerCase();
-                const matchCust = (req.user?.name || '').toLowerCase().includes(s);
-                const matchPhone = (req.user?.phoneNumber || '').toLowerCase().includes(s);
-                const matchReq = (req.requestNumber || '').toLowerCase().includes(s);
-                const matchService = (req.servicecode || '').toLowerCase().includes(s) || (req.subServiceCode || '').toLowerCase().includes(s);
-                const assigned = (assignedEngineers[req.id] || q?.created_by || '').toLowerCase();
-                const matchEng = assigned.includes(s);
-                return matchCust || matchPhone || matchReq || matchService || matchEng;
-              }
-              return true;
+              if (!searchLower) return true;
+              return (req.user?.name || '').toLowerCase().includes(searchLower) ||
+                (req.user?.phoneNumber || '').toLowerCase().includes(searchLower) ||
+                (req.requestNumber || '').toLowerCase().includes(searchLower) ||
+                (req.servicecode || '').toLowerCase().includes(searchLower);
             });
 
-            const filteredDirectBookings = directBookings.filter(b => {
-              if (overviewSearch.trim()) {
-                const s = overviewSearch.toLowerCase();
-                return (b.customerName || '').toLowerCase().includes(s) ||
-                  (b.customerPhone || '').toLowerCase().includes(s) ||
-                  (b.bookingNumber || '').toLowerCase().includes(s) ||
-                  (b.serviceName || '').toLowerCase().includes(s) ||
-                  (b.technicianName || '').toLowerCase().includes(s);
-              }
-              return true;
+            const displayBookings = filteredByCityBookings.filter(b => {
+              if (!searchLower) return true;
+              return (b.customerName || '').toLowerCase().includes(searchLower) ||
+                (b.customerPhone || '').toLowerCase().includes(searchLower) ||
+                (b.bookingNumber || '').toLowerCase().includes(searchLower) ||
+                (b.serviceName || '').toLowerCase().includes(searchLower) ||
+                (b.technicianName || '').toLowerCase().includes(searchLower);
+            });
+
+            const displayQuotes = filteredByCityQuotes.filter(q => {
+              if (!searchLower) return true;
+              return (q.quoteNumber || '').toLowerCase().includes(searchLower) ||
+                (q.customerName || '').toLowerCase().includes(searchLower) ||
+                (q.customerPhone || '').toLowerCase().includes(searchLower);
+            });
+
+            const displayVendors = filteredByCityVendors.filter(v => {
+              if (!searchLower) return true;
+              return (v.name || '').toLowerCase().includes(searchLower) ||
+                (v.businessName || '').toLowerCase().includes(searchLower) ||
+                (v.specialization || '').toLowerCase().includes(searchLower) ||
+                (v.city || '').toLowerCase().includes(searchLower) ||
+                (v.phone || '').toLowerCase().includes(searchLower);
             });
 
             return (
               <div className="space-y-6">
-                {/* 1. OPERATIONS COMMAND BANNER */}
-                <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-xs border border-slate-200/90">
-                  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                {/* 1. EXECUTIVE COMMAND BANNER & MULTI-CITY SELECTOR */}
+                <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-slate-200/90 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-primary-50/60 to-brand-50/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+
+                  <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
                     <div className="space-y-2 max-w-2xl">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-success-50 text-success-700 border border-success-200">
-                          <span className="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span> Live Dispatch Active
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          National Operations Live
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                          <Clock className="w-3.5 h-3.5 text-slate-500" /> Real-Time Sync
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          <Activity className="w-3.5 h-3.5 text-primary-600" />
+                          Multi-City Hub Dispatch
                         </span>
                       </div>
                       <h2 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-                        Customer & Service Operations Hub
+                        Executive Operations & Intelligence
                       </h2>
-                      <p className="text-slate-500 text-xs sm:text-sm font-normal leading-relaxed">
-                        Track who requested service, assign lead engineers, dispatch instant BOQ quotations, and execute jobs for customers ready for service.
+                      <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">
+                        Real-time command telemetry across customer demand, inspection requests, instant pre-paid bookings, quotations, and local vendor networks.
                       </p>
                     </div>
 
-                    {/* Quick Launch Buttons */}
+                    {/* Quick Command Launch Buttons */}
                     <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                       <button
                         onClick={() => setActiveTab('builder')}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow-xs transition-all group"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-xs transition-all"
                       >
-                        <PlusCircle className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-                        <span>Create Quotation</span>
+                        <PlusCircle className="w-4 h-4" />
+                        <span>Issue BOQ Quote</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('chat')}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-semibold border border-primary-200 transition-all"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-bold border border-primary-200 transition-all"
                       >
                         <MessageCircle className="w-4 h-4 text-primary-600" />
                         <span>Chat Desk ({chatThreads.length})</span>
                       </button>
                       <button
                         onClick={() => fetchAllData(true)}
-                        title="Sync Database"
+                        title="Sync Telemetry"
                         className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all"
                       >
                         <RefreshCw className="w-4 h-4 text-slate-600" />
                       </button>
                     </div>
                   </div>
-                </div>
 
-                {/* 2. REAL-TIME INTERACTIVE KPI METRIC CARDS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                  {/* Card 1: Total Inflow */}
-                  <div
-                    onClick={() => setOverviewFilter('ALL')}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                      overviewFilter === 'ALL'
-                        ? 'bg-white border-primary-500 shadow-md ring-2 ring-primary-500/20'
-                        : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Requests</span>
-                      <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                        <Inbox className="w-4 h-4" />
-                      </div>
+                  {/* Multi-City Quick Switcher Filter Bar */}
+                  <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active City Hub:</span>
                     </div>
-                    <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
-                      {stats?.totalRequests || requests.length}
-                    </div>
-                    <div className="flex items-center justify-between mt-2.5 text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                      <span className="text-primary-600 font-semibold flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" /> Active Pipeline
-                      </span>
-                      <span>{requests.filter(r => (r.status || '').toUpperCase() !== 'COMPLETED').length} active</span>
-                    </div>
-                  </div>
 
-                  {/* Card 2: Ready for Service (Quotation Accepted) */}
-                  <div
-                    onClick={() => setOverviewFilter('READY')}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                      overviewFilter === 'READY'
-                        ? 'bg-white border-success-500 shadow-md ring-2 ring-success-500/20'
-                        : 'bg-white border-slate-200/80 hover:border-success-300 hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-success-700 uppercase tracking-wider flex items-center gap-1">
-                        Ready For Service
-                      </span>
-                      <div className="w-8 h-8 rounded-xl bg-success-50 text-success-700 flex items-center justify-center font-bold">
-                        <CheckCircle2 className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="font-heading font-bold text-2xl text-slate-900 mt-2 flex items-baseline gap-2">
-                      <span>{readyRequests.length}</span>
-                      <span className="text-xs font-semibold text-success-700">Approved</span>
-                    </div>
-                    <div className="flex items-center justify-between mt-2.5 text-[11px] font-mono text-success-700 pt-2 border-t border-slate-100">
-                      <span className="font-bold">₹{totalAcceptedRev.toLocaleString('en-IN')}</span>
-                      <span className="text-[10px] font-sans font-semibold text-success-800 bg-success-50 border border-success-200 px-1.5 py-0.5 rounded-md">Mobilize</span>
-                    </div>
-                  </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                      {availableCities.map(c => {
+                        const isSelected = overviewCityFilter === c;
+                        const count = c === 'ALL'
+                          ? (requests.length + directBookings.length)
+                          : (requests.filter(r => (r.city || r.location || '').toLowerCase().includes(c.toLowerCase())).length +
+                             directBookings.filter(b => (b.city || '').toLowerCase().includes(c.toLowerCase())).length);
 
-                  {/* Card 3: Pending Estimation (Needs Quotation) */}
-                  <div
-                    onClick={() => setOverviewFilter('NEEDS_QUOTE')}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                      overviewFilter === 'NEEDS_QUOTE'
-                        ? 'bg-white border-warning-500 shadow-md ring-2 ring-warning-500/20'
-                        : 'bg-white border-slate-200/80 hover:border-warning-300 hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-warning-700 uppercase tracking-wider">Needs Quote</span>
-                      <div className="w-8 h-8 rounded-xl bg-warning-50 text-warning-700 flex items-center justify-center font-bold">
-                        <Clock className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
-                      {needsQuoteRequests.length}
-                    </div>
-                    <div className="flex items-center justify-between mt-2.5 text-[11px] pt-2 border-t border-slate-100">
-                      <span className="px-1.5 py-0.5 rounded-md font-bold bg-warning-50 text-warning-800 text-[10px] border border-warning-200">
-                        Pending BOQ
-                      </span>
-                      <span className="text-warning-800 font-semibold text-[11px]">Action Needed</span>
-                    </div>
-                  </div>
-
-                  {/* Card 4: Quotations Pipeline */}
-                  <div
-                    onClick={() => setActiveTab('quotations')}
-                    className="p-4 rounded-2xl border border-slate-200/80 bg-white hover:border-primary-300 hover:shadow-xs transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Quotations Issued</span>
-                      <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center font-bold">
-                        <FileCheck2 className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
-                      {quotations.length}
-                    </div>
-                    <div className="flex items-center justify-between mt-2.5 text-[11px] pt-2 border-t border-slate-100">
-                      <span className="font-mono text-primary-700 font-bold">₹{totalQuotedRev.toLocaleString('en-IN')}</span>
-                      <span className="text-slate-400 text-[11px] font-semibold">{conversionRatePct}% Accepted</span>
-                    </div>
-                  </div>
-
-                  {/* Card 5: Direct Maintenance Bookings */}
-                  <div
-                    onClick={() => setOverviewFilter('DIRECT')}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                      overviewFilter === 'DIRECT'
-                        ? 'bg-white border-primary-500 shadow-md ring-2 ring-primary-500/20'
-                        : 'bg-white border-slate-200/80 hover:border-primary-300 hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-primary-700 uppercase tracking-wider">Direct Bookings</span>
-                      <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center font-bold">
-                        <Zap className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="font-heading font-bold text-2xl text-slate-900 mt-2">
-                      {directBookings.length}
-                    </div>
-                    <div className="flex items-center justify-between mt-2.5 text-[11px] pt-2 border-t border-slate-100">
-                      <span className="font-mono text-primary-700 font-bold">₹{directBookingsRev.toLocaleString('en-IN')}</span>
-                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">Pre-Paid</span>
+                        return (
+                          <button
+                            key={c}
+                            onClick={() => setOverviewCityFilter(c)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-slate-900 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                            }`}
+                          >
+                            <span>{c === 'ALL' ? '🌍 All Hubs' : c}</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                              isSelected ? 'bg-white/25 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                            }`}>
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
-                {/* 3. VISUAL CHARTS & REAL-TIME FUNNEL ANALYTICS */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                  {/* Left: Interactive Request Lifecycle Funnel (7 cols) */}
-                  <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-primary-50 text-brand-600">
-                          <GitPullRequest className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-heading font-bold text-sm text-slate-900">Request Lifecycle & Execution Funnel</h3>
-                          <p className="text-[11px] text-slate-400">Live operational distribution from first customer submission to completion</p>
-                        </div>
+                {/* 2. STATS-DRIVEN EXECUTIVE KPI CARDS (THE 4 PILLARS) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Card 1: Inspection Requests Pipeline */}
+                  <div
+                    onClick={() => { setOverviewActiveSection('requests'); setOverviewFilter('ALL'); }}
+                    className={`p-5 rounded-2xl bg-white border transition-all cursor-pointer shadow-xs ${
+                      overviewActiveSection === 'requests'
+                        ? 'border-primary-500 ring-2 ring-primary-500/20'
+                        : 'border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Inspection Requests</span>
+                      <div className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold">
+                        <ClipboardList className="w-5 h-5" />
                       </div>
-                      <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                        {stats?.totalRequests || requests.length} Total
+                    </div>
+                    <div className="font-heading font-bold text-3xl text-slate-900 mt-2">
+                      {filteredByCityRequests.length}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-warning-50 text-warning-800 border border-warning-200">
+                        {needsQuoteRequests.length} Needs BOQ
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {readyRequests.length} Ready
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                        {auditScheduledRequests.length} Audit
                       </span>
                     </div>
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                      <span>Pipeline Value</span>
+                      <span className="font-mono font-bold text-slate-900">₹{totalQuotedRev.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
 
-                    <div className="space-y-3 pt-1">
-                      {[
-                        { key: 'SUBMITTED', label: '1. Submitted (Initial Review & Photo Check)', count: stats?.statusCounts?.SUBMITTED || requests.filter(r => (r.status || '').toUpperCase() === 'SUBMITTED').length, color: 'bg-primary-500', barBg: 'bg-primary-100' },
-                        { key: 'AUDIT_SCHEDULED', label: '2. Site Audit Scheduled (Physical Inspection)', count: stats?.statusCounts?.AUDIT_SCHEDULED || requests.filter(r => (r.status || '').toUpperCase() === 'AUDIT_SCHEDULED').length, color: 'bg-warning-500', barBg: 'bg-warning-100' },
-                        { key: 'ESTIMATING', label: '3. Estimator Triage (Drafting BOQ & Rates)', count: stats?.statusCounts?.ESTIMATING || requests.filter(r => (r.status || '').toUpperCase() === 'ESTIMATING').length, color: 'bg-warning-600', barBg: 'bg-warning-100' },
-                        { key: 'QUOTED', label: '4. Quotation Dispatched (Awaiting Client Decision)', count: stats?.statusCounts?.QUOTED || requests.filter(r => (r.status || '').toUpperCase() === 'QUOTED').length, color: 'bg-primary-500', barBg: 'bg-primary-100' },
-                        { key: 'ACCEPTED', label: '5. Client Accepted (Ready for Work & Mobilization)', count: readyRequests.length, color: 'bg-success-500', barBg: 'bg-success-100', highlight: true },
-                        { key: 'COMPLETED', label: '6. Work Completed (Handover & Sign-Off)', count: stats?.statusCounts?.COMPLETED || requests.filter(r => (r.status || '').toUpperCase() === 'COMPLETED').length, color: 'bg-success-500', barBg: 'bg-success-100' }
-                      ].map(st => {
-                        const total = Math.max(stats?.totalRequests || requests.length || 1, 1);
-                        const pct = Math.round((st.count / total) * 100);
+                  {/* Card 2: Instant Maintenance Bookings */}
+                  <div
+                    onClick={() => { setOverviewActiveSection('bookings'); }}
+                    className={`p-5 rounded-2xl bg-white border transition-all cursor-pointer shadow-xs ${
+                      overviewActiveSection === 'bookings'
+                        ? 'border-warning-500 ring-2 ring-warning-500/20'
+                        : 'border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-warning-700 uppercase tracking-wider">Instant Bookings</span>
+                      <div className="w-9 h-9 rounded-xl bg-warning-50 text-warning-700 flex items-center justify-center font-bold">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="font-heading font-bold text-3xl text-slate-900 mt-2">
+                      {filteredByCityBookings.length}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {confirmedBookings.length} Confirmed
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                        {assignedBookings.length} Assigned
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                        {completedBookings.length} Done
+                      </span>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                      <span>Online Paid Revenue</span>
+                      <span className="font-mono font-bold text-emerald-600">₹{directBookingsRev.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Quotations Performance & Win Rate */}
+                  <div
+                    onClick={() => { setOverviewActiveSection('quotations'); }}
+                    className={`p-5 rounded-2xl bg-white border transition-all cursor-pointer shadow-xs ${
+                      overviewActiveSection === 'quotations'
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Quotations & Won Deals</span>
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                        <FileCheck2 className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="font-heading font-bold text-3xl text-slate-900 mt-2 flex items-baseline gap-2">
+                      <span>{filteredByCityQuotes.length}</span>
+                      <span className="text-xs font-bold text-emerald-600">({conversionRatePct}% Accepted)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900">
+                        {acceptedQuotes.length} Deals Won
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                        Avg Ticket: ₹{avgQuoteTicket.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                      <span>Accepted Gross Value</span>
+                      <span className="font-mono font-bold text-emerald-700">₹{totalAcceptedRev.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Vendor Fulfillment Network */}
+                  <div
+                    onClick={() => { setOverviewActiveSection('vendors'); }}
+                    className={`p-5 rounded-2xl bg-white border transition-all cursor-pointer shadow-xs ${
+                      overviewActiveSection === 'vendors'
+                        ? 'border-purple-500 ring-2 ring-purple-500/20'
+                        : 'border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Connected Vendors</span>
+                      <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
+                        <Users className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="font-heading font-bold text-3xl text-slate-900 mt-2">
+                      {filteredByCityVendors.length}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {activeVendors.length} Active
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                        {serviceVendors.length} Services
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                        {adventureVendors.length} Adventure
+                      </span>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                      <span>Network Rating</span>
+                      <span className="font-bold text-slate-900 flex items-center gap-1">⭐ {avgVendorRating} / 5.0</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. "TOP VIEW OF CUSTOMERS" - LIVE CUSTOMER 360° EXPLORATION RADAR */}
+                <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/90 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary-600 to-primary-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900">
+                            Live Customer Demand & Active Carts Radar
+                          </h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Real-Time
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Real-time stream of customers exploring services and items waiting in checkout carts. Reach out instantly to prevent lost leads.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap shrink-0">
+                      <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center gap-2">
+                        <span>Exploring Leads:</span>
+                        <span className="font-bold text-slate-900 font-mono">{filteredByCityLeads.length}</span>
+                      </div>
+                      {activeCartLeads.length > 0 && (
+                        <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2 animate-pulse">
+                          <span>🛒 In Cart:</span>
+                          <span className="font-mono">₹{totalCartValue.toLocaleString('en-IN')} ({activeCartLeads.length} buyers)</span>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setActiveTab('customer-activity')}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 transition-all flex items-center gap-1"
+                      >
+                        <span>View All Leads</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Customer Leads Cards Grid */}
+                  {filteredByCityLeads.length === 0 ? (
+                    <div className="p-8 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-2">
+                      <Users className="w-8 h-8 text-slate-400 mx-auto" />
+                      <p className="text-sm font-bold text-slate-700">No active customer exploration events in {overviewCityFilter === 'ALL' ? 'any city' : overviewCityFilter} right now</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">When customers browse services or add items to cart in the app or website, their live telemetry and instant reach-out shortcuts appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {filteredByCityLeads.slice(0, 6).map(lead => {
+                        const hasCart = lead.hasActiveCart;
+                        const initial = (lead.customerName || 'C')[0].toUpperCase();
+
                         return (
                           <div
-                            key={st.key}
-                            onClick={() => {
-                              if (st.key === 'ACCEPTED') setOverviewFilter('READY');
-                              else if (st.key === 'SUBMITTED' || st.key === 'ESTIMATING') setOverviewFilter('NEEDS_QUOTE');
-                              else if (st.key === 'AUDIT_SCHEDULED') setOverviewFilter('AUDIT');
-                              else setOverviewFilter('ALL');
-                            }}
-                            className={`p-2 rounded-xl transition-all cursor-pointer ${st.highlight ? 'bg-success-50/70 border border-success-200 hover:bg-success-100/60' : 'hover:bg-slate-50'}`}
+                            key={lead.id}
+                            className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                              hasCart
+                                ? 'bg-gradient-to-br from-emerald-50/50 to-white border-emerald-300 shadow-xs ring-1 ring-emerald-500/10'
+                                : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs'
+                            }`}
                           >
-                            <div className="flex justify-between items-center text-xs font-medium text-slate-700 mb-1.5">
-                              <span className="flex items-center gap-1.5">
-                                {st.highlight && <span className="w-2 h-2 rounded-full bg-success-500 animate-ping"></span>}
-                                <span className={st.highlight ? 'font-bold text-success-900' : ''}>{st.label}</span>
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className={`font-mono text-xs ${st.highlight ? 'font-bold text-success-800' : 'text-slate-600'}`}>
-                                  {st.count}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-mono">({pct}%)</span>
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                                    {initial}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-sm text-slate-900 leading-tight">
+                                      {lead.customerName || 'Browsing Customer'}
+                                    </div>
+                                    <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                      <MapPin className="w-3 h-3 text-primary-500" />
+                                      <span>{lead.city || 'Udaipur'}</span>
+                                      {lead.customerPhone && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="font-mono text-slate-700">{lead.customerPhone}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {hasCart ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white flex items-center gap-1 shrink-0">
+                                    <ShoppingCart className="w-3 h-3" />
+                                    <span>₹{lead.cartTotal}</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">
+                                    Browsing
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Explored Services */}
+                              <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                                {(lead.exploredServices || []).slice(0, 3).map((s, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                    {s.name}
+                                  </span>
+                                ))}
+                                {(lead.exploredServices || []).length > 3 && (
+                                  <span className="text-[10px] text-slate-400 font-semibold">
+                                    +{lead.exploredServices.length - 3} more
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <div className={`h-2 w-full ${st.barBg} rounded-full overflow-hidden`}>
-                              <div className={`h-full ${st.color} rounded-full transition-all duration-700`} style={{ width: `${Math.max(pct, st.count > 0 ? 5 : 0)}%` }}></div>
+
+                            {/* Action Buttons to Prevent Customer Loss */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                              {lead.customerPhone && (
+                                <button
+                                  onClick={() => openWhatsAppForLead(lead)}
+                                  className="flex-1 py-1.5 px-2 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-center flex items-center justify-center gap-1 shadow-2xs"
+                                >
+                                  <span>WhatsApp</span>
+                                </button>
+                              )}
+                              {lead.customerPhone && (
+                                <button
+                                  onClick={() => callCustomer(lead.customerPhone)}
+                                  className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all"
+                                  title="Call Customer"
+                                >
+                                  <Phone className="w-3.5 h-3.5 text-slate-600" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openChatForCustomer(lead)}
+                                className="flex-1 py-1.5 px-2 rounded-xl text-[11px] font-bold bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all text-center flex items-center justify-center gap-1"
+                              >
+                                <MessageCircle className="w-3 h-3 text-primary-600" />
+                                <span>Live Chat</span>
+                              </button>
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-
-                  {/* Right: Technical Engineering Roster & Demand Breakdown (5 cols) */}
-                  <div className="lg:col-span-5 space-y-5">
-                    {/* Engineering Leads Capacity */}
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-3.5">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 rounded-lg bg-primary-50 text-primary-600">
-                            <HardHat className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <h3 className="font-heading font-bold text-sm text-slate-900">Engineering & Service Leads</h3>
-                            <p className="text-[11px] text-slate-400">Field assignment roster & active workload</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {availableEngineers.map(eng => {
-                          const activeJobCount = requests.filter(r => {
-                            const assigned = assignedEngineers[r.id] || r.quotations?.[0]?.created_by || '';
-                            return assigned.toLowerCase().includes(eng.name.toLowerCase().split(' ')[1] || eng.name.toLowerCase());
-                          }).length;
-
-                          return (
-                            <div key={eng.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all">
-                              <div className="flex items-start justify-between gap-1">
-                                <div className="space-y-0.5">
-                                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                                    <UserCheck className="w-3.5 h-3.5 text-brand-600" />
-                                    <span>{eng.name}</span>
-                                  </div>
-                                  <div className="text-[10px] text-slate-500 font-medium">{eng.role}</div>
-                                </div>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${eng.color}`}>
-                                  {activeJobCount} active
-                                </span>
-                              </div>
-                              <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-200/60 pt-1">
-                                <a href={`tel:${eng.phone}`} className="hover:text-brand-600 flex items-center gap-1">
-                                  <Phone className="w-2.5 h-2.5" /> {eng.phone}
-                                </a>
-                                <span className="font-semibold text-slate-600">{eng.badge}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Top Services Demand Breakdown */}
-                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs space-y-3">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-brand-600" /> Service Categories in Demand
-                        </span>
-                        <span className="text-[11px] text-slate-400">Total {requests.length} Orders</span>
-                      </div>
-                      <div className="space-y-2">
-                        {Object.entries(categoryDemand).map(([cat, count]) => {
-                          const pct = Math.round((count / Math.max(requests.length, 1)) * 100);
-                          return (
-                            <div key={cat} className="space-y-1">
-                              <div className="flex justify-between text-[11px] font-medium text-slate-600">
-                                <span>{cat}</span>
-                                <span className="font-mono text-slate-800 font-bold">{count} ({pct}%)</span>
-                              </div>
-                              <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }}></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* 4. MASTER OPERATIONS TRACKER (WHO REQUESTED, WHICH ENGINEER, READY FOR SERVICE) */}
-                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden space-y-0">
-                  {/* Tracker Header & Filter Tabs */}
+                {/* 4. OPERATIONAL WORKBENCH - INTERACTIVE 4-SECTION TABS */}
+                <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
+                  {/* Section Switcher Tabs & Search Toolbar */}
                   <div className="p-5 border-b border-slate-100 bg-slate-50/50 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">
-                            <ClipboardList className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <h3 className="font-heading font-bold text-base text-slate-900">
-                              Customer Service & Engineer Assignment Tracker
-                            </h3>
-                            <p className="text-xs text-slate-500">
-                              Real-time tracking of customer requests, assigned engineers, quotation status, and service readiness.
-                            </p>
-                          </div>
-                        </div>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      {/* 4 Main Tabs */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                        {[
+                          { id: 'requests', label: 'Inspection Requests', count: displayRequests.length, icon: ClipboardList, color: 'text-primary-600' },
+                          { id: 'bookings', label: 'Instant Bookings', count: displayBookings.length, icon: Zap, color: 'text-warning-600' },
+                          { id: 'quotations', label: 'Quotations & BOQ', count: displayQuotes.length, icon: FileCheck2, color: 'text-emerald-600' },
+                          { id: 'vendors', label: 'Connected Vendors', count: displayVendors.length, icon: Users, color: 'text-purple-600' },
+                        ].map(tab => {
+                          const isTabActive = overviewActiveSection === tab.id;
+                          const TabIcon = tab.icon;
+
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setOverviewActiveSection(tab.id)}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                                isTabActive
+                                  ? 'bg-slate-900 text-white shadow-xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                              }`}
+                            >
+                              <TabIcon className={`w-3.5 h-3.5 ${isTabActive ? 'text-primary-400' : tab.color}`} />
+                              <span>{tab.label}</span>
+                              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                                isTabActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {tab.count}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      {/* Search Bar */}
+                      {/* Unified Search Input */}
                       <div className="relative min-w-[260px] sm:w-72">
                         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                           type="text"
                           value={overviewSearch}
                           onChange={(e) => setOverviewSearch(e.target.value)}
-                          placeholder="Search customer, phone, req #, engineer..."
-                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                          placeholder="Search customer, phone, req #, city..."
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-semibold"
                         />
                         {overviewSearch && (
                           <button
@@ -3160,207 +3946,81 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       </div>
                     </div>
 
-                    {/* Filter Pills Toolbar */}
-                    <div className="flex items-center gap-2 flex-wrap pt-1">
-                      <button
-                        onClick={() => setOverviewFilter('ALL')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${overviewFilter === 'ALL' ? 'bg-slate-900 text-white border-slate-900 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}`}
-                      >
-                        <span>All Operations</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${overviewFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                          {requests.length}
-                        </span>
-                      </button>
-
-                      <button
-                        onClick={() => setOverviewFilter('READY')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${overviewFilter === 'READY' ? 'bg-success-600 text-white border-success-600 shadow-xs ring-2 ring-success-500/20' : 'bg-success-50 text-success-800 border-success-200 hover:bg-success-100'}`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Ready For Service Execution</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${overviewFilter === 'READY' ? 'bg-white/20 text-white' : 'bg-success-200 text-success-900'}`}>
-                          {readyRequests.length}
-                        </span>
-                      </button>
-
-                      <button
-                        onClick={() => setOverviewFilter('NEEDS_QUOTE')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${overviewFilter === 'NEEDS_QUOTE' ? 'bg-warning-600 text-white border-warning-600 shadow-xs' : 'bg-warning-50 text-warning-800 border-warning-200 hover:bg-warning-100'}`}
-                      >
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Needs Quotation</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${overviewFilter === 'NEEDS_QUOTE' ? 'bg-white/20 text-white' : 'bg-warning-200 text-warning-900'}`}>
-                          {needsQuoteRequests.length}
-                        </span>
-                      </button>
-
-                      <button
-                        onClick={() => setOverviewFilter('AUDIT')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${overviewFilter === 'AUDIT' ? 'bg-primary-600 text-white border-primary-600 shadow-xs' : 'bg-primary-50 text-primary-800 border-primary-200 hover:bg-primary-100'}`}
-                      >
-                        <MapPin className="w-3.5 h-3.5" />
-                        <span>Site Audit Scheduled</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${overviewFilter === 'AUDIT' ? 'bg-white/20 text-white' : 'bg-primary-200 text-primary-900'}`}>
-                          {auditScheduledRequests.length}
-                        </span>
-                      </button>
-
-                      <button
-                        onClick={() => setOverviewFilter('DIRECT')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${overviewFilter === 'DIRECT' ? 'bg-primary-600 text-white border-primary-600 shadow-xs' : 'bg-primary-50 text-primary-800 border-primary-200 hover:bg-primary-100'}`}
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>Direct Maintenance Orders</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${overviewFilter === 'DIRECT' ? 'bg-white/20 text-white' : 'bg-primary-200 text-primary-900'}`}>
-                          {directBookings.length}
-                        </span>
-                      </button>
-                    </div>
+                    {/* Secondary Filters (shown when on Requests section) */}
+                    {overviewActiveSection === 'requests' && (
+                      <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-200/60">
+                        {[
+                          { id: 'ALL', label: 'All Requests', count: filteredByCityRequests.length },
+                          { id: 'READY', label: 'Ready For Service Execution', count: readyRequests.length, highlight: true },
+                          { id: 'NEEDS_QUOTE', label: 'Needs BOQ Quotation', count: needsQuoteRequests.length },
+                          { id: 'AUDIT', label: 'Site Audit Scheduled', count: auditScheduledRequests.length },
+                        ].map(flt => (
+                          <button
+                            key={flt.id}
+                            onClick={() => setOverviewFilter(flt.id)}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                              overviewFilter === flt.id
+                                ? (flt.highlight ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-900 text-white border-slate-900 shadow-xs')
+                                : (flt.highlight ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100')
+                            }`}
+                          >
+                            <span>{flt.label}</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                              overviewFilter === flt.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {flt.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Operational Tracker Table */}
+                  {/* Dynamic Table Content Based On Active Section */}
                   <div className="overflow-x-auto">
-                    {overviewFilter === 'DIRECT' ? (
-                      /* DIRECT BOOKINGS TABLE */
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
-                            <th className="py-3 px-4">Booking #</th>
-                            <th className="py-3 px-4">Customer & Contact</th>
-                            <th className="py-3 px-4">Service Details</th>
-                            <th className="py-3 px-4">Scheduled Slot</th>
-                            <th className="py-3 px-4">Assigned Technician</th>
-                            <th className="py-3 px-4">Amount & Payment</th>
-                            <th className="py-3 px-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {filteredDirectBookings.length === 0 ? (
-                            <tr>
-                              <td colSpan="7" className="py-8 text-center text-slate-400">
-                                No direct maintenance bookings found.
-                              </td>
-                            </tr>
-                          ) : (
-                            filteredDirectBookings.map(b => (
-                              <tr key={b.id} className="hover:bg-slate-50/80 transition-all">
-                                <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
-                                  {b.bookingNumber}
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <div className="font-bold text-slate-900">{b.customerName}</div>
-                                  <a href={`tel:${b.customerPhone}`} className="text-slate-500 hover:text-brand-600 flex items-center gap-1 mt-0.5 font-mono text-[11px]">
-                                    <Phone className="w-3 h-3 text-success-500" /> {b.customerPhone}
-                                  </a>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <div className="font-semibold text-slate-800">{b.serviceName}</div>
-                                  <div className="text-[11px] text-slate-400">{b.subServiceName}</div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <div className="font-medium text-slate-700">{b.scheduledDate}</div>
-                                  <div className="text-[11px] text-slate-400">{b.scheduledSlot}</div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  {b.technicianName ? (
-                                    <div className="flex flex-col gap-1 items-start">
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-success-50 text-success-800 font-semibold border border-success-200 text-xs">
-                                        <HardHat className="w-3.5 h-3.5 text-success-600" /> {b.technicianName}
-                                      </span>
-                                      <div className="flex items-center gap-2 text-[11px]">
-                                        <span className="text-slate-500 font-medium">{b.technicianRole || 'Field Specialist'}</span>
-                                        <button
-                                          onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: b.technicianName || '', phone: b.technicianPhone || '', role: b.technicianRole || 'Senior Field Specialist' }); }}
-                                          className="text-brand-600 hover:text-brand-800 font-medium underline"
-                                        >
-                                          Change
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: '', phone: '', role: 'Senior Field Specialist' }); }}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-warning-50 text-warning-800 font-semibold border border-warning-300 hover:bg-warning-100 text-xs shadow-xs transition-all"
-                                    >
-                                      <UserPlus className="w-3.5 h-3.5 text-warning-600" /> Assign Specialist
-                                    </button>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4 font-mono">
-                                  <div className="font-bold text-slate-900">₹{(b.totalAmount || b.onlinePaidAmount || 199).toLocaleString('en-IN')}</div>
-                                  <span className="px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-success-100 text-success-800">
-                                    {b.paymentStatus || 'PAID'}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 text-right">
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    <button
-                                      onClick={() => openChatForBooking(b)}
-                                      title="Chat with Customer regarding this Instant Booking"
-                                      className="p-1.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all flex items-center gap-1 text-[11px] font-semibold"
-                                    >
-                                      <MessageCircle className="w-3.5 h-3.5 text-primary-600" />
-                                      <span className="hidden sm:inline">Chat</span>
-                                    </button>
-                                    <button
-                                      onClick={() => setSelectedBookingForDrawer(b)}
-                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
-                                    >
-                                      Details
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    ) : (
-                      /* MAIN INSPECTION & QUOTATION OPERATIONS TABLE */
+                    {/* SECTION 1: INSPECTION REQUESTS TABLE */}
+                    {overviewActiveSection === 'requests' && (
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
                             <th className="py-3 px-4">Customer & Request #</th>
+                            <th className="py-3 px-4">City / Location</th>
                             <th className="py-3 px-4">Service & Damage Scope</th>
                             <th className="py-3 px-4">Readiness & Quotation Status</th>
-                            <th className="py-3 px-4">Assigned Lead Engineer</th>
+                            <th className="py-3 px-4">Lead Engineer</th>
                             <th className="py-3 px-4 text-right">Quick Dispatch Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {filteredRequests.length === 0 ? (
+                          {displayRequests.length === 0 ? (
                             <tr>
-                              <td colSpan="5" className="py-12 text-center text-slate-400">
-                                <div className="space-y-1">
-                                  <ClipboardList className="w-8 h-8 mx-auto text-slate-300" />
-                                  <p className="font-semibold text-sm text-slate-600">No matching requests found</p>
-                                  <p className="text-xs text-slate-400">Try adjusting your search query or filter selection</p>
-                                </div>
+                              <td colSpan="6" className="py-12 text-center text-slate-400">
+                                <ClipboardList className="w-8 h-8 mx-auto text-slate-300" />
+                                <p className="font-bold text-sm text-slate-600 mt-2">No matching inspection requests</p>
+                                <p className="text-xs text-slate-400">Try adjusting your city filter or search query</p>
                               </td>
                             </tr>
                           ) : (
-                            filteredRequests.map(req => {
+                            displayRequests.map(req => {
                               const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
                               const q = req.quotations?.[0] || quotations.find(item => item.requestId === req.id);
                               const isAccepted = (req.status || '').toUpperCase() === 'ACCEPTED' || (q && (q.status || '').toUpperCase() === 'ACCEPTED');
                               const isQuoted = (req.status || '').toUpperCase() === 'QUOTED' || (q && (q.status || '').toUpperCase() === 'QUOTED');
                               const isNeedsQuote = ['SUBMITTED', 'ESTIMATING'].includes((req.status || '').toUpperCase()) && !q;
-                              const isUrgent = req.urgency === 'URGENT' || req.urgency === 'HIGH';
-
-                              // Assigned Engineer logic
-                              const assignedEngName = assignedEngineers[req.id] || q?.created_by || null;
+                              const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
+                              const assignedEngName = req.technicianName || assignedEngineers[req.id] || q?.created_by || null;
                               const isAssigningThis = assigningEngineerReqId === req.id;
 
                               return (
                                 <tr
                                   key={req.id}
-                                  className={`transition-all ${isAccepted ? 'bg-success-50/40 hover:bg-success-50/70 border-l-4 border-l-success-500' : isNeedsQuote ? 'hover:bg-warning-50/30' : 'hover:bg-slate-50/80'}`}
+                                  className={`transition-all ${isAccepted ? 'bg-emerald-50/40 hover:bg-emerald-50/70 border-l-4 border-l-emerald-500' : isNeedsQuote ? 'hover:bg-warning-50/30' : 'hover:bg-slate-50/80'}`}
                                 >
-                                  {/* 1. Customer Details (Who gave request) */}
-                                  <td className="py-4 px-4 align-top min-w-[210px]">
+                                  {/* Customer & ID */}
+                                  <td className="py-4 px-4 align-top min-w-[200px]">
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="font-mono font-bold text-xs text-brand-600">
+                                        <span className="font-mono font-bold text-xs text-primary-600">
                                           {req.requestNumber}
                                         </span>
                                         {isUrgent && (
@@ -3369,242 +4029,189 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                           </span>
                                         )}
                                       </div>
-
-                                      <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                                        <span>{req.user?.name || 'Customer'}</span>
+                                      <div className="font-bold text-sm text-slate-900">
+                                        {req.user?.name || 'Customer'}
                                       </div>
-
                                       <div className="flex items-center gap-2 pt-0.5">
                                         <a
                                           href={`tel:${req.user?.phoneNumber || ''}`}
-                                          className="text-slate-600 hover:text-brand-600 font-mono text-[11px] font-semibold flex items-center gap-1"
+                                          className="text-slate-600 hover:text-primary-600 font-mono text-[11px] font-semibold flex items-center gap-1"
                                           title="Call Customer"
                                         >
-                                          <Phone className="w-3 h-3 text-success-600" />
+                                          <Phone className="w-3 h-3 text-emerald-600" />
                                           <span>{req.user?.phoneNumber || 'No Phone'}</span>
                                         </a>
-
-                                        {req.user?.email && (
-                                          <span className="text-[10px] text-slate-400 truncate max-w-[120px]" title={req.user.email}>
-                                            • {req.user.email}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      <div className="text-[11px] text-slate-500 flex items-center gap-1 pt-0.5">
-                                        <Home className="w-3 h-3 text-slate-400 shrink-0" />
-                                        <span className="font-medium text-slate-700">{req.propertyType || 'Residential'}</span>
-                                        {req.propertySize && <span>({req.propertySize})</span>}
-                                      </div>
-
-                                      <div className="text-[10px] text-slate-400 flex items-start gap-1">
-                                        <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0 mt-0.5" />
-                                        <span className="truncate max-w-[180px]" title={req.addressline || req.location}>
-                                          {req.addressline || req.location || 'Bhilwara, Rajasthan'}
-                                        </span>
                                       </div>
                                     </div>
                                   </td>
 
-                                  {/* 2. Service & Issue Scope */}
-                                  <td className="py-4 px-4 align-top min-w-[220px]">
-                                    <div className="space-y-1.5">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                                          {req.servicecode}
-                                        </span>
+                                  {/* City & Address */}
+                                  <td className="py-4 px-4 align-top min-w-[150px]">
+                                    <div className="space-y-1">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                        <MapPin className="w-3 h-3 text-primary-600" />
+                                        <span>{req.city || req.location?.split(',')[0] || 'Bhilwara'}</span>
+                                      </span>
+                                      <div className="text-[11px] text-slate-500 leading-tight truncate max-w-[170px]" title={req.addressline || req.location}>
+                                        {req.addressline || req.location || 'Local Area'}
                                       </div>
+                                      <div className="text-[10px] text-slate-400 font-medium">
+                                        {req.propertyType || 'Residential'}
+                                      </div>
+                                    </div>
+                                  </td>
 
+                                  {/* Service & Issue Scope */}
+                                  <td className="py-4 px-4 align-top min-w-[210px]">
+                                    <div className="space-y-1">
+                                      <div className="font-bold text-xs text-slate-800">
+                                        {req.servicecode}
+                                      </div>
                                       {req.subServiceCode && (
-                                        <div className="font-semibold text-xs text-slate-800">
+                                        <div className="text-[11px] text-primary-700 font-medium">
                                           {req.subServiceCode}
                                         </div>
                                       )}
-
-                                      <div className="text-[11px] text-slate-600 line-clamp-2 max-w-[260px] italic">
+                                      <div className="text-[11px] text-slate-600 line-clamp-2 italic max-w-[240px]">
                                         "{req.issueDescription || 'Repair inspection requested.'}"
                                       </div>
-
-                                      {/* Photos / Media Thumbnail button */}
                                       {media.length > 0 && (
-                                        <div className="pt-1 flex items-center gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => setActivePhotoModal({ photos: media, index: 0, title: `Damage Photos - ${req.requestNumber}` })}
-                                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-[11px] font-semibold transition-all"
-                                          >
-                                            <Camera className="w-3 h-3 text-primary-600" />
-                                            <span>Inspect {media.length} {media.length === 1 ? 'Photo' : 'Photos'}</span>
-                                          </button>
-                                        </div>
-                                      )}
-
-                                      {req.preferredDate && (
-                                        <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                                          <Calendar className="w-2.5 h-2.5" />
-                                          <span>Slot: {req.preferredDate} ({req.preferredTime || 'Standard'})</span>
-                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setActivePhotoModal({ photos: media, index: 0, title: `Damage Photos - ${req.requestNumber}` })}
+                                          className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-[10px] font-bold transition-all"
+                                        >
+                                          <Camera className="w-3 h-3 text-primary-600" />
+                                          <span>Inspect {media.length} Photos</span>
+                                        </button>
                                       )}
                                     </div>
                                   </td>
 
-                                  {/* 3. Readiness Status (Which person is ready to take service) */}
-                                  <td className="py-4 px-4 align-top min-w-[190px]">
+                                  {/* Readiness & Quote Status */}
+                                  <td className="py-4 px-4 align-top min-w-[180px]">
+                                    {isAccepted ? (
+                                      <div className="p-2 rounded-xl bg-emerald-100/70 border border-emerald-300 space-y-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
+                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Ready For Execution
+                                        </span>
+                                        <div className="font-mono text-xs font-bold text-emerald-800">
+                                          Quote: {q?.quoteNumber || 'Agreed'}
+                                        </div>
+                                        <div className="font-mono font-bold text-sm text-emerald-950">
+                                          ₹{(q?.grandtotal || 0).toLocaleString('en-IN')}
+                                        </div>
+                                      </div>
+                                    ) : isQuoted ? (
+                                      <div className="p-2 rounded-xl bg-primary-50 border border-primary-200 space-y-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-900 uppercase tracking-wide">
+                                          <FileCheck2 className="w-3.5 h-3.5 text-primary-600" /> Quoted (₹{(q?.grandtotal || 0).toLocaleString('en-IN')})
+                                        </span>
+                                        <div className="text-[10px] text-primary-700 font-medium">Awaiting customer acceptance</div>
+                                      </div>
+                                    ) : isNeedsQuote ? (
+                                      <div className="p-2 rounded-xl bg-warning-50 border border-warning-200 space-y-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-warning-900 uppercase tracking-wide">
+                                          <Clock className="w-3.5 h-3.5 text-warning-600" /> Needs BOQ Quote
+                                        </span>
+                                        <div className="text-[10px] text-warning-800">Pending pricing estimate</div>
+                                      </div>
+                                    ) : (
+                                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusBadge(req.status)}`}>
+                                        {req.status}
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Lead Engineer */}
+                                  <td className="py-4 px-4 align-top min-w-[170px]">
                                     <div className="space-y-1.5">
-                                      {isAccepted ? (
-                                        <div className="space-y-1 p-2 rounded-xl bg-success-100/70 border border-success-300">
-                                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-success-900 uppercase tracking-wide">
-                                            <CheckCircle2 className="w-3.5 h-3.5 text-success-600" /> Ready For Execution
-                                          </span>
-                                          <div className="font-mono text-xs font-bold text-success-800">
-                                            Quote: {q?.quoteNumber || 'Agreed'}
-                                          </div>
-                                          <div className="font-mono font-bold text-base text-success-950">
-                                            ₹{(q?.grandtotal || 0).toLocaleString('en-IN')}
-                                          </div>
-                                          <div className="text-[10px] font-semibold text-success-800 bg-white/70 px-1.5 py-0.5 rounded border border-success-200 inline-block">
-                                            Customer Accepted
-                                          </div>
-                                        </div>
-                                      ) : isQuoted ? (
-                                        <div className="space-y-1 p-2 rounded-xl bg-primary-50 border border-primary-200">
-                                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-800 uppercase tracking-wide">
-                                            <FileCheck2 className="w-3.5 h-3.5 text-primary-600" /> Quotation Issued
-                                          </span>
-                                          <div className="font-mono text-xs font-bold text-primary-900">
-                                            {q?.quoteNumber}
-                                          </div>
-                                          <div className="font-mono font-bold text-sm text-primary-950">
-                                            ₹{(q?.grandtotal || 0).toLocaleString('en-IN')}
-                                          </div>
-                                          <div className="text-[10px] text-primary-700">Awaiting customer response</div>
-                                        </div>
-                                      ) : isNeedsQuote ? (
-                                        <div className="space-y-1 p-2 rounded-xl bg-warning-50 border border-warning-200">
-                                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-warning-900 uppercase tracking-wide">
-                                            <Clock className="w-3.5 h-3.5 text-warning-600" /> Needs Quotation
-                                          </span>
-                                          <div className="text-[11px] text-warning-800 font-medium">Pending BOQ estimate</div>
-                                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-warning-200 text-warning-900 inline-block">
-                                            Action Required
-                                          </span>
-                                        </div>
-                                      ) : (
-                                        <div className="space-y-1">
-                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusBadge(req.status)}`}>
-                                            {req.status}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* 4. Assigned Lead Engineer / Service Provider */}
-                                  <td className="py-4 px-4 align-top min-w-[200px]">
-                                    <div className="space-y-2">
                                       {assignedEngName ? (
-                                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 space-y-0.5">
                                           <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned Lead</span>
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase">Assigned</span>
                                             <button
                                               onClick={() => setAssigningEngineerReqId(isAssigningThis ? null : req.id)}
-                                              className="text-[10px] font-semibold text-brand-600 hover:text-brand-700"
+                                              className="text-[10px] font-bold text-primary-600 hover:underline"
                                             >
                                               Change
                                             </button>
                                           </div>
-                                          <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                                            <HardHat className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                                          <div className="font-bold text-xs text-slate-800 flex items-center gap-1">
+                                            <HardHat className="w-3 h-3 text-primary-600 shrink-0" />
                                             <span>{assignedEngName}</span>
                                           </div>
                                         </div>
                                       ) : (
-                                        <div className="space-y-1">
-                                          <button
-                                            onClick={() => setAssigningEngineerReqId(isAssigningThis ? null : req.id)}
-                                            className="w-full py-1.5 px-2.5 rounded-xl bg-warning-50 hover:bg-warning-100 text-warning-900 border border-warning-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                                          >
-                                            <UserPlus className="w-3.5 h-3.5 text-warning-600" />
-                                            <span>Assign Engineer</span>
-                                            <ChevronDown className="w-3 h-3 text-warning-500" />
-                                          </button>
-                                          <div className="text-[10px] text-slate-400 text-center">Unassigned Lead</div>
-                                        </div>
+                                        <button
+                                          onClick={() => setAssigningEngineerReqId(isAssigningThis ? null : req.id)}
+                                          className="w-full py-1.5 px-2 rounded-xl bg-warning-50 hover:bg-warning-100 text-warning-900 border border-warning-200 text-xs font-bold transition-all flex items-center justify-center gap-1"
+                                        >
+                                          <UserPlus className="w-3 h-3 text-warning-600" />
+                                          <span>Assign Lead</span>
+                                        </button>
                                       )}
 
-                                      {/* Quick Inline Picker Dropdown */}
                                       {isAssigningThis && (
-                                        <div className="p-2 rounded-xl bg-white border border-brand-300 shadow-lg space-y-1 mt-1 z-20 relative">
-                                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1">
-                                            Select Lead Engineer:
+                                        <div className="p-2 rounded-xl bg-white border border-primary-300 shadow-lg space-y-1 z-20 relative">
+                                          <div className="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-100 pb-1">
+                                            Select Engineer:
                                           </div>
-                                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                                          <div className="space-y-1 max-h-40 overflow-y-auto">
                                             {availableEngineers.map(eng => (
                                               <button
                                                 key={eng.id}
                                                 onClick={() => handleAssignEngineer(req.id, eng.name)}
-                                                className="w-full text-left p-1.5 rounded-lg hover:bg-brand-50 hover:text-brand-700 text-xs font-medium text-slate-700 flex items-center justify-between transition-all"
+                                                className="w-full text-left p-1.5 rounded-lg hover:bg-primary-50 text-xs font-bold text-slate-700 flex items-center justify-between"
                                               >
-                                                <div>
-                                                  <div className="font-bold">{eng.name}</div>
-                                                  <div className="text-[9.5px] text-slate-400">{eng.role}</div>
-                                                </div>
-                                                <span className="text-[9px] font-bold text-slate-500">{eng.badge}</span>
+                                                <span>{eng.name}</span>
+                                                <span className="text-[9px] text-slate-400">{eng.cityName}</span>
                                               </button>
                                             ))}
                                           </div>
-                                          <button
-                                            onClick={() => setAssigningEngineerReqId(null)}
-                                            className="w-full text-center text-[10px] font-semibold text-slate-400 hover:text-slate-600 pt-1"
-                                          >
-                                            Cancel
-                                          </button>
                                         </div>
                                       )}
                                     </div>
                                   </td>
 
-                                  {/* 5. Quick Dispatch Actions */}
-                                  <td className="py-4 px-4 align-top text-right min-w-[170px]">
-                                    <div className="flex flex-col items-end gap-2">
-                                      {/* One-Click Quotation Generator Action */}
+                                  {/* Quick Dispatch Actions */}
+                                  <td className="py-4 px-4 align-top text-right min-w-[150px]">
+                                    <div className="flex flex-col items-end gap-1.5">
                                       {(!q || isNeedsQuote) ? (
                                         <button
                                           onClick={() => handleStartQuote(req)}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-all w-full justify-center"
+                                          className="w-full py-1.5 px-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1"
                                         >
-                                          <Zap className="w-3.5 h-3.5" />
-                                          <span>Create Quotation</span>
+                                          <Zap className="w-3 h-3" />
+                                          <span>Create Quote</span>
                                         </button>
                                       ) : (
                                         <button
                                           onClick={() => setActiveQuoteModal(q)}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-xs font-bold transition-all w-full justify-center"
+                                          className="w-full py-1.5 px-2.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-xs font-bold transition-all flex items-center justify-center gap-1"
                                         >
-                                          <Eye className="w-3.5 h-3.5" />
-                                          <span>View BOQ Quote</span>
+                                          <Eye className="w-3 h-3" />
+                                          <span>View Quote</span>
                                         </button>
                                       )}
 
-                                      {/* Secondary Action Buttons */}
-                                      <div className="flex items-center gap-1.5 w-full justify-end">
+                                      <div className="flex items-center gap-1 w-full justify-end">
                                         <button
                                           onClick={() => openChatForRequest(req)}
-                                          title="Open Live Chat Desk with customer"
-                                          className="p-1.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all flex items-center gap-1 text-[11px] font-semibold"
+                                          className="p-1.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all"
+                                          title="Open Live Chat"
                                         >
-                                          <MessageCircle className="w-3.5 h-3.5 text-primary-600" />
-                                          <span className="hidden sm:inline">Chat</span>
+                                          <MessageCircle className="w-3.5 h-3.5" />
                                         </button>
-
-                                        <a
-                                          href={`tel:${req.user?.phoneNumber || ''}`}
-                                          title="Call customer directly"
-                                          className="p-1.5 rounded-lg bg-success-50 hover:bg-success-100 text-success-700 transition-all flex items-center gap-1 text-[11px] font-medium"
-                                        >
-                                          <Phone className="w-3.5 h-3.5" />
-                                          <span className="hidden sm:inline">Call</span>
-                                        </a>
+                                        {req.user?.phoneNumber && (
+                                          <button
+                                            onClick={() => callCustomer(req.user.phoneNumber)}
+                                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-all"
+                                            title="Call Customer"
+                                          >
+                                            <Phone className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   </td>
@@ -3615,6 +4222,253 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         </tbody>
                       </table>
                     )}
+
+                    {/* SECTION 2: INSTANT MAINTENANCE BOOKINGS TABLE */}
+                    {overviewActiveSection === 'bookings' && (
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                            <th className="py-3 px-4">Booking #</th>
+                            <th className="py-3 px-4">City</th>
+                            <th className="py-3 px-4">Customer & Contact</th>
+                            <th className="py-3 px-4">Service Details</th>
+                            <th className="py-3 px-4">Scheduled Slot</th>
+                            <th className="py-3 px-4">Assigned Specialist</th>
+                            <th className="py-3 px-4">Paid Online</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {displayBookings.length === 0 ? (
+                            <tr>
+                              <td colSpan="8" className="py-12 text-center text-slate-400">
+                                <Zap className="w-8 h-8 mx-auto text-slate-300" />
+                                <p className="font-bold text-sm text-slate-600 mt-2">No direct maintenance bookings</p>
+                              </td>
+                            </tr>
+                          ) : (
+                            displayBookings.map(b => (
+                              <tr key={b.id} className="hover:bg-slate-50/80 transition-all">
+                                <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                                  {b.bookingNumber}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-800">
+                                    <MapPin className="w-3 h-3 text-primary-600" />
+                                    {b.city || 'Bhilwara'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-900">{b.customerName}</div>
+                                  <a href={`tel:${b.customerPhone}`} className="text-slate-500 hover:text-primary-600 flex items-center gap-1 font-mono text-[11px]">
+                                    <Phone className="w-3 h-3 text-emerald-600" /> {b.customerPhone}
+                                  </a>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-800">{b.serviceName}</div>
+                                  <div className="text-[11px] text-slate-400">{b.subServiceName}</div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-semibold text-slate-700">{b.scheduledDate}</div>
+                                  <div className="text-[10px] text-slate-400">{b.scheduledSlot}</div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  {b.technicianName ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 text-xs">
+                                        <HardHat className="w-3.5 h-3.5 text-emerald-600" /> {b.technicianName}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: '', phone: '', role: 'Senior Field Specialist' }); }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-warning-50 text-warning-800 font-bold border border-warning-200 hover:bg-warning-100 text-xs"
+                                    >
+                                      <UserPlus className="w-3 h-3 text-warning-600" /> Assign Specialist
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 font-mono">
+                                  <div className="font-bold text-slate-900">₹{(b.totalAmount || b.onlinePaidAmount || 199).toLocaleString('en-IN')}</div>
+                                  <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800">
+                                    {b.paymentStatus || 'PAID'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => openChatForBooking(b)}
+                                      className="p-1.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200"
+                                      title="Chat with customer"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedBookingForDrawer(b)}
+                                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                    >
+                                      Details
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {/* SECTION 3: QUOTATIONS INTELLIGENCE & DEMAND BREAKDOWN */}
+                    {overviewActiveSection === 'quotations' && (
+                      <div className="p-5 space-y-6">
+                        {/* Financial Analytics Summary Bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Value Quoted</span>
+                            <div className="font-heading font-bold text-2xl text-slate-900 mt-1">₹{totalQuotedRev.toLocaleString('en-IN')}</div>
+                            <span className="text-[11px] text-slate-500">{filteredByCityQuotes.length} Total Quotes</span>
+                          </div>
+                          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                            <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Accepted Deals Value</span>
+                            <div className="font-heading font-bold text-2xl text-emerald-900 mt-1">₹{totalAcceptedRev.toLocaleString('en-IN')}</div>
+                            <span className="text-[11px] text-emerald-700 font-bold">{acceptedQuotes.length} Won Orders</span>
+                          </div>
+                          <div className="p-4 rounded-2xl bg-primary-50 border border-primary-200">
+                            <span className="text-[10px] font-bold text-primary-700 uppercase tracking-wider">Win / Conversion Rate</span>
+                            <div className="font-heading font-bold text-2xl text-primary-900 mt-1">{conversionRatePct}%</div>
+                            <span className="text-[11px] text-primary-700 font-medium">Customer Conversion</span>
+                          </div>
+                          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Average Deal Ticket</span>
+                            <div className="font-heading font-bold text-2xl text-slate-900 mt-1">₹{avgQuoteTicket.toLocaleString('en-IN')}</div>
+                            <span className="text-[11px] text-slate-500">Per Quotation</span>
+                          </div>
+                        </div>
+
+                        {/* Category Demand Bars */}
+                        <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-primary-600" />
+                              Demand Distribution by Service Category ({filteredByCityRequests.length} requests)
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            {Object.entries(categoryDemand).map(([cat, count]) => {
+                              const pct = Math.round((count / Math.max(filteredByCityRequests.length, 1)) * 100);
+                              return (
+                                <div key={cat} className="space-y-1">
+                                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                                    <span>{cat}</span>
+                                    <span className="font-mono font-bold text-slate-900">{count} ({pct}%)</span>
+                                  </div>
+                                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-primary-600 rounded-full" style={{ width: `${pct}%` }}></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Recent Quotations Table */}
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                          <div className="p-3.5 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-800">
+                            Recent Quotations Pipeline
+                          </div>
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100/60 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                                <th className="py-2.5 px-4">Quote #</th>
+                                <th className="py-2.5 px-4">Customer</th>
+                                <th className="py-2.5 px-4">Contact</th>
+                                <th className="py-2.5 px-4">Status</th>
+                                <th className="py-2.5 px-4 text-right">Grand Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {displayQuotes.slice(0, 8).map(q => (
+                                <tr key={q.id} className="hover:bg-slate-50">
+                                  <td className="py-3 px-4 font-mono font-bold text-primary-600">{q.quoteNumber}</td>
+                                  <td className="py-3 px-4 font-bold text-slate-800">{q.customerName || 'Customer'}</td>
+                                  <td className="py-3 px-4 font-mono text-slate-600">{q.customerPhone || '—'}</td>
+                                  <td className="py-3 px-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      (q.status || '').toUpperCase() === 'ACCEPTED'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-primary-50 text-primary-700'
+                                    }`}>
+                                      {q.status || 'QUOTED'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 font-mono font-bold text-slate-900 text-right">
+                                    ₹{(q.grandtotal || q.amount || 0).toLocaleString('en-IN')}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SECTION 4: CONNECTED VENDORS POOL */}
+                    {overviewActiveSection === 'vendors' && (
+                      <div className="p-5 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900">
+                              Local Vendor Network in {overviewCityFilter === 'ALL' ? 'All Operating Cities' : overviewCityFilter}
+                            </h4>
+                            <p className="text-xs text-slate-500">Connected contractors, adventure operators, and local service partners.</p>
+                          </div>
+                          <button
+                            onClick={() => setActiveTab('vendors')}
+                            className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-bold transition-all"
+                          >
+                            Manage Vendors & Quoting
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {displayVendors.map(v => (
+                            <div key={v.id} className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs transition-all space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-bold text-sm text-slate-900">{v.name}</div>
+                                  <div className="text-xs text-slate-500 font-medium">{v.businessName}</div>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  v.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {v.status}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                                <span className="px-2 py-0.5 rounded-md font-bold bg-slate-100 text-slate-700">
+                                  📍 {v.city}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md font-bold bg-primary-50 text-primary-700">
+                                  {v.category}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md font-medium bg-slate-50 text-slate-600 border border-slate-200">
+                                  {v.specialization}
+                                </span>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                                <span className="font-semibold text-slate-600">⭐ {v.rating || 4.5}</span>
+                                <span className="font-mono text-slate-700">Min: ₹{v.minCharge || 500}</span>
+                                <a href={`tel:${v.phone}`} className="text-primary-600 font-bold hover:underline flex items-center gap-1">
+                                  <Phone className="w-3 h-3" /> Call
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3622,274 +4476,1607 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
           })()}
 
           {/* REQUESTS TAB */}
-          {activeTab === 'requests' && (
-            <div className="space-y-5">
-              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-heading font-semibold text-base text-slate-800">Inspection Requests & Photo Damage Reviews</h2>
-                  <p className="text-[11px] text-slate-400">Examine damage severity uploaded by customers and dispatch itemized quotations.</p>
+          {activeTab === 'requests' && (() => {
+            const availableCities = ['ALL', 'Bhilwara', 'Udaipur', 'Jaipur', 'Dehradun', 'Rishikesh', 'Jaisalmer'];
+
+            const isCityMatch = (cityVal) => {
+              if (requestsCityFilter === 'ALL') return true;
+              const str = typeof cityVal === 'string' ? cityVal : (cityVal?.name || '');
+              return str.toLowerCase().includes(requestsCityFilter.toLowerCase());
+            };
+
+            const filteredByCityRequests = requests.filter(r => isCityMatch(r.city || r.location || r.addressline));
+
+            // Status counts for tabs
+            const countAll = filteredByCityRequests.length;
+            const countVendorQuotes = filteredByCityRequests.filter(r => (r.vendorQuotes || []).length > 0).length;
+            const countNeedsReview = filteredByCityRequests.filter(r => ['SUBMITTED', 'ESTIMATING'].includes((r.status || '').toUpperCase())).length;
+            const countSiteAudit = filteredByCityRequests.filter(r => (r.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (r.status || '').toUpperCase() === 'SITE_AUDIT' || r.requiresSiteAudit).length;
+            const countQuoted = filteredByCityRequests.filter(r => (r.status || '').toUpperCase() === 'QUOTED').length;
+            const countActive = filteredByCityRequests.filter(r => ['ACCEPTED', 'IN_PROGRESS'].includes((r.status || '').toUpperCase())).length;
+            const countCompleted = filteredByCityRequests.filter(r => (r.status || '').toUpperCase() === 'COMPLETED').length;
+
+            // Apply status filter
+            const filteredByStatus = filteredByCityRequests.filter(req => {
+              const st = (req.status || '').toUpperCase();
+              if (requestsStatusFilter === 'ALL') return true;
+              if (requestsStatusFilter === 'VENDOR_QUOTES') return (req.vendorQuotes || []).length > 0;
+              if (requestsStatusFilter === 'NEEDS_REVIEW') return ['SUBMITTED', 'ESTIMATING'].includes(st);
+              if (requestsStatusFilter === 'SITE_AUDIT') return st === 'AUDIT_SCHEDULED' || st === 'SITE_AUDIT' || req.requiresSiteAudit;
+              if (requestsStatusFilter === 'QUOTED') return st === 'QUOTED';
+              if (requestsStatusFilter === 'ACTIVE') return ['ACCEPTED', 'IN_PROGRESS'].includes(st);
+              if (requestsStatusFilter === 'COMPLETED') return st === 'COMPLETED';
+              return true;
+            });
+
+            // Apply search filter
+            const searchLower = requestsSearch.toLowerCase().trim();
+            const displayRequests = filteredByStatus.filter(req => {
+              if (!searchLower) return true;
+              return (
+                (req.requestNumber || '').toLowerCase().includes(searchLower) ||
+                (req.user?.name || '').toLowerCase().includes(searchLower) ||
+                (req.user?.phoneNumber || '').toLowerCase().includes(searchLower) ||
+                (req.servicecode || '').toLowerCase().includes(searchLower) ||
+                (req.subServiceCode || '').toLowerCase().includes(searchLower) ||
+                (req.issueDescription || '').toLowerCase().includes(searchLower) ||
+                (req.location || '').toLowerCase().includes(searchLower) ||
+                (req.addressline || '').toLowerCase().includes(searchLower)
+              );
+            });
+
+            return (
+              <div className="space-y-5">
+                {/* 1. TOP HEADER & METRIC CONTROLLER */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold">
+                        <ClipboardList className="w-4 h-4" />
+                      </div>
+                      <h2 className="font-heading font-bold text-lg text-slate-900">
+                        Inspection Requests & Site Audits
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                        {displayRequests.length} Showing
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                      Review customer damage evidence, schedule physical civil site audits, assign connected vendors, and issue itemized BOQ quotations.
+                    </p>
+                  </div>
+
+                  {/* Header Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => fetchRequests()}
+                      disabled={isLoadingRequests}
+                      title="Sync Inspection Requests"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingRequests ? 'animate-spin' : ''}`} />
+                      <span>{isLoadingRequests ? 'Syncing...' : 'Sync Requests'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCreateTestRequest('Udaipur')}
+                      title="Seed a realistic test inspection request in Udaipur"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>+ Seed Test Lead</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-                {requests.map(req => {
-                  const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : [];
-                  const isUrgent = req.urgency === 'URGENT';
-                  return (
-                    <div key={req.id} className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono font-bold text-sm sm:text-base text-brand-600 tracking-wide">{req.requestNumber}</span>
-                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${isUrgent ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                              {req.urgency || 'NORMAL'}
-                            </span>
-                            {((req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || req.requiresSiteAudit) && (
-                              <span className="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-warning-50 text-warning-800 border border-warning-300 flex items-center gap-1 shadow-2xs">
-                                <MapPin className="w-3 h-3 text-warning-600" /> Site Audit Req.
+                {/* 2. MULTI-CITY QUICK SWITCHER BAR */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Operational Hub:</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    {availableCities.map(c => {
+                      const isSel = requestsCityFilter === c;
+                      const cCount = c === 'ALL'
+                        ? requests.length
+                        : requests.filter(r => (r.city || r.location || r.addressline || '').toLowerCase().includes(c.toLowerCase())).length;
+
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setRequestsCityFilter(c)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                            isSel
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                          }`}
+                        >
+                          <span>{c === 'ALL' ? '🌐 All Cities' : `📍 ${c}`}</span>
+                          <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
+                            isSel ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {cCount}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Active Hub Alert Banner */}
+                {requestsCityFilter !== 'ALL' && (
+                  <div className="bg-primary-50/90 border border-primary-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-primary-800 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
+                      <span>
+                        Showing requests for <strong>📍 {requestsCityFilter}</strong> only ({filteredByCityRequests.length} of {requests.length} total). Requests in other cities are hidden by this hub filter.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRequestsCityFilter('ALL')}
+                      className="font-bold underline hover:text-primary-900 cursor-pointer ml-3 shrink-0"
+                    >
+                      Show All Hubs ({requests.length})
+                    </button>
+                  </div>
+                )}
+
+                {/* 3. STATUS FILTER PILLS & SEARCH BAR */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  {/* Status Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                    {[
+                      { id: 'ALL', label: 'All Requests', count: countAll },
+                      { id: 'VENDOR_QUOTES', label: '⭐ Vendor Quotes Received', count: countVendorQuotes, highlight: countVendorQuotes > 0 },
+                      { id: 'NEEDS_REVIEW', label: 'Needs Estimating', count: countNeedsReview },
+                      { id: 'SITE_AUDIT', label: 'Site Audit Req.', count: countSiteAudit },
+                      { id: 'QUOTED', label: 'Quoted', count: countQuoted },
+                      { id: 'ACTIVE', label: 'In Execution', count: countActive },
+                      { id: 'COMPLETED', label: 'Completed', count: countCompleted }
+                    ].map(st => {
+                      const isStActive = requestsStatusFilter === st.id;
+                      return (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={() => setRequestsStatusFilter(st.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                            isStActive
+                              ? 'bg-primary-600 text-white shadow-xs font-bold'
+                              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                          }`}
+                        >
+                          <span>{st.label}</span>
+                          <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
+                            isStActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {st.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full md:w-80 shrink-0">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={requestsSearch}
+                      onChange={(e) => setRequestsSearch(e.target.value)}
+                      placeholder="Search customer, phone, request #..."
+                      className="w-full pl-9 pr-8 py-1.5 bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
+                    />
+                    {requestsSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setRequestsSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. MAIN CONTENT AREA */}
+                {isLoadingRequests && requests.length === 0 ? (
+                  // Skeleton Loading State
+                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                    {[1, 2, 3].map(k => (
+                      <div key={k} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs animate-pulse space-y-4">
+                        <div className="flex justify-between items-center">
+                          <div className="h-5 w-32 bg-slate-200 rounded-md" />
+                          <div className="h-5 w-20 bg-slate-200 rounded-full" />
+                        </div>
+                        <div className="h-4 w-48 bg-slate-200 rounded-md" />
+                        <div className="h-16 w-full bg-slate-100 rounded-xl" />
+                        <div className="h-20 w-full bg-slate-100 rounded-xl" />
+                      </div>
+                    ))}
+                  </div>
+                ) : displayRequests.length === 0 ? (
+                  // Resilient Empty State
+                  <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center shadow-xs">
+                    <div className="w-14 h-14 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mx-auto mb-4">
+                      <ClipboardList className="w-7 h-7" />
+                    </div>
+                    <h3 className="font-heading font-bold text-base text-slate-800">
+                      No inspection requests found
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                      {requestsCityFilter !== 'ALL' || requestsStatusFilter !== 'ALL' || requestsSearch
+                        ? `No requests match the active filters (${requestsCityFilter !== 'ALL' ? `City: ${requestsCityFilter}` : ''} ${requestsStatusFilter !== 'ALL' ? `Status: ${requestsStatusFilter}` : ''} ${requestsSearch ? `Search: "${requestsSearch}"` : ''}).`
+                        : 'No inspection requests are currently logged in the database.'}
+                    </p>
+                    <div className="flex items-center justify-center gap-3 mt-5 flex-wrap">
+                      {(requestsCityFilter !== 'ALL' || requestsStatusFilter !== 'ALL' || requestsSearch) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRequestsCityFilter('ALL');
+                            setRequestsStatusFilter('ALL');
+                            setRequestsSearch('');
+                          }}
+                          className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                        >
+                          Clear All Filters
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => fetchAllData(true)}
+                        className="px-4 py-2 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl transition-all inline-flex items-center gap-1.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Sync Live Database
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCreateTestRequest('Udaipur')}
+                        className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all inline-flex items-center gap-1.5"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" /> + Seed Test Request
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Grid of Rich Request Cards
+                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                    {displayRequests.map(req => {
+                      const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
+                      const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
+                      const isAuditScheduled = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
+                      const hasQuote = (req.quotations || []).length > 0 || quotations.some(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+                      const assignedVendor = vendors.find(v => v.id === req.vendorId);
+
+                      return (
+                        <div
+                          key={req.id}
+                          className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                        >
+                          <div className="space-y-4">
+                            {/* Card Header: Request #, Urgency, Status */}
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-bold text-sm sm:text-base text-primary-600 tracking-wide">
+                                  {req.requestNumber}
+                                </span>
+                                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                                  isUrgent
+                                    ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}>
+                                  {req.urgency || 'NORMAL'}
+                                </span>
+                                {isAuditScheduled && (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-warning-50 text-warning-800 border border-warning-300 flex items-center gap-1 shadow-2xs">
+                                    <MapPin className="w-3 h-3 text-warning-600" /> Site Audit Req.
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>
+                                {req.status}
                               </span>
-                            )}
-                          </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>{req.status}</span>
-                        </div>
-
-                        <div>
-                          <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900 tracking-tight">{req.servicecode}</h3>
-                          {req.subServiceCode && <p className="text-xs sm:text-sm font-semibold text-brand-600 mt-0.5">{req.subServiceCode}</p>}
-                        </div>
-
-                        <div className="p-3.5 sm:p-4 bg-slate-50/90 rounded-xl text-sm text-slate-700 leading-relaxed border border-slate-200 font-normal">
-                          <span className="font-bold text-slate-900">Issue:</span> {req.issueDescription || 'No description provided'}
-                        </div>
-
-                        {media.length > 0 ? (
-                          <div className="space-y-1.5">
-                            <div className="text-xs font-semibold text-slate-500">Damage Photos / Evidence ({media.length}):</div>
-                            <div className="flex gap-2.5 overflow-x-auto pb-1.5">
-                              {media.map((imgUrl, i) => (
-                                <div key={i} onClick={() => setActivePhotoModal({ photos: media, index: i, title: `${req.requestNumber} Photo Review` })} className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer relative group shrink-0 hover:border-brand-500 hover:shadow-md transition-all">
-                                  <img src={imgUrl} alt="Damage" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }} />
-                                  <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 backdrop-blur-xs text-white text-[10px] font-semibold text-center py-1">Photo #{i + 1}</span>
-                                </div>
-                              ))}
                             </div>
-                          </div>
-                        ) : (
-                          <div className="p-3 bg-slate-50/50 rounded-lg border border-dashed border-slate-200 text-xs sm:text-sm text-slate-400 italic">No photos uploaded</div>
-                        )}
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm pt-3 border-t border-slate-100 text-slate-600">
-                          <div className="flex items-center gap-2"><User className="w-4 h-4 text-slate-400 shrink-0" /> <span className="font-semibold text-slate-800">{req.user?.name || 'Customer'}</span></div>
-                          <div className="flex items-center gap-2 font-mono"><Phone className="w-4 h-4 text-slate-400 shrink-0" /> <span className="font-medium text-slate-700">{req.user?.phoneNumber || 'N/A'}</span></div>
-                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-slate-400 shrink-0" /> <span className="font-medium text-slate-700">{req.propertyType || 'House'} ({req.propertySize || 'Standard'})</span></div>
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-400 shrink-0" /> <span className="font-medium text-slate-700">{req.preferredDate || 'Flexible'}</span></div>
-                          <div className="col-span-1 sm:col-span-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400 shrink-0" /> <span className="font-medium text-slate-700 truncate">{req.addressline || 'Main Residence'} {req.location && `• ${req.location}`}</span></div>
-                        </div>
-
-                        {/* INTERACTIVE TIMELINE STAGE CONTROLLER */}
-                        <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/90 space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                              <Clock className="w-4 h-4 text-brand-600" />
-                              <span>Service Timeline (Customer View)</span>
-                            </div>
-                            <span className="text-[11px] font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200">
-                              Stage {getTimelineStepIndex(req.status) + 1} of 5
-                            </span>
-                          </div>
-
-                          {/* Mini Progress Bar */}
-                          <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="bg-brand-600 h-full transition-all duration-300"
-                              style={{ width: `${((getTimelineStepIndex(req.status) + 1) / 5) * 100}%` }}
-                            />
-                          </div>
-
-                          {/* 5 Milestone Step Buttons */}
-                          <div className="grid grid-cols-5 gap-1.5 pt-0.5">
-                            {TIMELINE_STAGES.map((stg, idx) => {
-                              const currentIdx = getTimelineStepIndex(req.status);
-                              const isPast = idx < currentIdx;
-                              const isCurrent = idx === currentIdx;
-
-                              let btnStyle = 'bg-white text-slate-500 border-slate-200 hover:border-brand-400 hover:text-brand-600';
-                              if (isCurrent) {
-                                btnStyle = 'bg-brand-600 text-white border-brand-600 shadow-xs font-bold ring-2 ring-brand-500/20';
-                              } else if (isPast) {
-                                btnStyle = 'bg-success-50 text-success-700 border-success-300 font-semibold';
-                              }
-
-                              return (
-                                <button
-                                  key={stg.key}
-                                  type="button"
-                                  onClick={() => handleUpdateStatus(req.id, stg.key)}
-                                  title={`Set Timeline to: ${stg.label} (${stg.desc})`}
-                                  className={`px-1 py-1.5 rounded-lg border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${btnStyle}`}
-                                >
-                                  <div className="flex items-center justify-center">
-                                    {isPast ? (
-                                      <Check className="w-3 h-3 text-success-600" />
-                                    ) : (
-                                      <span className={`text-[10px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold ${isCurrent ? 'bg-white text-brand-600' : 'bg-slate-100 text-slate-600'}`}>
-                                        {stg.step}
-                                      </span>
-                                    )}
+                            {/* HIGH VISIBILITY: VENDOR QUOTATION ALERT CALLOUT */}
+                            {(req.vendorQuotes || []).length > 0 && (
+                              <div
+                                onClick={() => handleOpenVendorQuotesModal(req)}
+                                className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-xl cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between gap-3 group"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                                    <Tag className="w-4 h-4" />
                                   </div>
-                                  <span className="text-[10px] leading-tight truncate max-w-full">
-                                    {stg.label}
+                                  <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-bold text-emerald-950">
+                                        {(req.vendorQuotes || []).length} Vendor {(req.vendorQuotes || []).length === 1 ? 'Quotation' : 'Quotations'} Received!
+                                      </span>
+                                      <span className="text-[11px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
+                                        Lowest: ₹{Math.min(...(req.vendorQuotes || []).map(q => q.quotePrice)).toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-emerald-700 mt-0.5 line-clamp-1">
+                                      From: {(req.vendorQuotes || []).map(q => q.vendorBusiness || q.vendorName || 'Contractor').join(', ')}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all shrink-0 flex items-center gap-1 shadow-xs"
+                                >
+                                  <span>Review & Award</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Service Category & Sub Service */}
+                            <div>
+                              <div className="flex items-center justify-between gap-2">
+                                <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900 tracking-tight">
+                                  {req.servicecode}
+                                </h3>
+                                {(req.city || req.location) && (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 text-primary-600" />
+                                    <span>{req.city || req.location}</span>
+                                  </span>
+                                )}
+                              </div>
+                              {req.subServiceCode && (
+                                <p className="text-xs sm:text-sm font-semibold text-primary-600 mt-0.5">
+                                  {req.subServiceCode}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Issue Description Callout */}
+                            <div className="p-3.5 bg-slate-50/90 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed border border-slate-200 font-normal">
+                              <div className="flex items-start gap-1.5">
+                                <AlertCircle className="w-4 h-4 text-warning-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <strong className="text-slate-900 mr-1">Reported Issue:</strong>
+                                  {req.issueDescription || 'No description provided'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Damage Photos & Videos Gallery */}
+                            {media.length > 0 ? (
+                              <div className="space-y-1.5">
+                                <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
+                                  <span>Site Evidence ({media.length} items):</span>
+                                  <span className="text-[11px] text-primary-600 font-medium">Click to inspect</span>
+                                </div>
+                                <div className="flex gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
+                                  {media.map((itemUrl, i) => {
+                                    const isVid = isVideoMedia(itemUrl);
+                                    return (
+                                      <div
+                                        key={i}
+                                        onClick={() => setActivePhotoModal({ photos: media, index: i, title: `${req.requestNumber} Site Evidence` })}
+                                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer relative group shrink-0 hover:border-primary-500 hover:shadow-md transition-all"
+                                      >
+                                        {isVid ? (
+                                          <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
+                                            <Video className="w-6 h-6 text-primary-400 group-hover:scale-110 transition-transform" />
+                                            <span className="text-[9px] font-bold mt-1">Video</span>
+                                          </div>
+                                        ) : (
+                                          <img
+                                            src={itemUrl}
+                                            alt="Damage evidence"
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                                          />
+                                        )}
+                                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/75 backdrop-blur-xs text-white text-[9.5px] font-semibold text-center py-0.5">
+                                          {isVid ? 'Play Video' : `Photo #${i + 1}`}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400 italic text-center">
+                                No site photos or videos uploaded
+                              </div>
+                            )}
+
+                            {/* Customer & Site Details Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 text-slate-600">
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-semibold text-slate-800">{req.user?.name || req.customerName || 'Customer'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 font-mono">
+                                <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                                <a
+                                  href={`tel:${req.user?.phoneNumber || req.customerPhone || ''}`}
+                                  className="font-medium text-primary-600 hover:underline"
+                                >
+                                  {req.user?.phoneNumber || req.customerPhone || 'N/A'}
+                                </a>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Home className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700 truncate">
+                                  {req.propertyType || 'House'} ({req.propertySize || 'Standard'})
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700">
+                                  {req.preferredDate || 'Flexible'} {req.preferredTime ? `• ${req.preferredTime}` : ''}
+                                </span>
+                              </div>
+                              <div className="col-span-1 sm:col-span-2 flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700 truncate" title={req.addressline || req.location || ''}>
+                                  {req.addressline || req.location || 'Site address not provided'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Connected Vendor Quoting & Project Assignment Section */}
+                            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                                  <HardHat className="w-3.5 h-3.5 text-primary-600" />
+                                  <span>Vendor Quoting & Project Assignment:</span>
+                                </span>
+                                {req.assignedVendorName ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const v = vendors.find(x => x.id === req.vendorId || x.name === req.assignedVendorName);
+                                      if (v) handleOpenVendorDetail(v);
+                                    }}
+                                    className="text-[10px] font-bold text-success-700 bg-success-50 hover:bg-success-100 px-2.5 py-0.5 rounded-full border border-success-200 flex items-center gap-1 transition-all cursor-pointer"
+                                    title="Click to view full contractor profile & KYC"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 text-success-600" />
+                                    <span>Assigned: {req.assignedVendorName}</span>
+                                    <ExternalLink className="w-2.5 h-2.5 text-success-600 ml-0.5" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                                    Unassigned
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Two Core Action Buttons: Share with Vendors & View Quotations */}
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenShareVendorsModal(req)}
+                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                                    (req.sharedVendors || []).length > 0
+                                      ? 'bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-200'
+                                      : 'bg-primary-600 hover:bg-primary-700 text-white shadow-primary-500/20'
+                                  }`}
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                  <span>
+                                    {(req.sharedVendors || []).length > 0
+                                      ? `Shared (${req.sharedVendors.length})`
+                                      : 'Share with Vendors'}
                                   </span>
                                 </button>
-                              );
-                            })}
-                          </div>
-                          <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                            <span>💡 Tap any milestone to update app timeline</span>
-                            <span className="font-semibold text-slate-600">{TIMELINE_STAGES[getTimelineStepIndex(req.status)]?.desc}</span>
-                          </div>
-                        </div>
-                      </div>
 
-                      <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-500">Status:</span>
-                          <select value={req.status} onChange={(e) => handleUpdateStatus(req.id, e.target.value)} className="text-xs sm:text-sm font-semibold px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-brand-500/20">
-                            <option value="SUBMITTED">SUBMITTED</option>
-                            <option value="AUDIT_SCHEDULED">AUDIT_SCHEDULED (Physical Audit)</option>
-                            <option value="ESTIMATING">ESTIMATING (Digital Review)</option>
-                            <option value="QUOTED">QUOTED</option>
-                            <option value="ACCEPTED">ACCEPTED</option>
-                            <option value="IN_PROGRESS">IN_PROGRESS</option>
-                            <option value="COMPLETED">COMPLETED</option>
-                            <option value="REJECTED">REJECTED</option>
-                          </select>
-                        </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenVendorQuotesModal(req)}
+                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                                    (req.vendorQuotes || []).length > 0
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                                  }`}
+                                >
+                                  <Tag className="w-3.5 h-3.5" />
+                                  <span>
+                                    {(req.vendorQuotes || []).length > 0
+                                      ? `Quotes (${req.vendorQuotes.length})`
+                                      : 'Quotes (0)'}
+                                  </span>
+                                </button>
+                              </div>
 
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* Require Site Audit Button */}
-                          {(() => {
-                            const isAuditReq = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || req.requiresSiteAudit;
-                            return (
+                              {req.assignedVendorName && req.assignedQuotePrice && (
+                                <div className="text-[11px] text-emerald-700 bg-emerald-50/70 px-2.5 py-1 rounded-lg border border-emerald-200/80 flex items-center justify-between">
+                                  <span>Assigned Quote Price:</span>
+                                  <span className="font-mono font-bold">₹{req.assignedQuotePrice.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+
+                              {/* Secondary Direct Select Dropdown */}
+                              <div className="pt-1 flex items-center gap-2">
+                                <select
+                                  value={req.vendorId || ''}
+                                  onChange={(e) => handleAssignVendorDirect(req.id, e.target.value)}
+                                  className="w-full text-[11px] font-semibold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                >
+                                  <option value="">-- Or Direct Assign Connected Vendor --</option>
+                                  {vendors.map(v => (
+                                    <option key={v.id} value={v.id}>
+                                      {v.businessName || v.name} ({v.city || 'Regional'}) - {v.specialization || 'General'}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Interactive 5-Step Customer Timeline Stage Controller */}
+                            <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                                  <Clock className="w-4 h-4 text-primary-600" />
+                                  <span>Service Timeline (Customer View)</span>
+                                </div>
+                                <span className="text-[11px] font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-md border border-primary-200">
+                                  Stage {getTimelineStepIndex(req.status) + 1} of 5
+                                </span>
+                              </div>
+
+                              {/* Mini Progress Bar */}
+                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-primary-600 h-full transition-all duration-300"
+                                  style={{ width: `${((getTimelineStepIndex(req.status) + 1) / 5) * 100}%` }}
+                                />
+                              </div>
+
+                              {/* 5 Milestone Step Buttons */}
+                              <div className="grid grid-cols-5 gap-1 pt-0.5">
+                                {TIMELINE_STAGES.map((stg, idx) => {
+                                  const currentIdx = getTimelineStepIndex(req.status);
+                                  const isPast = idx < currentIdx;
+                                  const isCurrent = idx === currentIdx;
+
+                                  let btnStyle = 'bg-white text-slate-500 border-slate-200 hover:border-primary-400 hover:text-primary-600';
+                                  if (isCurrent) {
+                                    btnStyle = 'bg-primary-600 text-white border-primary-600 shadow-xs font-bold ring-2 ring-primary-500/20';
+                                  } else if (isPast) {
+                                    btnStyle = 'bg-success-50 text-success-700 border-success-300 font-semibold';
+                                  }
+
+                                  return (
+                                    <button
+                                      key={stg.key}
+                                      type="button"
+                                      onClick={() => handleUpdateStatus(req.id, stg.key)}
+                                      title={`Set Timeline to: ${stg.label} (${stg.desc})`}
+                                      className={`px-1 py-1 rounded-lg border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${btnStyle}`}
+                                    >
+                                      <div className="flex items-center justify-center">
+                                        {isPast ? (
+                                          <Check className="w-3 h-3 text-success-600" />
+                                        ) : (
+                                          <span className={`text-[9.5px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold ${
+                                            isCurrent ? 'bg-white text-primary-600' : 'bg-slate-100 text-slate-600'
+                                          }`}>
+                                            {stg.step}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[9.5px] leading-tight truncate max-w-full font-medium">
+                                        {stg.label}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                                <span>💡 Tap milestone to update app status</span>
+                                <span className="font-semibold text-slate-600">
+                                  {TIMELINE_STAGES[getTimelineStepIndex(req.status)]?.desc}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card Footer: Status Changer & Action Buttons */}
+                          <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-slate-500">Status:</span>
+                              <select
+                                value={req.status}
+                                onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
+                                className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                              >
+                                <option value="SUBMITTED">SUBMITTED</option>
+                                <option value="AUDIT_SCHEDULED">AUDIT_SCHEDULED (Physical Audit)</option>
+                                <option value="ESTIMATING">ESTIMATING (Digital Review)</option>
+                                <option value="QUOTED">QUOTED</option>
+                                <option value="ACCEPTED">ACCEPTED</option>
+                                <option value="IN_PROGRESS">IN_PROGRESS</option>
+                                <option value="COMPLETED">COMPLETED</option>
+                                <option value="REJECTED">REJECTED</option>
+                              </select>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Require Site Audit Toggle */}
+                              {(() => {
+                                const isAuditReq = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || req.requiresSiteAudit;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSiteAudit(req)}
+                                    title={isAuditReq ? 'Site audit is currently marked REQUIRED. Click to toggle.' : 'Mark this request as requiring a physical on-site audit inspection.'}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border shadow-xs flex items-center gap-1.5 transition-all ${
+                                      isAuditReq
+                                        ? 'bg-warning-100 text-warning-900 border-warning-400 hover:bg-warning-200 ring-2 ring-warning-400/20 font-bold'
+                                        : 'bg-white text-slate-700 border-slate-300 hover:border-warning-400 hover:bg-warning-50 hover:text-warning-800'
+                                    }`}
+                                  >
+                                    <MapPin className={`w-3.5 h-3.5 ${isAuditReq ? 'text-warning-700 fill-warning-300' : 'text-slate-400'}`} />
+                                    <span>{isAuditReq ? 'Audit: REQUIRED' : 'Require Audit'}</span>
+                                  </button>
+                                );
+                              })()}
+
+                              {/* Chat with Customer */}
                               <button
                                 type="button"
-                                onClick={() => handleToggleSiteAudit(req)}
-                                title={isAuditReq ? 'Site audit is currently marked REQUIRED. Click to switch back to digital review.' : 'Mark this request as requiring a physical on-site audit inspection.'}
-                                className={`px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg border shadow-xs flex items-center gap-1.5 transition-all ${
-                                  isAuditReq
-                                    ? 'bg-warning-100 text-warning-900 border-warning-400 hover:bg-warning-200 ring-2 ring-warning-400/20 font-bold'
-                                    : 'bg-white text-slate-700 border-slate-300 hover:border-warning-400 hover:bg-warning-50 hover:text-warning-800'
-                                }`}
+                                onClick={() => openChatForRequest(req)}
+                                title="Open Live Chat with Customer"
+                                className="px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
                               >
-                                <MapPin className={`w-4 h-4 ${isAuditReq ? 'text-warning-700 fill-warning-300' : 'text-slate-400'}`} />
-                                <span>{isAuditReq ? 'Site Audit: REQUIRED' : 'Require Site Audit'}</span>
+                                <MessageCircle className="w-3.5 h-3.5 text-primary-600" />
+                                <span>Chat</span>
                               </button>
-                            );
-                          })()}
 
-                          <button
-                            onClick={() => openChatForRequest(req)}
-                            title="Chat with Customer"
-                            className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
-                          >
-                            <MessageCircle className="w-4 h-4 text-primary-600" /> Chat
-                          </button>
-                          <button onClick={() => handleStartQuote(req)} className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs flex items-center gap-1.5 transition-all">
-                            <Calculator className="w-4 h-4" /> Build Quote
-                          </button>
-                          <button onClick={() => handleDeleteRequest(req.id)} title="Delete request" className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                              {/* Build BOQ Quote */}
+                              <button
+                                type="button"
+                                onClick={() => handleStartQuote(req)}
+                                title="Create itemized estimate in BOQ builder"
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
+                              >
+                                <Calculator className="w-3.5 h-3.5" />
+                                <span>Build Quote</span>
+                              </button>
+
+                              {/* Delete Request */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRequest(req.id)}
+                                title="Delete request"
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* QUOTATIONS TAB */}
-          {activeTab === 'quotations' && (
-            <div className="space-y-5">
-              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-heading font-semibold text-base text-slate-800">Quotations Desk & Commercial BOQ</h2>
-                  <p className="text-[11px] text-slate-400">Track issued estimates, customer decisions, and print official PDF receipts.</p>
+          {activeTab === 'quotations' && (() => {
+            const pendingCount = quotations.filter(q => q.status !== 'ACCEPTED' && q.status !== 'REJECTED').length;
+            const acceptedCount = quotations.filter(q => q.status === 'ACCEPTED').length;
+            const rejectedCount = quotations.filter(q => q.status === 'REJECTED').length;
+
+            const filteredQuotes = quotations.filter(q => {
+              if (quotationFilterStatus === 'PENDING' && (q.status === 'ACCEPTED' || q.status === 'REJECTED')) return false;
+              if (quotationFilterStatus === 'ACCEPTED' && q.status !== 'ACCEPTED') return false;
+              if (quotationFilterStatus === 'REJECTED' && q.status !== 'REJECTED') return false;
+
+              const searchQ = (quotationSearch || globalSearch || '').toLowerCase().trim();
+              if (!searchQ) return true;
+              const quoteNum = (q.quoteNumber || '').toLowerCase();
+              const clientName = (q.request?.user?.name || '').toLowerCase();
+              const clientPhone = (q.request?.user?.phoneNumber || '').toLowerCase();
+              const reqNum = (q.request?.requestNumber || '').toLowerCase();
+              const serviceCode = (q.request?.servicecode || '').toLowerCase();
+              return quoteNum.includes(searchQ) || clientName.includes(searchQ) || clientPhone.includes(searchQ) || reqNum.includes(searchQ) || serviceCode.includes(searchQ);
+            });
+
+            return (
+              <div className="space-y-5">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-heading font-semibold text-base text-slate-800">Quotations Desk & Commercial BOQ</h2>
+                    <p className="text-[11px] text-slate-400">Track issued estimates, vendor contractor bids, and customer decisions.</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setQuotationDeskTab('customer')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          quotationDeskTab === 'customer'
+                            ? 'bg-white text-slate-900 shadow-xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Customer BOQ Quotes ({quotations.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuotationDeskTab('vendor')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                          quotationDeskTab === 'vendor'
+                            ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Tag className="w-3.5 h-3.5" />
+                        <span>Vendor Contractor Bids ({vendorQuotesHistory.length})</span>
+                      </button>
+                    </div>
+
+                    <button onClick={() => setActiveTab('builder')} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition-all">
+                      <Calculator className="w-3.5 h-3.5" />
+                      <span>Create New Quote</span>
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => setActiveTab('builder')} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition-all">
-                  <Calculator className="w-3.5 h-3.5" />
-                  <span>Create New Quote</span>
-                </button>
-              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-                {quotations.map(q => {
-                  const lineItemsArray = Array.isArray(q.lineItem) ? q.lineItem : [];
-                  const grandTotalFormatted = (q.grandtotal || 0).toLocaleString('en-IN');
-                  return (
-                    <div key={q.id} className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-sm sm:text-base text-brand-600 tracking-wide">{q.quoteNumber}</span>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(q.status)}`}>{q.status}</span>
-                        </div>
-
-                        <div className="flex items-baseline justify-between gap-2">
-                          <div>
-                            <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900 tracking-tight">{q.request?.servicecode || 'Repair Quotation'}</h3>
-                            <div className="text-xs sm:text-sm text-slate-500 font-mono mt-0.5">{q.request?.requestNumber || ''}</div>
-                          </div>
-                          <div className="font-heading font-bold text-xl sm:text-2xl text-success-600 font-mono shrink-0">₹{grandTotalFormatted}</div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
-                          <div><strong className="text-slate-900">Client:</strong> {q.request?.user?.name || 'Customer'}</div>
-                          <div className="font-mono">{q.request?.user?.phoneNumber || 'N/A'}</div>
-                          <div><strong className="text-slate-900">Timeline:</strong> {q.estimatedTimeline || '1-2 Days'}</div>
-                          <div><strong className="text-slate-900">Scope:</strong> {q.estimatedTimeline || 'Standard'}</div>
-                        </div>
-
-                        <div className="text-xs sm:text-sm text-slate-600 font-normal">
-                          <strong className="text-slate-800">Scope ({lineItemsArray.length}):</strong> {lineItemsArray.map(li => li.item || li.description).slice(0, 2).join(', ')}{lineItemsArray.length > 2 ? '...' : ''}
-                        </div>
+                {quotationDeskTab === 'vendor' ? (
+                  <div className="space-y-4">
+                    {/* KPI Bar */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Vendor Quotes</span>
+                        <span className="text-xl font-mono font-bold text-slate-900">{vendorQuotesHistory.length}</span>
                       </div>
-
-                      <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openChatForQuotation(q)}
-                            className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
-                            title="Chat with Customer"
-                          >
-                            <MessageCircle className="w-4 h-4 text-primary-600" /> Chat
-                          </button>
-                          <button
-                            onClick={() => setActiveQuoteModal(q)}
-                            className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-brand-600 bg-brand-100 hover:bg-brand-50 border border-brand-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
-                            title="View Quotation Details"
-                          >
-                            <Eye className="w-4 h-4 text-brand-600" /> Details
-                          </button>
-                          <button onClick={() => handleQuoteDecision(q.id, 'ACCEPTED')} className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-success-700 bg-success-50 hover:bg-success-100 border border-success-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs">
-                            <Check className="w-4 h-4" /> Accept
-                          </button>
-                        </div>
-                        <button onClick={() => handleDeleteQuotation(q.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Delete quotation">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="p-4 bg-white rounded-xl border border-emerald-200 shadow-2xs bg-emerald-50/30">
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Lowest Bid Received</span>
+                        <span className="text-xl font-mono font-bold text-emerald-700">
+                          {vendorQuotesHistory.length > 0 ? `₹${Math.min(...vendorQuotesHistory.map(q => q.quotePrice)).toLocaleString('en-IN')}` : '—'}
+                        </span>
+                      </div>
+                      <div className="p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Contractors Quoting</span>
+                        <span className="text-xl font-mono font-bold text-slate-900">
+                          {new Set(vendorQuotesHistory.map(q => q.vendorId)).size}
+                        </span>
+                      </div>
+                      <div className="p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Bidding Value</span>
+                        <span className="text-xl font-mono font-bold text-slate-900">
+                          ₹{vendorQuotesHistory.reduce((s, q) => s + (q.quotePrice || 0), 0).toLocaleString('en-IN')}
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
+
+                    {/* Master Table of Vendor Quotes */}
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                              <th className="py-3 px-4 font-semibold text-slate-700">Request #</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700">Contractor / Business</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700">Service Category</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700 text-right">Quote Price (₹)</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700">Timeline</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700">Scope / Notes</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700">Status</th>
+                              <th className="py-3 px-4 font-semibold text-slate-700 text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {vendorQuotesHistory.length === 0 ? (
+                              <tr>
+                                <td colSpan="8" className="py-12 text-center text-slate-400">
+                                  <Tag className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                                  <p className="font-semibold text-sm text-slate-600">No vendor quotations received yet</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">Share customer inspection requests with connected vendors to receive price proposals.</p>
+                                </td>
+                              </tr>
+                            ) : (
+                              vendorQuotesHistory.map(q => {
+                                const linkedReq = requests.find(r => r.id === q.requestId) || q.request;
+                                const isAssigned = linkedReq?.vendorId === q.vendorId || q.status === 'accepted' || q.status === 'assigned';
+                                return (
+                                  <tr key={q.id} className="hover:bg-slate-50/70 transition-colors">
+                                    <td className="py-3 px-4 font-mono font-bold text-primary-600">
+                                      {linkedReq?.requestNumber || 'REQ-Job'}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="font-bold text-slate-900">{q.vendorBusiness || q.vendorName || 'Contractor'}</div>
+                                      <div className="text-[10px] text-slate-400">{q.vendor?.phone || 'Verified Partner'}</div>
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-700 font-medium">
+                                      {linkedReq?.servicecode || 'Service Request'}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 text-sm">
+                                      ₹{(q.quotePrice || 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-600">
+                                      {q.estimatedTimeline || 'Standard'}
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-500 max-w-xs truncate" title={q.notes || ''}>
+                                      {q.notes || 'Standard BOQ proposal'}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        isAssigned
+                                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      }`}>
+                                        {isAssigned ? 'Awarded / Assigned' : 'Submitted (Under Review)'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right">
+                                      {linkedReq ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenVendorQuotesModal(linkedReq)}
+                                          className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition-all shadow-2xs inline-flex items-center gap-1"
+                                        >
+                                          <span>Review & Award</span>
+                                          <ArrowRight className="w-3 h-3" />
+                                        </button>
+                                      ) : (
+                                        <span className="text-slate-400 text-xs">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {quotationDeskTab === 'customer' && (
+                  <div className="space-y-4">
+
+                {/* Status Filter & Search Bar */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                    {[
+                      { id: 'ALL', label: 'All Quotes', count: quotations.length },
+                      { id: 'PENDING', label: 'Pending', count: pendingCount },
+                      { id: 'ACCEPTED', label: 'Accepted', count: acceptedCount },
+                      { id: 'REJECTED', label: 'Rejected', count: rejectedCount }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setQuotationFilterStatus(f.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                          quotationFilterStatus === f.id
+                            ? 'bg-brand-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <span>{f.label}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          quotationFilterStatus === f.id ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {f.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search quote #, client, phone..."
+                      value={quotationSearch}
+                      onChange={(e) => setQuotationSearch(e.target.value)}
+                      className="w-full pl-8 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                    {quotationSearch && (
+                      <button
+                        onClick={() => setQuotationSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {filteredQuotes.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
+                    <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <h3 className="font-heading font-semibold text-sm text-slate-700">No Quotations Found</h3>
+                    <p className="text-xs text-slate-400 mt-1">Try adjusting your filter or search query</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                    {filteredQuotes.map(q => {
+                      const lineItemsArray = Array.isArray(q.lineItem) ? q.lineItem : [];
+                      const grandTotalFormatted = (q.grandtotal || 0).toLocaleString('en-IN');
+                      return (
+                        <div key={q.id} className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                          <div className="space-y-3.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono font-bold text-sm sm:text-base text-brand-600 tracking-wide">{q.quoteNumber}</span>
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(q.status)}`}>{q.status}</span>
+                            </div>
+
+                            <div className="flex items-baseline justify-between gap-2">
+                              <div>
+                                <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900 tracking-tight">{q.request?.servicecode || 'Repair Quotation'}</h3>
+                                <div className="text-xs sm:text-sm text-slate-500 font-mono mt-0.5">{q.request?.requestNumber || ''}</div>
+                              </div>
+                              <div className="font-heading font-bold text-xl sm:text-2xl text-success-600 font-mono shrink-0">₹{grandTotalFormatted}</div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
+                              <div><strong className="text-slate-900">Client:</strong> {q.request?.user?.name || 'Customer'}</div>
+                              <div className="font-mono">{q.request?.user?.phoneNumber || 'N/A'}</div>
+                              <div><strong className="text-slate-900">Timeline:</strong> {q.estimatedTimeline || '1-2 Days'}</div>
+                              <div><strong className="text-slate-900">Scope:</strong> {q.service_scope || q.termsAndConditions || 'Standard Specifications'}</div>
+                            </div>
+
+                            <div className="text-xs sm:text-sm text-slate-600 font-normal">
+                              <strong className="text-slate-800">Scope ({lineItemsArray.length}):</strong> {lineItemsArray.map(li => li.item || li.description).slice(0, 2).join(', ')}{lineItemsArray.length > 2 ? '...' : ''}
+                            </div>
+                          </div>
+
+                          <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                onClick={() => openChatForQuotation(q)}
+                                className="px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
+                                title="Chat with Customer"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-primary-600" /> Chat
+                              </button>
+                              <button
+                                onClick={() => setActiveQuoteModal(q)}
+                                className="px-3 py-1.5 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
+                                title="View Quotation Details"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-brand-600" /> Details
+                              </button>
+                              {q.status !== 'ACCEPTED' && (
+                                <button
+                                  onClick={() => handleQuoteDecision(q.id, 'ACCEPTED')}
+                                  className="px-3 py-1.5 text-xs font-semibold text-success-700 bg-success-50 hover:bg-success-100 border border-success-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
+                                  title="Mark as Accepted"
+                                >
+                                  <Check className="w-3.5 h-3.5" /> Accept
+                                </button>
+                              )}
+                              {q.status !== 'REJECTED' && (
+                                <button
+                                  onClick={() => handleQuoteDecision(q.id, 'REJECTED')}
+                                  className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
+                                  title="Mark as Rejected"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Reject
+                                </button>
+                              )}
+                            </div>
+                            <button onClick={() => handleDeleteQuotation(q.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Delete quotation">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* VENDORS TAB - Multi-panel vendor quotation management */}
           {activeTab === 'vendors' && (
             <div className="space-y-5">
-              {/* Header */}
+              {viewVendorDetail && selectedVendorDetail ? (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  
+                  {/* 1. Breadcrumb & Action Bar (Clean SaaS design, Sidebar fully visible!) */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <button
+                        type="button"
+                        onClick={() => { setViewVendorDetail(false); setSelectedVendorDetail(null); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-all shadow-2xs"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Back to Vendor Network</span>
+                      </button>
+                      <span className="text-slate-300">/</span>
+                      <span className="text-slate-500 font-medium">Contractor Profile</span>
+                      <span className="text-slate-300">/</span>
+                      <span className="font-bold text-slate-900">{selectedVendorDetail.businessName || selectedVendorDetail.name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {selectedVendorDetail.phone && (
+                        <button
+                          type="button"
+                          onClick={() => openWhatsApp(selectedVendorDetail.phone, `Hello ${selectedVendorDetail.name}! This is Hipro Admin regarding your contractor profile.`)}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs transition-all"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>WhatsApp</span>
+                        </button>
+                      )}
+
+                      {selectedVendorDetail.phone && (
+                        <a
+                          href={`tel:${selectedVendorDetail.phone}`}
+                          className="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-all border border-slate-200/80"
+                        >
+                          <PhoneCall className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{selectedVendorDetail.phone}</span>
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingVendor(selectedVendorDetail);
+                          setVendorForm({ ...selectedVendorDetail });
+                          setVendorModalOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-all border border-slate-200/80"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Edit Profile</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. Clean Identity Card (Zero AI feel: clean white, professional slate typography) */}
+                  <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+                    <div className="flex items-start sm:items-center gap-4">
+                      <div className="relative shrink-0">
+                        <div className="w-16 h-16 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-heading font-extrabold text-2xl flex items-center justify-center shadow-xs overflow-hidden">
+                          {selectedVendorDetail.imageUrl ? (
+                            <img
+                              src={selectedVendorDetail.imageUrl}
+                              alt={selectedVendorDetail.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          ) : (
+                            (selectedVendorDetail.businessName || selectedVendorDetail.name || 'V').charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-white ${
+                          selectedVendorDetail.status === 'active' ? 'bg-emerald-500' :
+                          selectedVendorDetail.status === 'busy' ? 'bg-amber-500' : 'bg-rose-500'
+                        }`} title={`Status: ${selectedVendorDetail.status || 'active'}`} />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h2 className="text-xl sm:text-2xl font-heading font-bold text-slate-900 tracking-tight">
+                            {selectedVendorDetail.businessName || selectedVendorDetail.name}
+                          </h2>
+
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-500" />
+                            <span>{selectedVendorDetail.city || 'Regional Hub'}</span>
+                          </span>
+
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
+                            {selectedVendorDetail.category || 'Services'}
+                          </span>
+
+                          {selectedVendorDetail.documentsVerified ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>KYC Verified</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                              <span>KYC Pending</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+                          <span>Contact Person: <strong className="text-slate-800">{selectedVendorDetail.name}</strong></span>
+                          <span>•</span>
+                          <span className="text-slate-700 font-medium">{selectedVendorDetail.specialization || 'General Contractor'}</span>
+                          <span>•</span>
+                          <span>Experience: <strong className="text-slate-800">{selectedVendorDetail.experience || '3+ Years'}</strong></span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* KYC Approval and Status Controls */}
+                    <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                      <button
+                        type="button"
+                        disabled={isVerifyingKYC}
+                        onClick={() => handleToggleVendorKYCStatus(selectedVendorDetail.id, selectedVendorDetail.documentsVerified)}
+                        className={`px-3.5 py-2 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-2xs ${
+                          selectedVendorDetail.documentsVerified
+                            ? 'bg-white hover:bg-rose-50 text-rose-700 border border-rose-200'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>{selectedVendorDetail.documentsVerified ? 'Revoke KYC' : 'Approve KYC'}</span>
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-slate-500">Status:</span>
+                        <select
+                          value={selectedVendorDetail.status || 'active'}
+                          onChange={(e) => handleQuickUpdateVendorStatus(selectedVendorDetail.id, e.target.value)}
+                          disabled={isUpdatingVendorStatus}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-2xs"
+                        >
+                          <option value="active">🟢 Active</option>
+                          <option value="busy">🟡 Busy (At Capacity)</option>
+                          <option value="inactive">🔴 Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Clean Standard KPI Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                    {/* Rating */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contractor Rating</span>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-amber-500 text-base">★</span>
+                        <span className="text-lg font-mono font-extrabold text-slate-900">{selectedVendorDetail.rating || 4.8}</span>
+                        <span className="text-xs text-slate-400">/ 5.0</span>
+                      </div>
+                    </div>
+
+                    {/* Active Workload */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Workload</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                          {selectedVendorDetail.capacity || 'SMALL'}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between mt-1">
+                        <span className="text-base font-mono font-extrabold text-slate-900">
+                          {selectedVendorDetail.currentJobCount || 0} / {selectedVendorDetail.maxConcurrentJobs || 5}
+                        </span>
+                        <span className="text-[10px] text-slate-400">jobs</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-2">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            (selectedVendorDetail.currentJobCount || 0) >= (selectedVendorDetail.maxConcurrentJobs || 5)
+                              ? 'bg-rose-500'
+                              : 'bg-primary-600'
+                          }`}
+                          style={{ width: `${Math.min(100, (((selectedVendorDetail.currentJobCount || 0) / (selectedVendorDetail.maxConcurrentJobs || 5)) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Assigned Won Jobs */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Won Jobs</span>
+                      <div className="text-lg font-mono font-extrabold text-slate-900 mt-1">
+                        {(selectedVendorDetail.assignedJobs || []).length}
+                      </div>
+                      <span className="text-[10px] text-slate-400">awarded projects</span>
+                    </div>
+
+                    {/* Quotation Bids */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Quotation Bids</span>
+                      <div className="text-lg font-mono font-extrabold text-slate-900 mt-1">
+                        {(selectedVendorDetail.vendorQuotes || []).length}
+                      </div>
+                      <span className="text-[10px] text-slate-400">submitted proposals</span>
+                    </div>
+
+                    {/* Shared Leads */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs col-span-2 sm:col-span-4 lg:col-span-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Shared Leads</span>
+                      <div className="text-lg font-mono font-extrabold text-slate-900 mt-1">
+                        {(selectedVendorDetail.sharedRequests || []).length}
+                      </div>
+                      <span className="text-[10px] text-slate-400">inspection dispatch</span>
+                    </div>
+                  </div>
+
+                  {/* 4. Clean Tab Navigation Bar */}
+                  <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs px-4 flex items-center gap-2 overflow-x-auto">
+                    {[
+                      { id: 'overview', label: 'Overview & Profile', icon: UserCheck },
+                      { id: 'kyc', label: 'KYC & Government Documents', icon: ShieldCheck, status: selectedVendorDetail.documentsVerified ? 'Verified' : 'Pending' },
+                      { id: 'jobs', label: 'Assigned Won Projects', icon: HardHat, count: (selectedVendorDetail.assignedJobs || []).length },
+                      { id: 'quotes', label: 'Quotation History', icon: Tag, count: (selectedVendorDetail.vendorQuotes || []).length },
+                      { id: 'shared', label: 'Shared Leads', icon: Share2, count: (selectedVendorDetail.sharedRequests || []).length },
+                    ].map(tab => {
+                      const isSel = vendorDetailTab === tab.id;
+                      const Icon = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setVendorDetailTab(tab.id)}
+                          className={`py-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                            isSel
+                              ? 'border-primary-600 text-primary-700'
+                              : 'border-transparent text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 ${isSel ? 'text-primary-600' : 'text-slate-400'}`} />
+                          <span>{tab.label}</span>
+                          {tab.count !== undefined && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isSel ? 'bg-primary-100 text-primary-800' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {tab.count}
+                            </span>
+                          )}
+                          {tab.status && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              tab.status === 'Verified'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {tab.status}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 5. Clean Tab Contents */}
+                  {/* TAB 1: OVERVIEW */}
+                  {vendorDetailTab === 'overview' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                            <Briefcase className="w-4 h-4 text-primary-600" />
+                            <span>Business & Trade Credentials</span>
+                          </h4>
+                          <span className="text-[11px] font-semibold text-slate-400 font-mono">
+                            ID: {selectedVendorDetail.id}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5 text-xs">
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Business / Firm:</span>
+                            <span className="font-bold text-slate-800">{selectedVendorDetail.businessName || 'Independent Contractor'}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Contact Person:</span>
+                            <span className="font-semibold text-slate-800">{selectedVendorDetail.name}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Trade Category:</span>
+                            <span className="font-semibold text-primary-700">{selectedVendorDetail.category || 'Services'}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Core Specialization:</span>
+                            <span className="font-semibold text-slate-800">{selectedVendorDetail.specialization || 'Waterproofing & Civil Repairs'}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Field Experience:</span>
+                            <span className="font-semibold text-slate-800">{selectedVendorDetail.experience || '3+ Years'}</span>
+                          </div>
+                          <div className="flex justify-between py-1">
+                            <span className="text-slate-500">Base Service / Inspection Fee:</span>
+                            <span className="font-mono font-bold text-slate-900">₹{selectedVendorDetail.minCharge || 500}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-primary-600" />
+                            <span>Contact & Operational Reach</span>
+                          </h4>
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {selectedVendorDetail.city || 'Bhilwara'} Hub
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5 text-xs">
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Operational Hub:</span>
+                            <span className="font-bold text-slate-800">{selectedVendorDetail.city || 'Bhilwara'}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Primary Phone:</span>
+                            <a href={`tel:${selectedVendorDetail.phone}`} className="font-mono font-bold text-primary-600 hover:underline">
+                              {selectedVendorDetail.phone || 'None'}
+                            </a>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Registered Email:</span>
+                            <span className="font-mono text-slate-700">{selectedVendorDetail.email || 'None on file'}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Work Capacity Tier:</span>
+                            <span className="font-bold text-slate-800">{selectedVendorDetail.capacity || 'SMALL'}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-50">
+                            <span className="text-slate-500">Max Concurrent Jobs:</span>
+                            <span className="font-mono font-bold text-slate-800">{selectedVendorDetail.maxConcurrentJobs || 5} concurrent</span>
+                          </div>
+                          <div className="flex justify-between py-1">
+                            <span className="text-slate-500">Geographic Reach:</span>
+                            <span className="text-slate-600">{selectedVendorDetail.city || 'Bhilwara'} & 35km Radius</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: KYC */}
+                  {vendorDetailTab === 'kyc' && (
+                    <div className="space-y-5">
+                      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                        selectedVendorDetail.documentsVerified
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                          : 'bg-amber-50 border-amber-200 text-amber-900'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          {selectedVendorDetail.documentsVerified ? (
+                            <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                          ) : (
+                            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                          )}
+                          <div className="text-xs">
+                            <span className="font-bold block">
+                              {selectedVendorDetail.documentsVerified ? 'KYC Verification Approved' : 'KYC Verification Pending'}
+                            </span>
+                            <span className="opacity-80">
+                              {selectedVendorDetail.documentsVerified
+                                ? 'All government identities and bank credentials have been approved.'
+                                : 'Review the uploaded documents below to verify this contractor.'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={isVerifyingKYC}
+                          onClick={() => handleToggleVendorKYCStatus(selectedVendorDetail.id, selectedVendorDetail.documentsVerified)}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all shrink-0 ${
+                            selectedVendorDetail.documentsVerified
+                              ? 'bg-white hover:bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>{selectedVendorDetail.documentsVerified ? 'Revoke KYC' : 'Approve KYC'}</span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        {/* Aadhaar */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-3">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <Shield className="w-4 h-4 text-primary-600" />
+                                <span>Aadhaar Card</span>
+                              </span>
+                              {selectedVendorDetail.aadhaarNumber ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Uploaded</span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">Missing</span>
+                              )}
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                              <span className="text-[11px] text-slate-400 block font-semibold">Aadhaar Number</span>
+                              <span className="font-mono font-bold text-xs text-slate-800">{selectedVendorDetail.aadhaarNumber || 'Not Uploaded'}</span>
+                            </div>
+                          </div>
+                          {selectedVendorDetail.aadhaarUrl ? (
+                            <a href={selectedVendorDetail.aadhaarUrl} target="_blank" rel="noreferrer" className="w-full py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all border border-slate-200/60">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>View Document Scan</span>
+                            </a>
+                          ) : (
+                            <div className="text-center py-2 text-xs text-slate-400 italic">No document scan uploaded</div>
+                          )}
+                        </div>
+
+                        {/* PAN */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-3">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <FileText className="w-4 h-4 text-primary-600" />
+                                <span>PAN Card</span>
+                              </span>
+                              {selectedVendorDetail.panNumber ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Uploaded</span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">Missing</span>
+                              )}
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                              <span className="text-[11px] text-slate-400 block font-semibold">PAN Number</span>
+                              <span className="font-mono font-bold text-xs text-slate-800">{selectedVendorDetail.panNumber || 'Not Uploaded'}</span>
+                            </div>
+                          </div>
+                          {selectedVendorDetail.panUrl ? (
+                            <a href={selectedVendorDetail.panUrl} target="_blank" rel="noreferrer" className="w-full py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all border border-slate-200/60">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>View Document Scan</span>
+                            </a>
+                          ) : (
+                            <div className="text-center py-2 text-xs text-slate-400 italic">No document scan uploaded</div>
+                          )}
+                        </div>
+
+                        {/* Bank */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-3">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <Receipt className="w-4 h-4 text-primary-600" />
+                                <span>Bank Account</span>
+                              </span>
+                              {selectedVendorDetail.bankPassbookUrl ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Uploaded</span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">Missing</span>
+                              )}
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                              <span className="text-[11px] text-slate-400 block font-semibold">Bank Passbook / Cheque</span>
+                              <span className="font-mono font-bold text-xs text-slate-800">{selectedVendorDetail.bankPassbookUrl ? 'Passbook Scan on file' : 'Not Uploaded'}</span>
+                            </div>
+                          </div>
+                          {selectedVendorDetail.bankPassbookUrl ? (
+                            <a href={selectedVendorDetail.bankPassbookUrl} target="_blank" rel="noreferrer" className="w-full py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all border border-slate-200/60">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>View Passbook Scan</span>
+                            </a>
+                          ) : (
+                            <div className="text-center py-2 text-xs text-slate-400 italic">No document scan uploaded</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: ASSIGNED WON PROJECTS */}
+                  {vendorDetailTab === 'jobs' && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-slate-900">Assigned Won Projects</h4>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          {(selectedVendorDetail.assignedJobs || []).length} Total Projects
+                        </span>
+                      </div>
+                      {(selectedVendorDetail.assignedJobs || []).length === 0 ? (
+                        <div className="bg-white p-8 rounded-xl border border-slate-200/90 text-center space-y-2">
+                          <HardHat className="w-6 h-6 text-slate-400 mx-auto" />
+                          <h5 className="font-bold text-slate-700 text-xs">No Projects Assigned Yet</h5>
+                          <p className="text-xs text-slate-400">Share customer inspection requests with this vendor to assign projects.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(selectedVendorDetail.assignedJobs || []).map(job => (
+                            <div key={job.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-100">#{job.trackingid || job.id.slice(0, 8)}</span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-700">{job.status}</span>
+                              </div>
+                              <h5 className="font-bold text-slate-900 text-xs">{job.customername || 'Customer'}</h5>
+                              <p className="text-xs text-slate-500">{job.addressline || job.location || selectedVendorDetail.city}</p>
+                              <div className="text-xs font-bold text-slate-900">Awarded: ₹{job.assignedPrice || job.estimatedBudget || 0}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 4: QUOTATION HISTORY */}
+                  {vendorDetailTab === 'quotes' && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-slate-900">Quotation History</h4>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          {(selectedVendorDetail.vendorQuotes || []).length} Submitted
+                        </span>
+                      </div>
+                      {(selectedVendorDetail.vendorQuotes || []).length === 0 ? (
+                        <div className="bg-white p-8 rounded-xl border border-slate-200/90 text-center space-y-2">
+                          <Tag className="w-6 h-6 text-slate-400 mx-auto" />
+                          <h5 className="font-bold text-slate-700 text-xs">No Quotations Submitted Yet</h5>
+                          <p className="text-xs text-slate-400">Quotes submitted on shared requests will appear here.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {(selectedVendorDetail.vendorQuotes || []).map(q => (
+                            <div key={q.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-4">
+                              <div>
+                                <span className="font-mono text-xs font-bold text-slate-700">Request #{q.requestId?.slice(0, 8)}</span>
+                                <p className="text-xs text-slate-600 mt-0.5">{q.scopeOfWork || 'Quotation bid'}</p>
+                                <span className="text-[11px] text-slate-400">{q.timelineDays ? `${q.timelineDays} Days` : 'Immediate'}</span>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-mono font-bold text-base text-slate-900">₹{q.quotePrice || 0}</div>
+                                <span className="text-[10px] font-bold uppercase text-slate-500">{q.status}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 5: SHARED LEADS */}
+                  {vendorDetailTab === 'shared' && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-slate-900">Shared Leads</h4>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          {(selectedVendorDetail.sharedRequests || []).length} Dispatched
+                        </span>
+                      </div>
+                      {(selectedVendorDetail.sharedRequests || []).length === 0 ? (
+                        <div className="bg-white p-8 rounded-xl border border-slate-200/90 text-center space-y-2">
+                          <Share2 className="w-6 h-6 text-slate-400 mx-auto" />
+                          <h5 className="font-bold text-slate-700 text-xs">No Leads Shared Yet</h5>
+                          <p className="text-xs text-slate-400">Share inspection requests from the Inspection Requests desk.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {(selectedVendorDetail.sharedRequests || []).map(sr => (
+                            <div key={sr.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-4">
+                              <div>
+                                <span className="font-mono text-xs font-bold text-slate-900">Request #{sr.requestId?.slice(0, 8)}</span>
+                                <p className="text-xs text-slate-600">{sr.request?.servicecode || 'Inspection Request'}</p>
+                                <span className="text-[11px] text-slate-400">Shared {new Date(sr.sharedAt).toLocaleDateString('en-IN')}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewVendorDetail(false);
+                                  setActiveTab('requests');
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all"
+                              >
+                                View in Requests
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              ) : (
+                <>
+                {/* Header */}
               <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="font-heading font-semibold text-lg text-slate-800">Vendor Network & Quotation Assignment</h2>
@@ -3954,23 +6141,39 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 </div>
               </div>
 
-              {/* Tabs: Manage Vendors | Quote to Vendors */}
-              <div className="flex gap-1 border-b border-slate-200/50 pb-2">
+              {/* VENDOR MANAGEMENT TABS - High Priority */}
+              <div className="flex gap-1 border-b border-slate-200/50 pb-2 overflow-x-auto">
                 <button
-                  onClick={() => { setShowVendorPanel(false); setQuoteRequestId(null); }}
-                  className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all ${
-                    !showVendorPanel ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                  onClick={() => { setShowVendorPanel(false); setQuoteRequestId(null); setVendorComparisonMode(false); }}
+                  className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    !showVendorPanel && !vendorComparisonMode ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  Manage Vendors
+                  👥 Manage Vendors
+                </button>
+                <button
+                  onClick={() => { setVendorComparisonMode(true); setShowVendorPanel(false); setQuoteRequestId(null); }}
+                  className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    vendorComparisonMode ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  ⚖️ Vendor Comparison
+                </button>
+                <button
+                  onClick={() => { setVendorComparisonMode(false); setShowVendorPanel(false); setQuoteRequestId(null); }}
+                  className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    !vendorComparisonMode && !showVendorPanel && quoteRequestId === null ? 'bg-accent-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  💰 Quotation History
                 </button>
                 <button
                   onClick={() => setShowVendorPanel(true)}
-                  className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all ${
+                  className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all whitespace-nowrap ${
                     showVendorPanel ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  Share Request → Collect Quotes
+                  📋 Share Request → Collect Quotes
                 </button>
               </div>
 
@@ -3981,70 +6184,88 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-brand-600" />
                       <h3 className="font-heading font-bold text-sm text-slate-800">
-                        Vendor Categories
+                        Vendor Category Filter
                       </h3>
                     </div>
                     <span className="text-[11px] text-slate-400">
-                      Filter verified contractors by domain specialization
+                      Filter verified contractors by domain category and specialization
                     </span>
                   </div>
 
-                  {/* Category Cards Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setVendorCategoryFilter('ALL')}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                        vendorCategoryFilter === 'ALL'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">All Domains</div>
-                      <div className="mt-2 flex items-baseline justify-between">
-                        <span className="font-bold text-xs truncate">All Vendors</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          vendorCategoryFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {vendors.length}
-                        </span>
-                      </div>
-                    </button>
+                  {/* Primary Domain Category Buttons (Dynamic) */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(domainTabs.length > 0 ? domainTabs : [
+                      { id: 'ALL', name: 'All Domains', count: vendors.length, color: '#0f172a' },
+                      { id: 'Services', name: 'Home & Civil Services', count: 0, color: '#3b82f6' },
+                      { id: 'Adventure', name: 'Adventure & Sports Operators', count: 0, color: '#f43f5e' },
+                    ]).map(tab => {
+                      const isSelected = vendorCategoryFilter === tab.id;
+                      const tabCount = tab.id === 'ALL'
+                        ? vendors.length
+                        : tab.id === 'Services'
+                          ? vendors.filter(v => (v.category || '').toLowerCase() !== 'adventure' && !(v.category || '').toLowerCase().includes('adventure')).length
+                          : tab.id === 'Adventure'
+                            ? vendors.filter(v => (v.category || '').toLowerCase() === 'adventure' || (v.category || '').toLowerCase().includes('adventure')).length
+                            : tab.count;
 
-                    {[
-                      { id: 'waterproofing', name: 'Waterproofing', match: 'waterproof', color: '#0284c7' },
-                      { id: 'civil', name: 'Civil & Masonry', match: 'civil', color: '#6366f1' },
-                      { id: 'plumbing', name: 'Plumbing', match: 'plumb', color: '#0d9488' },
-                      { id: 'electrical', name: 'Electrical', match: 'electr', color: '#eab308' },
-                      { id: 'painting', name: 'Painting', match: 'paint', color: '#ec4899' },
-                      { id: 'renovation', name: 'Renovation', match: 'reno', color: '#8b5cf6' },
-                      { id: 'adventure', name: 'Adventure Ops', match: 'adventure', color: '#e11d48' },
-                    ].map(cat => {
-                      const count = vendors.filter(v =>
-                        (v.specialization || '').toLowerCase().includes(cat.match)
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setVendorCategoryFilter(tab.id)}
+                          className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 border ${
+                            isSelected ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{tab.name}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {tabCount}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Specific Specialization Pills Grid (Dynamic & Smaller) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-1.5">
+                    {(categoryPills.length > 0 ? categoryPills : [
+                      { id: 'waterproofing', name: 'Waterproofing', slug: 'waterproofing', color: '#0284c7', vendorCount: 0 },
+                      { id: 'civil', name: 'Civil & Masonry', slug: 'civil', color: '#6366f1', vendorCount: 0 },
+                      { id: 'plumbing', name: 'Plumbing', slug: 'plumbing', color: '#0d9488', vendorCount: 0 },
+                      { id: 'electrical', name: 'Electrical', slug: 'electrical', color: '#eab308', vendorCount: 0 },
+                      { id: 'painting', name: 'Painting', slug: 'painting', color: '#ec4899', vendorCount: 0 },
+                      { id: 'paragliding', name: 'Paragliding', slug: 'paragliding', color: '#f43f5e', vendorCount: 0 },
+                      { id: 'safari', name: 'Desert Safari', slug: 'safari', color: '#f97316', vendorCount: 0 },
+                      { id: 'rafting', name: 'River Rafting', slug: 'rafting', color: '#06b6d4', vendorCount: 0 },
+                    ]).map(cat => {
+                      const count = cat.vendorCount || vendors.filter(v =>
+                        (v.specialization || '').toLowerCase().includes((cat.slug || cat.id || '').toLowerCase()) ||
+                        (v.category || '').toLowerCase().includes((cat.slug || cat.id || '').toLowerCase())
                       ).length;
-                      const isSelected = vendorCategoryFilter === cat.match;
+                      const isSelected = vendorCategoryFilter.toLowerCase() === (cat.slug || cat.id || '').toLowerCase();
 
                       return (
                         <button
                           key={cat.id}
                           type="button"
-                          onClick={() => setVendorCategoryFilter(isSelected ? 'ALL' : cat.match)}
-                          className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          onClick={() => setVendorCategoryFilter(isSelected ? 'ALL' : (cat.slug || cat.id || ''))}
+                          className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 ${
                             isSelected
-                              ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                              : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
+                              ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
                               isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                             }`}>
                               {count}
                             </span>
                           </div>
-                          <div className="mt-2 font-bold text-xs truncate">
+                          <div className="mt-1 font-bold text-[9px] truncate leading-tight">
                             {cat.name}
                           </div>
                         </button>
@@ -4061,7 +6282,9 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-brand-600" />
                       <span className="font-semibold text-slate-700 text-sm">
-                        {vendorCategoryFilter === 'ALL' ? 'Connected Local Vendors' : `Vendors (${vendorCategoryFilter})`}
+                        {vendorCategoryFilter === 'ALL'
+                          ? 'Connected Vendors'
+                          : `Vendors (Filtered: ${vendorCategoryFilter})`}
                       </span>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
                         {vendors.filter(v => {
@@ -4069,11 +6292,21 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             (v.name || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.businessName || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.city || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
+                            (v.category || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.specialization || '').toLowerCase().includes(globalSearch.toLowerCase());
-                          const matchesCategory = vendorCategoryFilter === 'ALL' ||
-                            (v.specialization || '').toLowerCase().includes(vendorCategoryFilter.toLowerCase());
+
+                          let matchesCategory = true;
+                          if (vendorCategoryFilter !== 'ALL') {
+                            const filterLower = vendorCategoryFilter.toLowerCase();
+                            matchesCategory =
+                              (v.category || '').toLowerCase() === filterLower ||
+                              (v.category || '').toLowerCase().includes(filterLower) ||
+                              (v.specialization || '').toLowerCase().includes(filterLower);
+                          }
+
                           const matchesCity = vendorCityFilter === 'ALL' ||
                             (v.city || '').toLowerCase() === vendorCityFilter.toLowerCase();
+
                           return matchesSearch && matchesCategory && matchesCity;
                         }).length}
                       </span>
@@ -4109,10 +6342,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
                           <th className="py-3 px-4 font-semibold text-slate-700">Vendor & Business</th>
                           <th className="py-3 px-4 font-semibold text-slate-700">Contact</th>
-                          <th className="py-3 px-4 font-semibold text-slate-700">Category / Specialization</th>
+                          <th className="py-3 px-4 font-semibold text-slate-700">Category & Domain</th>
                           <th className="py-3 px-4 font-semibold text-slate-700">City & Experience</th>
                           <th className="py-3 px-4 font-semibold text-slate-700">Rating</th>
                           <th className="py-3 px-4 font-semibold text-slate-700 text-right">Status</th>
+                          <th className="py-3 px-4 font-semibold text-slate-700 text-center">Priority</th>
                           <th className="py-3 px-4 font-semibold text-slate-700 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -4122,21 +6356,42 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             (v.name || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.businessName || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.city || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
+                            (v.category || '').toLowerCase().includes(globalSearch.toLowerCase()) ||
                             (v.specialization || '').toLowerCase().includes(globalSearch.toLowerCase());
-                          const matchesCategory = vendorCategoryFilter === 'ALL' ||
-                            (v.specialization || '').toLowerCase().includes(vendorCategoryFilter.toLowerCase());
+
+                          let matchesCategory = true;
+                          if (vendorCategoryFilter !== 'ALL') {
+                            const filterLower = vendorCategoryFilter.toLowerCase();
+                            matchesCategory =
+                              (v.category || '').toLowerCase() === filterLower ||
+                              (v.category || '').toLowerCase().includes(filterLower) ||
+                              (v.specialization || '').toLowerCase().includes(filterLower);
+                          }
+
                           const matchesCity = vendorCityFilter === 'ALL' ||
                             (v.city || '').toLowerCase() === vendorCityFilter.toLowerCase();
+
                           return matchesSearch && matchesCategory && matchesCity;
                         }).map(vendor => (
-                          <tr key={vendor.id} className="hover:bg-slate-50/60 transition-all">
+                          <tr key={vendor.id} onClick={() => handleOpenVendorDetail(vendor)} className="hover:bg-slate-50/80 transition-all cursor-pointer group" title="Click to view full vendor profile & KYC">
                             <td className="py-4 px-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm overflow-hidden">
+                              <div
+                                onClick={() => handleOpenVendorDetail(vendor)}
+                                className="flex items-center gap-3 cursor-pointer group"
+                                title="Click to view full vendor profile & KYC"
+                              >
+                                <div className={`w-10 h-10 rounded-xl ${
+                                  (vendor.category || '').toLowerCase().includes('adventure')
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-primary-100 text-primary-700'
+                                } flex items-center justify-center font-bold text-sm overflow-hidden group-hover:scale-105 transition-transform`}>
                                   {vendor.name.charAt(0)}
                                 </div>
                                 <div>
-                                  <div className="font-semibold text-slate-900">{vendor.name}</div>
+                                  <div className="font-semibold text-slate-900 group-hover:text-primary-600 transition-colors flex items-center gap-1">
+                                    <span>{vendor.name}</span>
+                                    <ExternalLink className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </div>
                                   <div className="text-[10px] text-slate-500">{vendor.businessName}</div>
                                 </div>
                               </div>
@@ -4148,9 +6403,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               <div className="text-[10px] text-slate-400 mt-0.5">{vendor.email}</div>
                             </td>
                             <td className="py-4 px-4">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200">
-                                {vendor.specialization}
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                  (vendor.category || '').toLowerCase().includes('adventure')
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}>
+                                  {(vendor.category || '').toLowerCase().includes('adventure') ? '🪂 Adventure' : '🛠️ Services'}
+                                </span>
+                                <span className="text-slate-600 font-medium text-xs">
+                                  {vendor.specialization}
+                                </span>
+                              </div>
                             </td>
                             <td className="py-4 px-4">
                               <div className="text-slate-700 font-medium">{vendor.city}</div>
@@ -4162,7 +6426,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                 <span className="font-semibold text-slate-800">{vendor.rating}</span>
                               </div>
                             </td>
-                            <td className="py-4 px-4 text-right">
+                            <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={() => handleToggleVendorStatus(vendor)}
                                 className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
@@ -4174,7 +6438,25 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                 {vendor.status === 'active' ? 'Active' : 'Inactive'}
                               </button>
                             </td>
-                            <td className="py-4 px-4 text-right">
+                            <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleToggleVendorPriority(vendor.id)}
+                                className={`w-10 h-5 rounded-full px-3 py-1 transition-all ${
+                                  priorityVendors.includes(vendor.id)
+                                    ? 'bg-amber-400 border-amber-400'
+                                    : 'bg-slate-200 border-slate-200'
+                                }`}
+                              >
+                                <span
+                                  className={`w-3 h-3 rounded-full transition-transform ${
+                                    priorityVendors.includes(vendor.id)
+                                      ? 'translate-x-2 bg-white'
+                                      : 'translate-x-1 bg-slate-400'
+                                  }`}
+                                />
+                              </button>
+                            </td>
+                            <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   onClick={() => { setEditingVendor(vendor); setVendorForm({ ...vendor }); setVendorModalOpen(true); }}
@@ -4205,6 +6487,266 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         )}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ============ VENDOR COMPARISON VIEW ============ */}
+              {vendorComparisonMode && (
+                <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="p-4 border-b border-slate-200/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Scale className="w-5 h-5 text-accent-600" />
+                      <div>
+                        <h3 className="font-heading font-bold text-base text-slate-800">Vendor Comparison & Selection</h3>
+                        <p className="text-[11px] text-slate-500">Compare vendors side-by-side to select the best partner for customer assignments.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setVendorComparisonMode(false)}
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-1.5"
+                      >
+                        <ArrowLeft className="w-3 h-3" />
+                        <span>Back to Manage</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Vendor Comparison Cards */}
+                  <div className="p-4">
+                    {vendors.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <Scale className="w-8 h-8 mx-auto text-slate-300 mb-3" />
+                        <p className="font-semibold text-sm text-slate-600">No vendors to compare</p>
+                        <p className="text-xs text-slate-400">Connect vendors first to enable comparison.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {vendors.map(v => {
+                          const stats = vendorPerformanceStats[v.id] || {};
+                          const totalQuotes = stats.totalQuotes || 0;
+                          const assignedCount = stats.assignedCount || 0;
+                          const winRate = totalQuotes > 0 ? Math.round((assignedCount / totalQuotes) * 100) : 0;
+                          const avgQuoteValue = totalQuotes > 0 ? Math.round(stats.totalValue / totalQuotes) : 0;
+                          const isSelected = selectedVendorsForComparison.includes(v.id);
+
+                          return (
+                            <div
+                              key={v.id}
+                              onClick={() => handleOpenVendorDetail(v)}
+                              className={`p-4 rounded-xl border transition-all cursor-pointer group hover:border-primary-400 hover:shadow-md ${
+                                isSelected
+                                  ? 'bg-accent-50 border-accent-200 shadow-sm'
+                                  : 'bg-white border-slate-200/80'
+                              }`}
+                              title="Click card to view full contractor profile & KYC"
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div
+                                  onClick={() => handleOpenVendorDetail(v)}
+                                  className="flex items-center gap-2.5 cursor-pointer group"
+                                  title="Click to view full contractor profile & KYC"
+                                >
+                                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-600 to-indigo-700 text-white flex items-center justify-center font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
+                                    {v.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="font-heading font-bold text-slate-900 text-sm group-hover:text-primary-600 transition-colors flex items-center gap-1">
+                                      <span>{v.businessName || v.name}</span>
+                                      <ExternalLink className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    <div className="text-[11px] text-slate-500">Owner: {v.name}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isSelected) {
+                                      setSelectedVendorsForComparison(selectedVendorsForComparison.filter(id => id !== v.id));
+                                    } else {
+                                      setSelectedVendorsForComparison([...selectedVendorsForComparison, v.id]);
+                                    }
+                                  }}
+                                  className={`w-5 h-5 rounded-full transition-all ${
+                                    isSelected
+                                      ? 'bg-accent-600 text-white'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  } flex items-center justify-center`}
+                                >
+                                  {isSelected ? (
+                                    <Check className="w-3 h-3" />
+                                  ) : (
+                                    <Plus className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+
+                              <div className="space-y-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase">Category</div>
+                                    <div className="text-sm font-semibold text-slate-800">{v.specialization}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase">City</div>
+                                    <div className="text-sm font-semibold text-slate-800">{v.city}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase">Experience</div>
+                                    <div className="text-sm font-semibold text-slate-800">{v.experience}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase">Rating</div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-yellow-500 text-xs">★</span>
+                                      <span className="text-sm font-bold text-slate-800">{v.rating}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="bg-slate-50 rounded-lg p-3 mt-2">
+                                  <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Performance Metrics</div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <div className="text-xs font-bold text-success-700">{winRate}%</div>
+                                      <div className="text-[10px] text-slate-500">Win Rate</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold text-brand-700">{totalQuotes}</div>
+                                      <div className="text-[10px] text-slate-500">Quotes Submitted</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold text-warning-700">{assignedCount}</div>
+                                      <div className="text-[10px] text-slate-500">Jobs Assigned</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold text-slate-700">₹{avgQuoteValue}</div>
+                                      <div className="text-[10px] text-slate-500">Avg Quote Value</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 text-xs">
+                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    v.status === 'active'
+                                      ? 'bg-success-50 text-success-700 border-success-200'
+                                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                                  }`}>
+                                    {v.status === 'active' ? 'Active' : 'Inactive'}
+                                  </span>
+                                  {v.documentsVerified ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60 flex items-center gap-1">
+                                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                      <span>KYC Verified</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                      <span>KYC Pending</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ============ QUOTATION HISTORY VIEW ============ */}
+              {!vendorComparisonMode && !showVendorPanel && quoteRequestId === null && (
+                <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="p-4 border-b border-slate-200/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <FileCheck2 className="w-4 h-4 text-accent-600" />
+                      <div>
+                        <h3 className="font-heading font-bold text-base text-slate-800">Vendor Quotation History</h3>
+                        <p className="text-[11px] text-slate-500">All quotations submitted by vendors for customer requests.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setVendorComparisonMode(false)}
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-1.5"
+                      >
+                        <ArrowLeft className="w-3 h-3" />
+                        <span>Back to Manage</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    {vendorQuotesHistory.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <FileCheck2 className="w-8 h-8 mx-auto text-slate-300 mb-3" />
+                        <p className="font-semibold text-sm text-slate-600">No quotations submitted yet</p>
+                        <p className="text-xs text-slate-400">Vendor quotations will appear here once vendors submit prices for customer requests.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                              <th className="py-3 px-4">Request #</th>
+                              <th className="py-3 px-4">Vendor</th>
+                              <th className="py-3 px-4 text-right">Quote Price (₹)</th>
+                              <th className="py-3 px-4">Timeline</th>
+                              <th className="py-3 px-4">Status</th>
+                              <th className="py-3 px-4 text-right">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {vendorQuotesHistory.map(q => {
+                              const vendor = vendors.find(v => v.id === q.vendorId);
+                              return (
+                                <tr key={q.id} className="hover:bg-slate-50/60 transition-all">
+                                  <td className="py-4 px-4 font-mono font-bold text-slate-800">
+                                    {q.requestNumber || q.requestId}
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-accent-100 text-accent-600 flex items-center justify-center text-[10px] font-bold">
+                                        {vendor?.name.charAt(0).toUpperCase() || 'V'}
+                                      </div>
+                                      <div className="text-sm font-semibold text-slate-900">{vendor?.name || 'Unknown Vendor'}</div>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4 font-mono text-right">
+                                    <span className={`font-bold ${q.status === 'assigned' ? 'text-success-700' : 'text-brand-700'}`}>
+                                      ₹{(q.quotePrice || 0).toLocaleString('en-IN')}
+                                    </span>
+                                  </td>
+                                  <td className="py-4 px-4 text-slate-600">
+                                    {q.estimatedTimeline || '1-2 Days'}
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      q.status === 'assigned'
+                                        ? 'bg-success-50 text-success-700 border-success-200'
+                                        : q.status === 'submitted'
+                                          ? 'bg-accent-50 text-accent-700 border-accent-200'
+                                          : q.status === 'rejected'
+                                            ? 'bg-danger-50 text-danger-700 border-danger-200'
+                                            : 'bg-slate-50 text-slate-600 border-slate-200'
+                                    }`}>
+                                      {q.status}
+                                    </span>
+                                  </td>
+                                  <td className="py-4 px-4 text-slate-500 text-right">
+                                    {q.createdAt ? new Date(q.createdAt).toLocaleDateString('en-IN') : '-'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -4451,8 +6993,9 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
                 </div>
               )}
-
-              {/* Vendor Add/Edit Modal */}
+                </>
+              )}
+{/* Vendor Add/Edit Modal */}
               {vendorModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setVendorModalOpen(false)} />
@@ -4522,23 +7065,49 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vendor Category *</label>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Domain Category *</label>
                           <select
-                            name="specialization"
-                            value={vendorForm.specialization}
-                            onChange={(e) => setVendorForm(prev => ({ ...prev, specialization: e.target.value }))}
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-medium"
+                            name="category"
+                            value={vendorForm.category || 'Services'}
+                            onChange={(e) => {
+                              const newCat = e.target.value;
+                              setVendorForm(prev => ({
+                                ...prev,
+                                category: newCat,
+                                specialization: newCat === 'Adventure' ? 'Paragliding & Microlight Flights' : 'Waterproofing & Leakage'
+                              }));
+                            }}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-semibold"
                           >
+                            <option value="Services">🛠️ Home & Civil Services</option>
+                            <option value="Adventure">🪂 Adventure & Sports Operator</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Specialization *</label>
+                        <select
+                          name="specialization"
+                          value={vendorForm.specialization}
+                          onChange={(e) => setVendorForm(prev => ({ ...prev, specialization: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-medium"
+                        >
+                          <optgroup label="🛠️ Services Specializations">
                             <option value="Waterproofing & Leakage">Waterproofing & Leakage</option>
                             <option value="Civil Construction & Masonry">Civil Construction & Masonry</option>
                             <option value="Plumbing & Sanitation">Plumbing & Sanitation</option>
                             <option value="Electrical & Wiring">Electrical & Wiring</option>
                             <option value="Painting & Finishing">Painting & Finishing</option>
                             <option value="Renovation & Carpentry">Renovation & Carpentry</option>
-                            <option value="Adventure & Tour Operators">Adventure & Tour Operators</option>
                             <option value="General Maintenance">General Maintenance</option>
-                          </select>
-                        </div>
+                          </optgroup>
+                          <optgroup label="🪂 Adventure Specializations">
+                            <option value="Paragliding & Microlight Flights">Paragliding & Microlight Flights</option>
+                            <option value="Desert Safari & Dune Bashing">Desert Safari & Dune Bashing</option>
+                            <option value="River Rafting & Kayaking">River Rafting & Kayaking</option>
+                            <option value="Trekking & Mountain Expeditions">Trekking & Mountain Expeditions</option>
+                          </optgroup>
+                        </select>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -4860,60 +7429,38 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
           {/* LIVE CHAT DESK TAB */}
           {activeTab === 'chat' && (
-            <div className="space-y-4">
-              {/* Header / Stats Banner */}
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary-50 border border-primary-100 flex items-center justify-center text-primary-600 shadow-xs shrink-0">
-                      <MessageCircle className="w-5 h-5" />
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden grid grid-cols-12 min-h-0" style={{ height: 'calc(100vh - 64px - 48px)', minHeight: '520px' }}>
+              {/* LEFT COLUMN: Conversation Threads List */}
+              <div className={`col-span-12 md:col-span-5 lg:col-span-4 border-r border-slate-200 flex flex-col min-h-0 bg-slate-50/50 ${activeThreadId ? 'hidden md:flex' : 'flex'}`}>
+                {/* Search and Filters */}
+                <div className="p-4 border-b border-slate-200 space-y-3 bg-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-success-500 animate-pulse' : 'bg-danger-400'}`}></span>
+                      <span className="text-xs font-bold text-slate-800">Customer Chats</span>
+                      <span className="text-[11px] font-semibold text-slate-400">({chatThreads.length})</span>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-heading font-semibold text-lg sm:text-xl text-slate-900">
-                          Live Customer Chat Desk
-                        </h2>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-50 text-success-700 border border-success-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse"></span>
-                          Socket Live
-                        </span>
-                      </div>
-                      <p className="text-xs font-medium text-slate-500 mt-0.5">
-                        Real-time direct communication with customers across Quotations, Service Requests, and Technical Inquiries.
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => {
+                        fetchChatThreads();
+                        if (activeThreadId) fetchThreadMessages(activeThreadId);
+                      }}
+                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                      title="Sync Threads"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                    </button>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <button
-                    onClick={() => {
-                      fetchChatThreads();
-                      if (activeThreadId) fetchThreadMessages(activeThreadId);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all shadow-xs"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Sync Threads</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Chat Two-Pane Workspace */}
-              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden grid grid-cols-12 h-[calc(100vh-210px)] min-h-[460px]">
-                {/* LEFT COLUMN: Conversation Threads List */}
-                <div className={`col-span-12 md:col-span-5 lg:col-span-4 border-r border-slate-200 flex flex-col h-full bg-slate-50/50 ${activeThreadId ? 'hidden md:flex' : 'flex'}`}>
-                  {/* Search and Filters */}
-                  <div className="p-4 border-b border-slate-200 space-y-3 bg-white">
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                      <input
-                        type="text"
-                        value={chatSearch}
-                        onChange={(e) => setChatSearch(e.target.value)}
-                        placeholder="Search client, quote #, phone..."
-                        className="w-full pl-9 pr-3.5 py-2 text-sm font-semibold text-slate-800 placeholder-slate-400 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                      />
-                    </div>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      value={chatSearch}
+                      onChange={(e) => setChatSearch(e.target.value)}
+                      placeholder="Search client, quote #, phone..."
+                      className="w-full pl-9 pr-3.5 py-2 text-sm font-semibold text-slate-800 placeholder-slate-400 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                    />
+                  </div>
                     {/* Filter tabs */}
                     <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs font-semibold">
                       {[
@@ -5043,7 +7590,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 </div>
 
                 {/* RIGHT COLUMN: Active Thread Chat View */}
-                <div className={`col-span-12 md:col-span-7 lg:col-span-8 flex flex-col h-full bg-white ${!activeThreadId ? 'hidden md:flex' : 'flex'}`}>
+                <div className={`col-span-12 md:col-span-7 lg:col-span-8 flex flex-col min-h-0 bg-white ${!activeThreadId ? 'hidden md:flex' : 'flex'}`}>
                   {(() => {
                     const currentThread = chatThreads.find(t => t.id === activeThreadId) || (activeThreadId ? { id: activeThreadId, customerName: 'Client' } : null);
 
@@ -5064,7 +7611,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     return (
                       <>
                         {/* Thread Header */}
-                        <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-white">
+                        <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-white shrink-0">
                           <div className="flex items-center gap-3">
                             <button
                               onClick={() => setActiveThreadId(null)}
@@ -5146,7 +7693,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         </div>
 
                         {/* Thread Message Stream */}
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/60">
+                        <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 space-y-4 bg-slate-50/60">
                           {/* Context Callout Banner */}
                           <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-between text-xs font-semibold text-slate-700">
                             <div className="flex items-center gap-2">
@@ -5201,7 +7748,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         </div>
 
                         {/* Quick Pre-Set Replies */}
-                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center gap-2 overflow-x-auto no-scrollbar text-xs font-semibold">
+                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center gap-2 overflow-x-auto no-scrollbar text-xs font-semibold shrink-0">
                           <span className="text-slate-500 shrink-0 text-[11px]">Quick reply:</span>
                           {[
                             'Hello! I am reviewing your request right now.',
@@ -5221,7 +7768,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         </div>
 
                         {/* Admin Reply Input */}
-                        <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200">
+                        <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 shrink-0">
                           <form
                             onSubmit={(e) => {
                               e.preventDefault();
@@ -5255,7 +7802,6 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   })()}
                 </div>
               </div>
-            </div>
           )}
 
           {/* DIRECT MAINTENANCE BOOKINGS TAB */}
@@ -5523,7 +8069,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </button>
 
                                   <button
-                                    onClick={() => { setStatusModalBooking(b); setStatusForm({ status: b.status, reason: '' }); }}
+                                    onClick={() => { setStatusModalBooking(b); setStatusForm({ status: '', reason: '' }); }}
                                     title="Update Booking Status"
                                     className="p-1.5 rounded-lg text-slate-500 hover:text-warning-600 hover:bg-slate-100 transition-all"
                                   >
@@ -5532,7 +8078,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
                                   {!isRefunded && (
                                     <button
-                                      onClick={() => { setRefundModalBooking(b); setRefundForm({ amount: b.onlinePaidAmount || b.visitingCharge, reason: 'Technician unavailable / Customer cancellation' }); }}
+                                      onClick={() => {
+                                        const maxRef = Math.max(0, (b.onlinePaidAmount || b.visitingCharge || 199) - (b.refundAmount || 0));
+                                        setRefundModalBooking(b);
+                                        setRefundForm({ amount: maxRef, reason: 'Technician unavailable / Customer cancellation' });
+                                      }}
                                       title="Issue Automated Refund via Razorpay"
                                       className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-all"
                                     >
@@ -5618,6 +8168,13 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg flex items-center gap-1 transition-all"
                         >
                           Edit Category
+                        </button>
+                        <button
+                          onClick={() => handleDeleteService(svc.id)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg flex items-center gap-1 transition-all"
+                          title="Delete Service Category"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleOpenAddSubService(svc)}
@@ -6197,42 +8754,368 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
           )}
 
           {/* CUSTOMER DIRECTORY TAB */}
-          {activeTab === 'users' && (
-            <div className="space-y-5">
-              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-                <h2 className="font-heading font-semibold text-base text-slate-800">Registered Customers Directory</h2>
-                <p className="text-[11px] text-slate-400">Customer contact information, saved address books, and service history.</p>
+          {activeTab === 'users' && !viewUserDetail && (() => {
+            const filteredUsers = users.filter(u => {
+              const q = (userSearch || globalSearch || '').toLowerCase().trim();
+              if (!q) return true;
+              const name = (u.name || '').toLowerCase();
+              const phone = (u.phoneNumber || '').toLowerCase();
+              const addressStr = (u.address || []).map(a => `${a.type || ''} ${a.address || ''} ${a.city || ''}`).join(' ').toLowerCase();
+              return name.includes(q) || phone.includes(q) || addressStr.includes(q);
+            });
+
+            return (
+              <div className="space-y-5">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-heading font-semibold text-base text-slate-800">Registered Customers Directory</h2>
+                    <p className="text-[11px] text-slate-400">Customer contact information, saved address books, and service history. Click a row to open chat.</p>
+                  </div>
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search customer name, phone, address..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="w-full pl-8 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                    {userSearch && (
+                      <button
+                        onClick={() => setUserSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-400 font-medium uppercase tracking-wider border-b border-slate-200 text-[11px]">
+                        <tr>
+                          <th className="p-3">Customer Name</th>
+                          <th className="p-3">Phone Number</th>
+                          <th className="p-3">Saved Addresses</th>
+                          <th className="p-3">Requests</th>
+                          <th className="p-3">Registered Date</th>
+                          <th className="p-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {filteredUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" className="p-8 text-center text-slate-400">
+                              No customers found matching your search.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredUsers.map(u => (
+                            <tr
+                              key={u.id}
+                              className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                              onClick={() => handleOpenChatWithCustomer(u, u.phoneNumber)}
+                            >
+                              <td className="p-3 font-medium text-slate-800">{u.name}</td>
+                              <td className="p-3 font-mono font-medium text-success-600">{u.phoneNumber}</td>
+                              <td className="p-3 text-slate-500 font-normal leading-tight">
+                                {(u.address || []).map(a => `${a.type.toUpperCase()}: ${a.address}, ${a.city}`).join(' | ') || 'Default Residence'}
+                              </td>
+                              <td className="p-3">
+                                <span className="px-2 py-0.5 rounded-full font-medium bg-primary-50 text-primary-700 border border-primary-200 text-[10px]">{(u.requests || []).length} Requests</span>
+                              </td>
+                              <td className="p-3 text-slate-400 font-normal">{new Date(u.created_at).toLocaleDateString('en-IN')}</td>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fetchUserDetail(u.id);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-all"
+                                    title="View User Details & Bookings"
+                                  >
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>Details</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleOpenChatWithCustomer(u, u.phoneNumber); }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-all"
+                                    title="Open Chat"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>Chat</span>
+                                  </button>
+                                  {u.phoneNumber && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); callCustomer(u.phoneNumber); }}
+                                      className="p-1.5 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-lg transition-all"
+                                      title="Call Customer"
+                                    >
+                                      <PhoneCall className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* FULL SCREEN USER DETAIL PAGE */}
+          {viewUserDetail && selectedUser && (
+            <div className="flex-1 overflow-y-auto">
+              <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 px-6 sm:px-8 flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => { setViewUserDetail(false); setSelectedUser(null); setUserBookings([]); }}
+                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-all flex items-center gap-1.5"
+                    title="Back to Customer Directory"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                    <span className="hidden sm:inline text-xs font-semibold">Back to Directory</span>
+                  </button>
+                  <div>
+                    <h1 className="font-heading font-bold text-base text-slate-900">
+                      Customer Details
+                    </h1>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {selectedUser.name || 'Unnamed Customer'} • {selectedUser.phoneNumber || 'No phone'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-50 text-success-700 border border-success-200">
+                    Active Customer
+                  </span>
+                </div>
+              </header>
+
+              <div className="p-6">
+                {/* User Profile Header */}
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 mb-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-brand-600 text-white flex items-center justify-center text-2xl font-bold shadow-lg shadow-brand-200">
+                        {selectedUser.name ? selectedUser.name.charAt(0).toUpperCase() : 'U'}
+                      </div>
+                      <div>
+                        <h2 className="font-heading font-bold text-xl text-slate-900">{selectedUser.name || 'Unnamed Customer'}</h2>
+                        <div className="flex items-center gap-3 mt-1 text-xs">
+                          {selectedUser.email && (
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <Mail className="w-3 h-3" />
+                              {selectedUser.email}
+                            </span>
+                          )}
+                          {selectedUser.phoneNumber && (
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <Phone className="w-3 h-3" />
+                              {selectedUser.phoneNumber}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      {selectedUser.phoneNumber && (
+                        <button
+                          onClick={() => openWhatsApp(selectedUser.phoneNumber, `Hello ${selectedUser.name || 'there'}! This is Hipro Admin Desk. How can we assist you today?`)}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span>WhatsApp</span>
+                        </button>
+                      )}
+                      {selectedUser.phoneNumber && (
+                        <button
+                          onClick={() => callCustomer(selectedUser.phoneNumber)}
+                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+                        >
+                          <PhoneCall className="w-4 h-4" />
+                          <span>Call</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { openChatForCustomer(selectedUser, selectedUser.phoneNumber); setViewUserDetail(false); }}
+                        className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Open Chat</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Customer ID</div>
+                    <div className="font-mono font-semibold text-slate-800 text-xs truncate">{selectedUser.id}</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Member Since</div>
+                    <div className="font-semibold text-slate-800 text-xs">
+                      {selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleDateString('en-IN') : 'N/A'}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Service Requests</div>
+                    <div className="font-bold text-2xl text-slate-900">{selectedUser.requests?.length || 0}</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Direct Bookings</div>
+                    <div className="font-bold text-2xl text-slate-900">{userBookings.length}</div>
+                  </div>
+                </div>
+
+                {/* Addresses Section */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-heading font-bold text-base text-slate-800 flex items-center gap-2">
+                      <Home className="w-4 h-4 text-brand-600" />
+                      <span>Saved Addresses ({selectedUser.address?.length || 0})</span>
+                    </h2>
+                    {selectedUser.address?.length === 0 && (
+                      <span className="text-[10px] text-slate-400 font-medium">No addresses saved</span>
+                    )}
+                  </div>
+                  {selectedUser.address && selectedUser.address.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedUser.address.map((addr, idx) => (
+                        <div key={idx} className="p-4 bg-white rounded-xl border border-slate-100 flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-sm text-slate-800">{addr.type || 'Home'}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${addr.label === 'Primary' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                                {addr.label || 'Address'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 leading-relaxed">{addr.address}</div>
+                            <div className="text-xs text-slate-600">{addr.city}, {addr.pin || ''}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] font-semibold text-slate-400">{addr.city}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 bg-white rounded-xl border border-dashed border-slate-200 text-center">
+                      <Home className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                      <p className="text-xs text-slate-400 font-medium">No saved addresses</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-400 font-medium uppercase tracking-wider border-b border-slate-200 text-[11px]">
-                      <tr>
-                        <th className="p-3">Customer Name</th>
-                        <th className="p-3">Phone Number</th>
-                        <th className="p-3">Saved Addresses</th>
-                        <th className="p-3">Requests</th>
-                        <th className="p-3">Registered Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {users.map(u => (
-                        <tr key={u.id} className="hover:bg-slate-50/50">
-                          <td className="p-3 font-medium text-slate-800">{u.name}</td>
-                          <td className="p-3 font-mono font-medium text-success-600">{u.phoneNumber}</td>
-                          <td className="p-3 text-slate-500 font-normal leading-tight">
-                            {(u.address || []).map(a => `${a.type.toUpperCase()}: ${a.address}, ${a.city}`).join(' | ') || 'Default Residence'}
-                          </td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full font-medium bg-primary-50 text-primary-700 border border-primary-200 text-[10px]">{(u.requests || []).length} Requests</span>
-                          </td>
-                          <td className="p-3 text-slate-400 font-normal">{new Date(u.created_at).toLocaleDateString('en-IN')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* Service Requests History */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-heading font-bold text-base text-slate-800 flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-brand-600" />
+                    <span>Service Requests ({selectedUser.requests?.length || 0})</span>
+                  </h2>
                 </div>
+                {selectedUser.requests && selectedUser.requests.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedUser.requests.map(req => (
+                      <div key={req.id} className="p-4 bg-white rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[10px] text-brand-600">{req.requestNumber}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${req.urgency === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                              {req.urgency || 'NORMAL'}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${req.status === 'COMPLETED' ? 'bg-success-50 text-success-700 border border-success-200' : req.status === 'ASSIGNED' ? 'bg-brand-50 text-brand-700 border border-brand-200' : req.status === 'QUOTE_REQUESTED' ? 'bg-accent-50 text-accent-700 border border-accent-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                            {req.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 mb-1">{req.subServiceCode || req.servicecode || 'Service Request'}</div>
+                        <div className="text-[10px] text-slate-500 truncate max-w-[300px]">{req.issueDescription || 'No description'}</div>
+                        <div className="mt-3 pt-3 border-t border-slate-50/60 flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-slate-400">
+                            <span className="font-mono">{req.preferredDate || 'TBD'}</span>
+                            <span className="text-slate-400">•</span>
+                            <span className="truncate max-w-[200px]">{req.location || 'N/A'}</span>
+                          </div>
+                          {req.assignedVendorName && (
+                            <span className="text-[10px] font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded">
+                              <UserCheck className="w-3 h-3 mr-1" />
+                              {req.assignedVendorName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 bg-white rounded-xl border border-dashed border-slate-200 text-center">
+                    <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-xs text-slate-400 font-medium">No service requests</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Direct Bookings History */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-heading font-bold text-base text-slate-800 flex items-center gap-2">
+                    <Ticket className="w-4 h-4 text-brand-600" />
+                    <span>Direct Bookings ({userBookings.length})</span>
+                  </h2>
+                  {userBookingsLoading && <span className="text-[10px] text-slate-400 animate-pulse">Loading...</span>}
+                </div>
+                {userBookingsLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-3"></div>
+                    <p className="text-xs text-slate-400">Loading bookings...</p>
+                  </div>
+                ) : userBookings.length > 0 ? (
+                  <div className="space-y-3">
+                    {userBookings.map(b => (
+                      <div key={b.id} className="p-4 bg-white rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[10px] text-brand-600">#{b.bookingNumber || b.id}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${b.paymentStatus === 'PAID' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                              {b.paymentStatus}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${b.status === 'COMPLETED' ? 'bg-success-50 text-success-700 border border-success-200' : b.status === 'IN_PROGRESS' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                            {b.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 mb-1">{b.subServiceName || b.serviceName || 'Direct Booking'}</div>
+                        <div className="text-[10px] text-slate-500 truncate max-w-[300px]">{b.customerAddress || 'N/A'}</div>
+                        <div className="mt-3 pt-3 border-t border-slate-50/60 flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-slate-400">
+                            <span className="font-mono">{b.scheduledDate || 'TBD'}</span>
+                            <span className="text-slate-400">•</span>
+                            <span>{b.scheduledSlot || 'N/A'}</span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-slate-800 font-mono">
+                            ₹{(b.totalAmount || b.visitingCharge || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 bg-white rounded-xl border border-dashed border-slate-200 text-center">
+                    <Ticket className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-xs text-slate-400 font-medium">No direct bookings</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -7371,15 +10254,43 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
               </button>
             </div>
             <div className="p-4 overflow-y-auto space-y-3">
-              <div className="w-full h-80 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center">
-                <img src={activePhotoModal.photos[activePhotoModal.index]} alt="Damage" className="max-w-full max-h-full object-contain" />
+              <div className="w-full h-80 sm:h-96 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center relative">
+                {isVideoMedia(activePhotoModal.photos[activePhotoModal.index]) ? (
+                  <video
+                    key={activePhotoModal.photos[activePhotoModal.index]}
+                    src={activePhotoModal.photos[activePhotoModal.index]}
+                    controls
+                    className="max-w-full max-h-full object-contain"
+                    autoPlay
+                  />
+                ) : (
+                  <img
+                    src={activePhotoModal.photos[activePhotoModal.index]}
+                    alt="Damage"
+                    className="max-w-full max-h-full object-contain"
+                  />
+                )}
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {activePhotoModal.photos.map((p, i) => (
-                  <div key={i} onClick={() => setActivePhotoModal({ ...activePhotoModal, index: i })} className={`w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer flex-shrink-0 ${activePhotoModal.index === i ? 'border-brand-600' : 'border-slate-200'}`}>
-                    <img src={p} alt="Thumb" className="w-full h-full object-cover" />
-                  </div>
-                ))}
+                {activePhotoModal.photos.map((p, i) => {
+                  const isVid = isVideoMedia(p);
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => setActivePhotoModal({ ...activePhotoModal, index: i })}
+                      className={`w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer flex-shrink-0 relative ${activePhotoModal.index === i ? 'border-brand-600 ring-2 ring-brand-500/30' : 'border-slate-200'}`}
+                    >
+                      {isVid ? (
+                        <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
+                          <Video className="w-4 h-4 text-primary-400" />
+                          <span className="text-[8px] font-bold mt-0.5">Video</span>
+                        </div>
+                      ) : (
+                        <img src={p} alt="Thumb" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -7551,64 +10462,71 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         </div>
       )}
 
-      {/* ADD SERVICE MODAL */}
+      {/* ADD / EDIT SERVICE MODAL */}
       {addServiceModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-heading font-medium text-slate-800 text-sm">Add New Service Category</h3>
-              <button onClick={() => setAddServiceModalOpen(false)} className="p-1 rounded text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              <h3 className="font-heading font-medium text-slate-800 text-sm">
+                {editingService ? `Edit Service Category: ${editingService.name}` : 'Add New Service Category'}
+              </h3>
+              <button onClick={() => { setAddServiceModalOpen(false); setEditingService(null); }} className="p-1 rounded text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
             </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.target;
-              try {
-                const res = await fetch(`${API_BASE}/api/v1/admin/services`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    code: form.code.value,
-                    name: form.name.value,
-                    description: form.description.value,
-                    icon: form.imageUrl?.value || form.icon?.value || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
-                    imageUrl: form.imageUrl?.value || form.icon?.value || '',
-                    iconImage: form.imageUrl?.value || form.icon?.value || '',
-                    rating: parseFloat(form.rating.value) || 4.8
-                  })
-                });
-                const data = await res.json();
-                if (data.success) {
-                  showToastMsg('Service created', 'success');
-                  setAddServiceModalOpen(false);
-                  fetchServices();
-                }
-              } catch (err) { showToastMsg('Error creating service', 'error'); }
-            }} className="p-4 space-y-3 text-xs">
+            <form onSubmit={handleSaveServiceCategory} className="p-4 space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="block text-[11px] font-medium text-slate-500 uppercase">Service Code</label>
-                <input name="code" placeholder="e.g. WATERPROOFING" required className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Service Code *</label>
+                <input
+                  value={serviceCategoryForm.code}
+                  onChange={(e) => setServiceCategoryForm({ ...serviceCategoryForm, code: e.target.value })}
+                  placeholder="e.g. WATERPROOFING"
+                  disabled={Boolean(editingService)}
+                  required
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono disabled:opacity-60 disabled:bg-slate-100"
+                />
               </div>
               <div className="space-y-1">
-                <label className="block text-[11px] font-medium text-slate-500 uppercase">Service Name</label>
-                <input name="name" placeholder="e.g. Terrace Waterproofing" required className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Service Name *</label>
+                <input
+                  value={serviceCategoryForm.name}
+                  onChange={(e) => setServiceCategoryForm({ ...serviceCategoryForm, name: e.target.value })}
+                  placeholder="e.g. Terrace Waterproofing"
+                  required
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"
+                />
               </div>
               <div className="space-y-1">
                 <label className="block text-[11px] font-medium text-slate-500 uppercase">Description</label>
-                <textarea name="description" rows="2" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"></textarea>
+                <textarea
+                  value={serviceCategoryForm.description}
+                  onChange={(e) => setServiceCategoryForm({ ...serviceCategoryForm, description: e.target.value })}
+                  rows={2}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"
+                />
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-medium text-slate-500 uppercase">Icon</label>
-                  <input name="icon" defaultValue="Droplets" className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-medium text-slate-500 uppercase">Rating</label>
-                  <input name="rating" defaultValue="4.8" step="0.1" type="number" className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800" />
-                </div>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Category Image URL</label>
+                <input
+                  value={serviceCategoryForm.imageUrl}
+                  onChange={(e) => setServiceCategoryForm({ ...serviceCategoryForm, imageUrl: e.target.value })}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase">Rating</label>
+                <input
+                  value={serviceCategoryForm.rating}
+                  onChange={(e) => setServiceCategoryForm({ ...serviceCategoryForm, rating: e.target.value })}
+                  step="0.1"
+                  type="number"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"
+                />
               </div>
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setAddServiceModalOpen(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg">Cancel</button>
-                <button type="submit" className="px-3.5 py-1.5 text-xs font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700">Save Service</button>
+                <button type="button" onClick={() => { setAddServiceModalOpen(false); setEditingService(null); }} className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg">Cancel</button>
+                <button type="submit" className="px-3.5 py-1.5 text-xs font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700">
+                  {editingService ? 'Update Category' : 'Save Service'}
+                </button>
               </div>
             </form>
           </div>
@@ -8555,22 +11473,53 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             </div>
 
             <form onSubmit={handleUpdateDirectBookingStatus} className="mt-4 space-y-3.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Lifecycle Status *
-                </label>
-                <select
-                  value={statusForm.status}
-                  onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 text-xs font-semibold border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
-                >
-                  <option value="CONFIRMED">CONFIRMED (Payment Verified)</option>
-                  <option value="ASSIGNED">ASSIGNED (Technician Dispatched)</option>
-                  <option value="IN_PROGRESS">IN_PROGRESS (Technician On-Site)</option>
-                  <option value="COMPLETED">COMPLETED (Work Done & Signed Off)</option>
-                  <option value="CANCELLED">CANCELLED (Order Cancelled)</option>
-                </select>
-              </div>
+              {(() => {
+                const VALID_TRANSITIONS_MAP = {
+                  'CONFIRMED': [
+                    { value: 'ASSIGNED', label: 'ASSIGNED (Technician Dispatched)' },
+                    { value: 'CANCELLED', label: 'CANCELLED (Order Cancelled)' }
+                  ],
+                  'ASSIGNED': [
+                    { value: 'IN_PROGRESS', label: 'IN_PROGRESS (Technician On-Site)' },
+                    { value: 'CANCELLED', label: 'CANCELLED (Order Cancelled)' }
+                  ],
+                  'IN_PROGRESS': [
+                    { value: 'COMPLETED', label: 'COMPLETED (Work Done & Signed Off)' },
+                    { value: 'CANCELLED', label: 'CANCELLED (Order Cancelled)' }
+                  ],
+                  'COMPLETED': [],
+                  'CANCELLED': []
+                };
+                const allowed = VALID_TRANSITIONS_MAP[statusModalBooking.status] || [];
+                const isTerminal = allowed.length === 0;
+
+                if (isTerminal) {
+                  return (
+                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                      Booking <span className="font-mono font-bold">#{statusModalBooking.bookingNumber}</span> is in terminal state <strong className="font-bold">{statusModalBooking.status}</strong> and cannot undergo further lifecycle status transitions.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
+                      Allowed Next Lifecycle Status * (Current: {statusModalBooking.status})
+                    </label>
+                    <select
+                      value={statusForm.status}
+                      onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 text-xs font-semibold border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500"
+                    >
+                      <option value="">-- Select Valid Next Transition --</option>
+                      {allowed.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
@@ -8591,15 +11540,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   onClick={() => setStatusModalBooking(null)}
                   className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
                 >
-                  Cancel
+                  {['COMPLETED', 'CANCELLED'].includes(statusModalBooking.status) ? 'Close' : 'Cancel'}
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-sm flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Update Status</span>
-                </button>
+                {!['COMPLETED', 'CANCELLED'].includes(statusModalBooking.status) && (
+                  <button
+                    type="submit"
+                    disabled={!statusForm.status || statusForm.status === statusModalBooking.status}
+                    className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Update Status</span>
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -9034,7 +11986,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   type="button"
                   onClick={() => {
                     setStatusModalBooking(selectedBookingForDrawer);
-                    setStatusForm({ status: selectedBookingForDrawer.status, reason: '' });
+                    setStatusForm({ status: '', reason: '' });
                   }}
                   className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-2xs"
                 >
@@ -9056,9 +12008,10 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 <button
                   type="button"
                   onClick={() => {
+                    const maxRef = Math.max(0, (selectedBookingForDrawer.onlinePaidAmount || selectedBookingForDrawer.visitingCharge || 199) - (selectedBookingForDrawer.refundAmount || 0));
                     setRefundModalBooking(selectedBookingForDrawer);
                     setRefundForm({
-                      amount: selectedBookingForDrawer.onlinePaidAmount || selectedBookingForDrawer.visitingCharge,
+                      amount: maxRef,
                       reason: 'Customer requested cancellation'
                     });
                   }}
@@ -9515,6 +12468,660 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* USER DETAIL & BOOKINGS MODAL */}
+      {userDetailModalOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 md:p-6 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200/90">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-brand-600 text-white flex items-center justify-center text-xl font-bold shadow-lg">
+                  {selectedUser.name ? selectedUser.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-base text-slate-900">
+                    {selectedUser.name || 'Unnamed Customer'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {selectedUser.email || 'No email'} • {selectedUser.phoneNumber || 'No phone'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setUserDetailModalOpen(false); setSelectedUser(null); setUserBookings([]); }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Customer ID</div>
+                  <div className="font-mono font-semibold text-slate-800 text-xs truncate">{selectedUser.id}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</div>
+                  <div className="font-semibold text-slate-800 text-xs">{selectedUser.phoneNumber || 'N/A'}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email</div>
+                  <div className="font-semibold text-slate-800 text-xs">{selectedUser.email || 'N/A'}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Member Since</div>
+                  <div className="font-semibold text-slate-800 text-xs">
+                    {selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleDateString('en-IN') : 'N/A'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50/50 rounded-xl border border-slate-200/80 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Home className="w-3 h-3" />
+                    <span>Saved Addresses ({selectedUser.address?.length || 0})</span>
+                  </h4>
+                  {selectedUser.address?.length === 0 && (
+                    <span className="text-[10px] text-slate-400 font-medium">No addresses saved</span>
+                  )}
+                </div>
+                {selectedUser.address && selectedUser.address.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedUser.address.map((addr, idx) => (
+                      <div key={idx} className="p-3 bg-white rounded-lg border border-slate-100 flex justify-between items-start">
+                        <div>
+                          <div className="font-semibold text-sm text-slate-800">{addr.type || 'Home'}</div>
+                          <div className="text-xs text-slate-600">{addr.address}</div>
+                          <div className="text-xs text-slate-600">{addr.city}, {addr.pin || ''}</div>
+                        </div>
+                        <div className="text-[10px] font-semibold text-slate-400">{addr.label || 'Address'}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-slate-400 text-xs">No saved addresses</div>
+                )}
+              </div>
+
+              <div className="bg-slate-50/50 rounded-xl border border-slate-200/80 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <ClipboardList className="w-3 h-3" />
+                    <span>Service Requests ({selectedUser.requests?.length || 0})</span>
+                  </h4>
+                </div>
+                {selectedUser.requests && selectedUser.requests.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedUser.requests.map(req => (
+                      <div key={req.id} className="p-3 bg-white rounded-lg border border-slate-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[10px] text-brand-600">{req.requestNumber}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${req.urgency === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                              {req.urgency || 'NORMAL'}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${req.status === 'COMPLETED' ? 'bg-success-50 text-success-700 border border-success-200' : req.status === 'ASSIGNED' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                            {req.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 mb-1">{req.subServiceCode || req.servicecode || 'Service Request'}</div>
+                        <div className="text-[10px] text-slate-500 truncate max-w-[280px]">{req.issueDescription || 'No description'}</div>
+                        <div className="mt-2 pt-2 border-t border-slate-50/60 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-slate-400">
+                            {req.preferredDate || 'TBD'} • {req.location || 'N/A'}
+                          </span>
+                          {req.assignedVendorName && (
+                            <span className="text-[10px] font-semibold text-success-700 bg-success-50 px-2 py-0.5 rounded">
+                              Assigned: {req.assignedVendorName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-slate-400 text-xs">No service requests</div>
+                )}
+              </div>
+
+              <div className="bg-slate-50/50 rounded-xl border border-slate-200/80 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Ticket className="w-3 h-3" />
+                    <span>Direct Bookings ({userBookings.length})</span>
+                  </h4>
+                  {userBookingsLoading && <span className="text-[10px] text-slate-400 animate-pulse">Loading...</span>}
+                </div>
+                {userBookingsLoading ? (
+                  <div className="text-center py-6">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-600 mx-auto mb-2"></div>
+                    <span className="text-[10px] text-slate-400">Loading bookings...</span>
+                  </div>
+                ) : userBookings.length > 0 ? (
+                  <div className="space-y-3">
+                    {userBookings.map(b => (
+                      <div key={b.id} className="p-3 bg-white rounded-lg border border-slate-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[10px] text-brand-600">#{b.bookingNumber || b.id}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${b.paymentStatus === 'PAID' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                              {b.paymentStatus}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${b.status === 'COMPLETED' ? 'bg-success-50 text-success-700 border border-success-200' : b.status === 'IN_PROGRESS' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                            {b.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 mb-1">{b.subServiceName || b.serviceName || 'Direct Booking'}</div>
+                        <div className="text-[10px] text-slate-500 truncate max-w-[280px]">{b.customerAddress || 'N/A'}</div>
+                        <div className="mt-2 pt-2 border-t border-slate-50/60 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-slate-400">
+                            {b.scheduledDate || 'TBD'} • {b.scheduledSlot || 'N/A'}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-800 font-mono">
+                            ₹{(b.totalAmount || b.visitingCharge || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-slate-400 text-xs">No direct bookings</div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                {selectedUser.phoneNumber && (
+                  <>
+                    <button
+                      onClick={() => { openWhatsApp(selectedUser.phoneNumber, `Hello ${selectedUser.name || 'there'}! This is Hipro Admin Desk. How can we assist you today?`); }}
+                      className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => callCustomer(selectedUser.phoneNumber)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+                    >
+                      <PhoneCall className="w-4 h-4" />
+                      <span>Call</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => { openChatForCustomer(selectedUser, selectedUser.phoneNumber); setUserDetailModalOpen(false); }}
+                  className="flex-1 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Open Chat</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* MODAL 1: SHARE INSPECTION REQUEST WITH SELECTED VENDORS */}
+      {shareVendorModalOpen && shareModalRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-primary-500/20 text-primary-300 border border-primary-400/30 font-mono">
+                    #{shareModalRequest.requestNumber}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-200 border border-white/10">
+                    {shareModalRequest.propertyType || 'Residential'} • {shareModalRequest.propertySize || 'Standard'}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    <span>{shareModalRequest.city || shareModalRequest.location || 'Site Hub'}</span>
+                  </span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-heading font-bold text-white flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-primary-400" />
+                  <span>Share Inspection with Selected Vendors</span>
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Select certified local vendors in this city to invite itemized quotations. Vendors only receive non-sensitive damage details (photos, scope & square footage).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShareVendorModalOpen(false); setShareModalRequest(null); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Customer Damage Scope Summary */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+                <div className="space-y-1 flex-1 min-w-[240px]">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                    <Wrench className="w-3 h-3 text-primary-600" />
+                    <span>Requirement: {shareModalRequest.servicecode}</span>
+                    {shareModalRequest.subServiceCode && <span className="text-primary-700">({shareModalRequest.subServiceCode})</span>}
+                  </div>
+                  <p className="text-xs text-slate-700 font-medium line-clamp-2">
+                    {shareModalRequest.issueDescription || 'Damage reported requiring on-site contractor quotation.'}
+                  </p>
+                </div>
+                {Array.isArray(shareModalRequest.mediaUrl) && shareModalRequest.mediaUrl.length > 0 && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {shareModalRequest.mediaUrl.slice(0, 3).map((img, idx) => (
+                      <img key={idx} src={img} alt="Damage evidence" className="w-12 h-12 rounded-lg object-cover border border-slate-300" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }} />
+                    ))}
+                    {shareModalRequest.mediaUrl.length > 3 && (
+                      <div className="w-12 h-12 rounded-lg bg-slate-200 border border-slate-300 flex items-center justify-center text-[11px] font-bold text-slate-600">
+                        +{shareModalRequest.mediaUrl.length - 3}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="p-3 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs font-bold text-slate-700 shrink-0">Filter City:</span>
+                <select
+                  value={shareVendorCityFilter}
+                  onChange={(e) => setShareVendorCityFilter(e.target.value)}
+                  className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                >
+                  <option value="ALL">All Operational Hubs</option>
+                  {['Udaipur', 'Bhilwara', 'Jaipur', 'Dehradun', 'Rishikesh', 'Jaisalmer'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search vendor name, specialization..."
+                  value={shareVendorSearch}
+                  onChange={(e) => setShareVendorSearch(e.target.value)}
+                  className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+              </div>
+            </div>
+
+            {/* Vendor List (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-2.5">
+              {(() => {
+                const searchLower = shareVendorSearch.toLowerCase().trim();
+                const filteredVendors = vendors.filter(v => {
+                  if (shareVendorCityFilter !== 'ALL' && v.city && !v.city.toLowerCase().includes(shareVendorCityFilter.toLowerCase())) {
+                    return false;
+                  }
+                  if (searchLower) {
+                    const matchName = (v.name || '').toLowerCase().includes(searchLower);
+                    const matchBiz = (v.businessName || '').toLowerCase().includes(searchLower);
+                    const matchSpec = (v.specialization || '').toLowerCase().includes(searchLower);
+                    const matchCity = (v.city || '').toLowerCase().includes(searchLower);
+                    if (!matchName && !matchBiz && !matchSpec && !matchCity) return false;
+                  }
+                  return true;
+                });
+
+                const allSelected = filteredVendors.length > 0 && filteredVendors.every(v => selectedShareVendorIds.includes(v.id));
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between pb-1 text-xs">
+                      <span className="font-semibold text-slate-600">
+                        Available Vendors: <strong className="text-slate-900">{filteredVendors.length}</strong>
+                      </span>
+                      {filteredVendors.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAllCityVendors(filteredVendors)}
+                          className="text-xs font-bold text-primary-600 hover:text-primary-800"
+                        >
+                          {allSelected ? 'Deselect All' : 'Select All in View'}
+                        </button>
+                      )}
+                    </div>
+
+                    {filteredVendors.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400 text-xs">
+                        No registered vendors found matching current filter.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredVendors.map(v => {
+                          const isSelected = selectedShareVendorIds.includes(v.id);
+                          const alreadyShared = (shareModalRequest.sharedVendors || []).find(s => s.vendorId === v.id);
+                          const hasQuoted = (shareModalRequest.vendorQuotes || []).find(q => q.vendorId === v.id);
+
+                          return (
+                            <div
+                              key={v.id}
+                              onClick={() => handleToggleSelectVendor(v.id)}
+                              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                isSelected
+                                  ? 'bg-primary-50/70 border-primary-300 ring-2 ring-primary-500/20 shadow-xs'
+                                  : 'bg-white hover:bg-slate-50 border-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                                  isSelected ? 'bg-primary-600 border-primary-600 text-white' : 'border-slate-300 bg-white'
+                                }`}>
+                                  {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                </div>
+
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-heading font-bold text-sm text-slate-900 truncate">
+                                      {v.businessName || v.name}
+                                    </h4>
+                                    <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                      {v.city || 'Regional'}
+                                    </span>
+                                    {alreadyShared && (
+                                      <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        Shared Earlier
+                                      </span>
+                                    )}
+                                    {hasQuoted && (
+                                      <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        Quote: ₹{hasQuoted.quotePrice.toLocaleString('en-IN')}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                                    Contact: <strong className="text-slate-700">{v.name}</strong> • {v.phone || 'N/A'} • <span className="text-primary-700 font-medium">{v.specialization || 'General Contractor'}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <div className="text-xs font-bold text-slate-800 flex items-center justify-end gap-1">
+                                  <span className="text-amber-500">★</span>
+                                  <span>{v.rating || '4.8'}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                  {v.currentJobCount || 0}/{v.maxConcurrentJobs || 5} active jobs
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Dispatch Instructions & Action Footer */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 shrink-0 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Optional Dispatch Instructions for Vendors:
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Urgent customer requirement. Please submit lowest itemized quote before 6:00 PM."
+                  value={shareDispatchNotes}
+                  onChange={(e) => setShareDispatchNotes(e.target.value)}
+                  className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="text-xs font-semibold text-slate-600">
+                  Selected Vendors: <strong className="text-primary-700 text-sm">{selectedShareVendorIds.length}</strong>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShareVendorModalOpen(false); setShareModalRequest(null); }}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSharingDispatching || selectedShareVendorIds.length === 0}
+                    onClick={handleDispatchShareVendors}
+                    className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-primary-500/20"
+                  >
+                    <Send className={`w-3.5 h-3.5 ${isSharingDispatching ? 'animate-spin' : ''}`} />
+                    <span>{isSharingDispatching ? 'Dispatching...' : `Dispatch to ${selectedShareVendorIds.length} Vendor(s)`}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: VENDOR QUOTATIONS COMPARISON & PROJECT ASSIGNMENT */}
+      {vendorQuotesModalOpen && quotesModalRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-primary-500/20 text-primary-300 border border-primary-400/30 font-mono">
+                    #{quotesModalRequest.requestNumber}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-200 border border-white/10">
+                    {quotesModalRequest.servicecode}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    <span>{quotesModalRequest.city || quotesModalRequest.location || 'Site Hub'}</span>
+                  </span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-heading font-bold text-white flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-emerald-400" />
+                  <span>Vendor Quotations & Project Assignment</span>
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Compare all quotations submitted by invited vendors for this inspection request. Select the most competitive quote to award and assign the project.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setVendorQuotesModalOpen(false); setQuotesModalRequest(null); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* KPI Summary Banner */}
+            {(() => {
+              const quotes = quotesModalList || [];
+              const minPrice = quotes.length > 0 ? Math.min(...quotes.map(q => q.quotePrice)) : 0;
+              const maxPrice = quotes.length > 0 ? Math.max(...quotes.map(q => q.quotePrice)) : 0;
+              const isAssigned = !!quotesModalRequest.assignedVendorName;
+
+              return (
+                <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Quotes</span>
+                    <span className="text-lg font-mono font-bold text-slate-900">{quotes.length} Submitted</span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs bg-emerald-50/40">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Lowest Bid</span>
+                    <span className="text-lg font-mono font-bold text-emerald-700">
+                      {quotes.length > 0 ? `₹${minPrice.toLocaleString('en-IN')}` : '—'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Highest Bid</span>
+                    <span className="text-lg font-mono font-bold text-slate-900">
+                      {quotes.length > 0 ? `₹${maxPrice.toLocaleString('en-IN')}` : '—'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Project Status</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block mt-1 ${
+                      isAssigned ? 'bg-success-100 text-success-800' : 'bg-warning-100 text-warning-800'
+                    }`}>
+                      {isAssigned ? 'Assigned' : 'Awaiting Award'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Quotations List (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+              {isLoadingQuotesModal ? (
+                <div className="text-center py-12">
+                  <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-2" />
+                  <span className="text-xs font-medium text-slate-500">Loading vendor quotes...</span>
+                </div>
+              ) : quotesModalList.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl p-6">
+                  <Tag className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <h4 className="font-heading font-bold text-sm text-slate-700">No Quotations Received Yet</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                    Share this request with local vendors to invite price bids and timelines.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVendorQuotesModalOpen(false);
+                      handleOpenShareVendorsModal(quotesModalRequest);
+                    }}
+                    className="mt-4 px-4 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all inline-flex items-center gap-1.5"
+                  >
+                    <Share2 className="w-3.5 h-3.5" /> Share with Vendors Now
+                  </button>
+                </div>
+              ) : (
+                quotesModalList.map((q, idx) => {
+                  const minPrice = Math.min(...quotesModalList.map(item => item.quotePrice));
+                  const isLowest = q.quotePrice === minPrice;
+                  const isCurrentlyAssigned = quotesModalRequest.vendorId === q.vendorId || q.status === 'accepted' || q.status === 'assigned';
+
+                  return (
+                    <div
+                      key={q.id || idx}
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                        isCurrentlyAssigned
+                          ? 'bg-emerald-50/70 border-emerald-300 ring-2 ring-emerald-500/20'
+                          : isLowest
+                          ? 'bg-amber-50/40 border-amber-300'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4
+                            onClick={() => {
+                              const v = vendors.find(x => x.id === q.vendorId) || q.vendor;
+                              if (v) handleOpenVendorDetail(v);
+                            }}
+                            className="font-heading font-bold text-base text-slate-900 cursor-pointer hover:text-primary-600 transition-colors flex items-center gap-1.5"
+                            title="Click to view full contractor profile & KYC"
+                          >
+                            <span>{q.vendorBusiness || q.vendorName || q.vendor?.businessName || 'Vendor'}</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                          </h4>
+                          {isLowest && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                              ⭐ Lowest Quote
+                            </span>
+                          )}
+                          {isCurrentlyAssigned && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Assigned Winner
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">
+                          <span>Owner: <strong className="text-slate-700">{q.vendorName || q.vendor?.name}</strong></span>
+                          {q.vendor?.phone && <span>Phone: <strong className="text-slate-700">{q.vendor.phone}</strong></span>}
+                          {q.vendor?.rating && <span className="text-amber-600 font-semibold">★ {q.vendor.rating}</span>}
+                          <span>Timeline: <strong className="text-slate-700">{q.estimatedTimeline || '1-2 Days'}</strong></span>
+                        </div>
+
+                        {q.notes && (
+                          <div className="p-2.5 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed border border-slate-200/80">
+                            <strong className="text-slate-800">Scope Notes:</strong> {q.notes}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        <div className="text-left sm:text-right">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Quote Amount</span>
+                          <span className="text-xl sm:text-2xl font-mono font-extrabold text-slate-900">
+                            ₹{q.quotePrice.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+
+                        {!isCurrentlyAssigned ? (
+                          <button
+                            type="button"
+                            disabled={isAssigningFromQuotes}
+                            onClick={() => handleAssignVendorFromQuote(q)}
+                            className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all flex items-center gap-1.5 shadow-sm shadow-emerald-500/20 disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Award Project</span>
+                          </button>
+                        ) : (
+                          <div className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded-xl flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Project Assigned
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setVendorQuotesModalOpen(false);
+                  handleOpenShareVendorsModal(quotesModalRequest);
+                }}
+                className="px-3 py-1.5 text-xs font-semibold text-primary-700 hover:text-primary-800 flex items-center gap-1.5"
+              >
+                <Share2 className="w-3.5 h-3.5" /> Share with more vendors
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setVendorQuotesModalOpen(false); setQuotesModalRequest(null); }}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

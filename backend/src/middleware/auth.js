@@ -1,7 +1,17 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_here';
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'your_super_secret_jwt_key_here') {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL: A secure, strong JWT_SECRET must be configured in environment variables.');
+  } else {
+    console.warn('⚠️ WARNING: JWT_SECRET not configured or using default placeholder. Generating an ephemeral secret for this session.');
+    JWT_SECRET = crypto.randomBytes(32).toString('hex');
+    process.env.JWT_SECRET = JWT_SECRET;
+  }
+}
 
 /**
  * Access Control Middleware Suite
@@ -16,38 +26,6 @@ async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      // Dev mode bypass for testing if explicitly provided
-      if (process.env.NODE_ENV !== 'production' && req.headers['x-dev-role']) {
-        const devRole = req.headers['x-dev-role'].toUpperCase();
-        req.user = {
-          id: req.headers['x-dev-user-id'] || 'dev_admin_1',
-          role: devRole,
-          vendorId: req.headers['x-dev-vendor-id'] || (devRole === 'VENDOR' ? 'v_adv_01' : null),
-          email: `${devRole.toLowerCase()}@hipro.in`,
-          name: `Dev ${devRole}`
-        };
-        return next();
-      }
-
-      // Guest session fallback for mobile app browsing
-      const guestId = req.headers['x-guest-id'] || req.body?.guestId || req.query?.guestId;
-      if (guestId) {
-        let guestUser = await prisma.user.findFirst({
-          where: { googleId: `guest_${guestId}` }
-        });
-        if (!guestUser) {
-          guestUser = await prisma.user.create({
-            data: {
-              name: 'App Visitor',
-              googleId: `guest_${guestId}`,
-              authProvider: 'guest'
-            }
-          });
-        }
-        req.user = { id: guestUser.id, role: 'CUSTOMER', isGuest: true };
-        return next();
-      }
-
       return res.status(401).json({
         success: false,
         message: 'Authentication token is required (Bearer <token>)'
@@ -212,7 +190,36 @@ async function requireAgent(req, res, next) {
   }
 }
 
+
+/**
+ * Optional Authentication Middleware
+ * If Bearer token is provided and valid, attaches req.user. Does not reject unauthenticated calls.
+ */
+async function optionalAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const userId = decoded.id || decoded.userId;
+      if (userId) {
+        req.user = {
+          id: userId,
+          role: (decoded.role || 'CUSTOMER').toUpperCase(),
+          vendorId: decoded.vendorId || (decoded.role === 'VENDOR' ? userId : null),
+          email: decoded.email || null,
+          name: decoded.name || null
+        };
+      }
+    }
+  } catch (err) {
+    // Silent ignore for optional authentication
+  }
+  next();
+}
+
 module.exports = {
+  optionalAuth,
   authenticate,
   requireAdmin,
   requireVendor,

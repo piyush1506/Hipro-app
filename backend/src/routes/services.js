@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 
 // 1. GET /api/v1/services/cities - Get supported operational cities dynamically from database
 router.get('/cities', async (req, res) => {
@@ -59,9 +60,10 @@ router.get('/', async (req, res) => {
         // If a specific city is requested (e.g. Udaipur or Bhilwara), filter by array containment
         if (city && city.toLowerCase() !== 'all') {
             const normalizedCity = city.trim();
-            where.cities = {
-                has: normalizedCity
-            };
+            where.OR = [
+                { cities: { has: normalizedCity } },
+                { cities: { isEmpty: true } }
+            ];
         }
 
         const services = await prisma.service.findMany({
@@ -145,7 +147,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // 5. POST /api/v1/services - Create new service (with cities support)
-router.post('/', async (req, res) => {
+router.post('/', authenticate, requireAdmin, async (req, res) => {
     try {
         const { code, name, description, icon, iconImage, imageUrl, rating, cities } = req.body;
         const iconVal = iconImage || imageUrl || icon || 'https://cdn-icons-png.flaticon.com/512/2830/2830305.png';
@@ -170,7 +172,7 @@ router.post('/', async (req, res) => {
 });
 
 // 6. PUT /api/v1/services/:id - Update service (including cities)
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, requireAdmin, async (req, res) => {
     try {
         const { name, description, icon, iconImage, imageUrl, rating, cities, isActive } = req.body;
         const updateData = {};
@@ -196,7 +198,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // 7. PUT /api/v1/services/:id/cities - Specific endpoint to dynamically update allowed cities for a service
-router.put('/:id/cities', async (req, res) => {
+router.put('/:id/cities', authenticate, requireAdmin, async (req, res) => {
     try {
         const { cities } = req.body;
         if (!Array.isArray(cities)) {

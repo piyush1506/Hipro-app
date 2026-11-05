@@ -2,9 +2,18 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const axios = require('axios');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 
 // File paths for persistence
-const uploadsDir = path.join(__dirname, '../../uploads');
+const uploadsDir = path.join(__dirname, '../data/ent');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+['ent_experiences.json', 'ent_categories.json', 'ent_bookings.json', 'ent_reviews.json'].forEach(f => {
+  const oldP = path.join(__dirname, '../../uploads', f);
+  const newP = path.join(uploadsDir, f);
+  if (fs.existsSync(oldP) && !fs.existsSync(newP)) { try { fs.copyFileSync(oldP, newP); fs.unlinkSync(oldP); } catch(e){} }
+});
 const ENT_DATA_FILE = path.join(uploadsDir, 'ent_experiences.json');
 const ENT_CATEGORIES_FILE = path.join(uploadsDir, 'ent_categories.json');
 const ENT_BOOKINGS_FILE = path.join(uploadsDir, 'ent_bookings.json');
@@ -750,7 +759,7 @@ router.get('/categories', (req, res) => {
 });
 
 // Dynamic Category: Create
-router.post('/categories', (req, res) => {
+router.post('/categories', authenticate, requireAdmin, (req, res) => {
   try {
     const { name, tagline, icon, color, imageUrl } = req.body;
     if (!name || !name.trim()) {
@@ -797,7 +806,7 @@ router.post('/categories', (req, res) => {
 });
 
 // Dynamic Category: Update
-router.put('/categories/:id', (req, res) => {
+router.put('/categories/:id', authenticate, requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { name, tagline, icon, color, imageUrl, isActive, displayOrder } = req.body;
@@ -849,7 +858,7 @@ router.put('/categories/:id', (req, res) => {
 });
 
 // Dynamic Category: Delete
-router.delete('/categories/:id', (req, res) => {
+router.delete('/categories/:id', authenticate, requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     let categories = loadCategories();
@@ -909,19 +918,22 @@ router.get('/categories/:id/experiences', (req, res) => {
 // -------------------------------------------------------------
 // 3. Bookings: /bookings , /my-bookings/:userId , /bookings/:bookingCode
 // -------------------------------------------------------------
-router.post('/bookings', (req, res) => {
+router.post('/bookings', authenticate, async (req, res) => {
   try {
     const {
       experienceId,
       entId,
-      userId,
       travelerName,
       travelerPhone,
       date,
       timeSlot,
       guestsCount = 1,
       notes,
+      razorpayPaymentId,
+      razorpayOrderId,
+      razorpaySignature,
     } = req.body;
+    const userId = req.user.id;
 
     const targetId = entId || experienceId;
 
@@ -945,6 +957,71 @@ router.post('/bookings', (req, res) => {
     const baseAmount = ent.startingPrice * guests;
     const taxes = Math.round(baseAmount * 0.05); // 5% GST
     const totalAmount = baseAmount + taxes;
+
+    // Mandatory payment verification for ENT bookings
+    const rzKey = process.env.RAZORPAY_KEY_ID;
+    const rzSecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_SECRET;
+
+    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification required: razorpayPaymentId, razorpayOrderId, and razorpaySignature are mandatory for ENT bookings',
+      });
+    }
+
+    if (rzSecret) {
+      const hmac = crypto.createHmac('sha256', rzSecret);
+      hmac.update(`${razorpayOrderId}|${razorpayPaymentId}`);
+      const digest = hmac.digest('hex');
+      if (digest !== razorpaySignature) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment signature verification failed. ENT booking cannot be confirmed.',
+        });
+      }
+    }
+
+    if (rzKey && rzSecret) {
+      try {
+        const auth = Buffer.from(`${rzKey}:${rzSecret}`).toString('base64');
+        const paymentRes = await axios.get(
+          `https://api.razorpay.com/v1/payments/${razorpayPaymentId}`,
+          {
+            headers: {
+              Authorization: `Basic ${auth}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          }
+        );
+        const paymentData = paymentRes.data;
+        if (paymentData.status !== 'captured') {
+          return res.status(400).json({
+            success: false,
+            message: `Payment is not captured (status: ${paymentData.status}). Booking rejected.`,
+          });
+        }
+        if (paymentData.order_id && paymentData.order_id !== razorpayOrderId) {
+          return res.status(400).json({
+            success: false,
+            message: 'Payment order_id mismatch.',
+          });
+        }
+        const paidAmount = paymentData.amount / 100;
+        if (Math.abs(paidAmount - totalAmount) > 1) {
+          return res.status(400).json({
+            success: false,
+            message: `Payment amount mismatch: expected ₹${totalAmount}, got ₹${paidAmount}`,
+          });
+        }
+      } catch (rzErr) {
+        console.error('ENT payment verification API error:', rzErr.response?.data || rzErr.message);
+        return res.status(400).json({
+          success: false,
+          message: 'Unable to verify payment with payment gateway. Booking creation rejected.',
+        });
+      }
+    }
 
     // Generate unique ENT booking reference
     const bookingCode = `ENT-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
@@ -976,6 +1053,8 @@ router.post('/bookings', (req, res) => {
       totalAmount,
       currency: 'INR',
       notes: notes || '',
+      razorpayPaymentId,
+      razorpayOrderId,
       status: 'CONFIRMED',
       paymentStatus: 'PAID',
       createdAt: new Date().toISOString(),
@@ -985,13 +1064,18 @@ router.post('/bookings', (req, res) => {
     bookings.unshift(newBooking);
     saveBookings(bookings);
 
-    // If socket.io is active, notify admin and vendor in real-time
+    // If socket.io is active, notify admin, user, and vendor in real-time
     const io = req.app.get('io');
     if (io) {
-      io.to('admin').emit('new_ent_booking', {
+      io.to('admin_room').emit('new_ent_booking', {
         message: `New ENT adventure booked: ${ent.title} in ${ent.city}`,
         booking: newBooking,
       });
+      if (newBooking.userId) {
+        io.to(`user_${newBooking.userId}`).emit('new_ent_booking', {
+          booking: newBooking,
+        });
+      }
       if (newBooking.vendorId) {
         io.to(`vendor_${newBooking.vendorId}`).emit('vendor_adventure_booking', newBooking);
       }
@@ -1011,23 +1095,30 @@ router.post('/bookings', (req, res) => {
   }
 });
 
-router.get('/my-bookings/:userId', (req, res) => {
+router.get('/my-bookings/:userId', authenticate, (req, res) => {
   try {
     const { userId } = req.params;
-    const { phone } = req.query;
+    const isAdmin = req.user.role === 'ADMIN';
+    const isOwner = req.user.id === userId || (req.user.phone && req.user.phone === userId);
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You cannot access bookings of another user',
+      });
+    }
+
     const bookings = loadBookings();
     const cleanId = String(userId || '').trim().toLowerCase();
-    const cleanPhone = String(phone || '').trim();
 
     const userBookings = bookings.filter((b) => {
       const bUser = String(b.userId || '').trim().toLowerCase();
       const bPhone = String(b.travelerPhone || '').trim();
 
-      if (cleanPhone && bPhone === cleanPhone) return true;
-      if (cleanId === 'guest_user') {
-        return !b.userId || b.userId === 'guest_user' || (cleanPhone && bPhone === cleanPhone);
+      if (isAdmin) {
+        return bUser === cleanId || bPhone === cleanId;
       }
-      return bUser === cleanId || (cleanId.length >= 10 && bPhone === cleanId) || (cleanPhone && bPhone === cleanPhone);
+      return bUser === req.user.id || (req.user.phone && bPhone === req.user.phone);
     });
 
     res.json({
@@ -1044,7 +1135,7 @@ router.get('/my-bookings/:userId', (req, res) => {
   }
 });
 
-router.get('/bookings/:bookingCode', (req, res) => {
+router.get('/bookings/:bookingCode', authenticate, (req, res) => {
   try {
     const { bookingCode } = req.params;
     const bookings = loadBookings();
@@ -1056,13 +1147,21 @@ router.get('/bookings/:bookingCode', (req, res) => {
       return res.status(404).json({ success: false, message: 'ENT booking not found' });
     }
 
+    const isAdmin = req.user.role === 'ADMIN';
+    const isOwner = booking.userId === req.user.id || (req.user.phone && booking.travelerPhone === req.user.phone);
+    const isVendor = req.user.role === 'VENDOR' && booking.vendorId === req.user.vendorId;
+
+    if (!isAdmin && !isOwner && !isVendor) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You cannot view this booking' });
+    }
+
     res.json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-router.patch('/bookings/:id/cancel', (req, res) => {
+router.patch('/bookings/:id/cancel', authenticate, (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -1073,6 +1172,14 @@ router.patch('/bookings/:id/cancel', (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
+    const booking = bookings[idx];
+    const isAdmin = req.user.role === 'ADMIN';
+    const isOwner = booking.userId === req.user.id || (req.user.phone && booking.travelerPhone === req.user.phone);
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You cannot cancel this booking' });
+    }
+
     bookings[idx].status = 'CANCELLED';
     bookings[idx].cancelReason = reason || 'Cancelled by user';
     bookings[idx].refundStatus = 'INITIATED';
@@ -1081,10 +1188,16 @@ router.patch('/bookings/:id/cancel', (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to('admin').emit('ent_booking_updated', {
+      io.to('admin_room').emit('ent_booking_updated', {
         action: 'CANCELLED',
         booking: bookings[idx],
       });
+      if (booking.userId) {
+        io.to(`user_${booking.userId}`).emit('ent_booking_updated', {
+          action: 'CANCELLED',
+          booking: bookings[idx],
+        });
+      }
     }
 
     res.json({
@@ -1097,7 +1210,7 @@ router.patch('/bookings/:id/cancel', (req, res) => {
   }
 });
 
-router.patch('/bookings/:id/reschedule', (req, res) => {
+router.patch('/bookings/:id/reschedule', authenticate, (req, res) => {
   try {
     const { id } = req.params;
     const { date, timeSlot } = req.body;
@@ -1111,6 +1224,14 @@ router.patch('/bookings/:id/reschedule', (req, res) => {
 
     if (idx === -1) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const booking = bookings[idx];
+    const isAdmin = req.user.role === 'ADMIN';
+    const isOwner = booking.userId === req.user.id || (req.user.phone && booking.travelerPhone === req.user.phone);
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You cannot reschedule this booking' });
     }
 
     bookings[idx].travelDate = date;
@@ -1131,7 +1252,7 @@ router.patch('/bookings/:id/reschedule', (req, res) => {
 // -------------------------------------------------------------
 // 4. Admin Management & Stats: /admin/bookings , /admin/stats
 // -------------------------------------------------------------
-router.get('/admin/bookings', (req, res) => {
+router.get('/admin/bookings', authenticate, requireAdmin, (req, res) => {
   try {
     const { status, city } = req.query;
     let bookings = loadBookings();
@@ -1151,12 +1272,18 @@ router.get('/admin/bookings', (req, res) => {
 });
 
 // GET /api/v1/ent/vendor/bookings - Specific to an adventure vendor
-router.get('/vendor/bookings', (req, res) => {
+router.get('/vendor/bookings', authenticate, (req, res) => {
   try {
-    const { vendorId, status, search } = req.query;
+    const { status, search } = req.query;
+    let targetVendorId = req.query.vendorId;
+    if (req.user.role === 'VENDOR') {
+      targetVendorId = req.user.vendorId || req.user.id;
+    } else if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden: Access restricted to vendors and admins' });
+    }
     let bookings = loadBookings();
-    if (vendorId && vendorId !== 'ALL') {
-      bookings = bookings.filter((b) => b.vendorId === vendorId || !b.vendorId);
+    if (targetVendorId && targetVendorId !== 'ALL') {
+      bookings = bookings.filter((b) => b.vendorId === targetVendorId);
     }
     if (status && status !== 'All') {
       bookings = bookings.filter((b) => (b.status || '').toUpperCase() === status.toUpperCase());
@@ -1177,7 +1304,7 @@ router.get('/vendor/bookings', (req, res) => {
   }
 });
 
-router.patch('/admin/bookings/:id/status', (req, res) => {
+router.patch('/admin/bookings/:id/status', authenticate, requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -1194,7 +1321,7 @@ router.patch('/admin/bookings/:id/status', (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to('admin').emit('ent_booking_updated', {
+      io.to('admin_room').emit('ent_booking_updated', {
         action: 'STATUS_UPDATED',
         status,
         booking: bookings[idx],
@@ -1211,7 +1338,7 @@ router.patch('/admin/bookings/:id/status', (req, res) => {
   }
 });
 
-router.get('/admin/stats', (req, res) => {
+router.get('/admin/stats', authenticate, requireAdmin, (req, res) => {
   try {
     const items = loadEntItems();
     const bookings = loadBookings();
@@ -1368,9 +1495,9 @@ const createEntHandler = (req, res) => {
   }
 };
 
-router.post('/', createEntHandler);
-router.post('/items', createEntHandler);
-router.post('/experiences', createEntHandler);
+router.post('/', authenticate, requireAdmin, createEntHandler);
+router.post('/items', authenticate, requireAdmin, createEntHandler);
+router.post('/experiences', authenticate, requireAdmin, createEntHandler);
 
 // -------------------------------------------------------------
 // 6. Single ENT Item Details: GET /:id or /experiences/:id
@@ -1463,8 +1590,8 @@ const updateEntHandler = (req, res) => {
   }
 };
 
-router.put('/experiences/:id', updateEntHandler);
-router.put('/:id', updateEntHandler);
+router.put('/experiences/:id', authenticate, requireAdmin, updateEntHandler);
+router.put('/:id', authenticate, requireAdmin, updateEntHandler);
 
 // -------------------------------------------------------------
 // 8. Delete / Deactivate ENT Item: DELETE /:id or /experiences/:id
@@ -1500,8 +1627,8 @@ const deleteEntHandler = (req, res) => {
   }
 };
 
-router.delete('/experiences/:id', deleteEntHandler);
-router.delete('/:id', deleteEntHandler);
+router.delete('/experiences/:id', authenticate, requireAdmin, deleteEntHandler);
+router.delete('/:id', authenticate, requireAdmin, deleteEntHandler);
 
 // -------------------------------------------------------------
 // 9. Toggle Active/Featured: PATCH /:id/toggle
@@ -1532,8 +1659,8 @@ const toggleEntHandler = (req, res) => {
   }
 };
 
-router.patch('/experiences/:id/toggle', toggleEntHandler);
-router.patch('/:id/toggle', toggleEntHandler);
+router.patch('/experiences/:id/toggle', authenticate, requireAdmin, toggleEntHandler);
+router.patch('/:id/toggle', authenticate, requireAdmin, toggleEntHandler);
 
 // -------------------------------------------------------------
 // 10. Reviews & Ratings: GET & POST /:id/reviews
@@ -1604,7 +1731,7 @@ const addEntReviewHandler = (req, res) => {
 router.get('/experiences/:id/reviews', getEntReviewsHandler);
 router.get('/:id/reviews', getEntReviewsHandler);
 
-router.post('/experiences/:id/reviews', addEntReviewHandler);
-router.post('/:id/reviews', addEntReviewHandler);
+router.post('/experiences/:id/reviews', authenticate, addEntReviewHandler);
+router.post('/:id/reviews', authenticate, addEntReviewHandler);
 
 module.exports = router;

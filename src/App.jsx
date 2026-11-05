@@ -10,6 +10,8 @@ import {
 import AdminApp from './admin/AdminApp.jsx';
 import VendorPanel from './admin/VendorPanel.jsx';
 import LoginPage from './admin/LoginPage.jsx';
+import VendorRegisterPage from './admin/VendorRegisterPage.jsx';
+import AdminLoginPage from './admin/AdminLoginPage.jsx';
 
 // The 8 Primary Construction & Maintenance Categories with Subcategories
 
@@ -129,15 +131,58 @@ const CATEGORIES = [
 export default function App() {
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      const hash = window.location.hash;
-      const path = window.location.pathname;
+      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      const token = localStorage.getItem('hipro_auth_token');
+      const role = localStorage.getItem('hipro_user_role');
+
       if (hash === '#client') return 'client';
-      if (hash === '#login') return 'login';
-      if (hash === '#vendor' || path.includes('/vendor')) return 'vendor';
-      if (hash === '#admin' || path.includes('/admin')) return 'admin';
+      if (search.includes('redirect=%2fadmin') || search.includes('redirect=/admin')) {
+        try { window.history.replaceState(null, '', '/admin'); } catch (e) {}
+        return (token && role === 'ADMIN') ? 'admin' : 'admin_login';
+      }
+      if (hash.includes('register') || path.includes('/register')) return 'register';
+      if (hash.includes('admin') || path.includes('/admin')) {
+        return (token && role === 'ADMIN') ? 'admin' : 'admin_login';
+      }
+      if (hash.includes('vendor') || path.includes('/vendor') || path.includes('/partner')) {
+        return (token && role === 'VENDOR') ? 'vendor' : 'login';
+      }
+      if (hash.includes('login') || path.includes('/login')) return 'login';
     }
-    return 'admin'; // Defaults to Admin Panel as requested
+    return 'admin_login';
   });
+
+  // Listen for navigation changes
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      const token = localStorage.getItem('hipro_auth_token');
+      const role = localStorage.getItem('hipro_user_role');
+
+      if (hash === '#client') {
+        setViewMode('client');
+      } else if (search.includes('redirect=%2fadmin') || search.includes('redirect=/admin') || hash.includes('admin') || path.includes('/admin')) {
+        setViewMode((token && role === 'ADMIN') ? 'admin' : 'admin_login');
+      } else if (hash.includes('register') || path.includes('/register')) {
+        setViewMode('register');
+      } else if (hash.includes('vendor') || path.includes('/vendor') || path.includes('/partner')) {
+        setViewMode((token && role === 'VENDOR') ? 'vendor' : 'login');
+      } else if (hash.includes('login') || path.includes('/login')) {
+        setViewMode('login');
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
 
   const [currentScreen, setCurrentScreen] = useState('home');
   const [fullscreenMode, setFullscreenMode] = useState(false);
@@ -650,14 +695,20 @@ export default function App() {
 
   const showBottomNav = ['home', 'my_bookings', 'projects', 'profile'].includes(currentScreen);
 
+  if (viewMode === 'admin_login') {
+    return <AdminLoginPage onLoginSuccess={() => setViewMode('admin')} />;
+  }
+  if (viewMode === 'register') {
+    return <VendorRegisterPage onRegisterSuccess={() => setViewMode('vendor')} onSwitchToLogin={() => setViewMode('login')} />;
+  }
   if (viewMode === 'login') {
-    return <LoginPage onLoginSuccess={(role) => setViewMode(role === 'VENDOR' ? 'vendor' : 'admin')} />;
+    return <LoginPage onLoginSuccess={() => setViewMode('vendor')} onSwitchToRegister={() => setViewMode('register')} />;
   }
   if (viewMode === 'vendor') {
-    return <VendorPanel onSwitchToSuperAdmin={() => setViewMode('admin')} onLogout={() => setViewMode('login')} />;
+    return <VendorPanel onSwitchToSuperAdmin={() => setViewMode('admin_login')} onLogout={() => setViewMode('login')} />;
   }
   if (viewMode === 'admin') {
-    return <AdminApp onSwitchToCustomerApp={() => setViewMode('client')} onSwitchToVendor={() => setViewMode('vendor')} onLogout={() => setViewMode('login')} />;
+    return <AdminApp onSwitchToCustomerApp={() => setViewMode('client')} onSwitchToVendor={() => setViewMode('login')} onLogout={() => setViewMode('admin_login')} />;
   }
 
   return (

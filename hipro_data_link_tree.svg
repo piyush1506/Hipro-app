@@ -1,0 +1,325 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1100" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0f1d"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+
+    <!-- Card Gradients -->
+    <linearGradient id="rootCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="servicesCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#131d38"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="adventureCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#28131e"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+
+    <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="1100" fill="url(#bgGrad)"/>
+
+  <!-- Grid Accent Lines -->
+  <g opacity="0.07" stroke="#94a3b8" stroke-width="1">
+    <line x1="100" y1="0" x2="100" y2="1100"/>
+    <line x1="300" y1="0" x2="300" y2="1100"/>
+    <line x1="500" y1="0" x2="500" y2="1100"/>
+    <line x1="700" y1="0" x2="700" y2="1100"/>
+    <line x1="900" y1="0" x2="900" y2="1100"/>
+    <line x1="1100" y1="0" x2="1100" y2="1100"/>
+    <line x1="1300" y1="0" x2="1300" y2="1100"/>
+    <line x1="1500" y1="0" x2="1500" y2="1100"/>
+    <line x1="0" y1="150" x2="1600" y2="150"/>
+    <line x1="0" y1="350" x2="1600" y2="350"/>
+    <line x1="0" y1="550" x2="1600" y2="550"/>
+    <line x1="0" y1="750" x2="1600" y2="750"/>
+    <line x1="0" y1="950" x2="1600" y2="950"/>
+  </g>
+
+  <!-- Title & Header -->
+  <g transform="translate(800, 50)" text-anchor="middle">
+    <rect x="-140" y="-18" width="280" height="28" rx="14" fill="#312e81" stroke="#6366f1" stroke-width="1.5"/>
+    <text y="0" fill="#a5b4fc" font-size="12" font-weight="700" font-family="system-ui, sans-serif" letter-spacing="2">SYSTEM ARCHITECTURE MAP</text>
+    <text y="42" fill="#ffffff" font-size="30" font-weight="800" font-family="system-ui, sans-serif">Hipro Super-App Data Link Tree</text>
+    <text y="70" fill="#94a3b8" font-size="14" font-family="system-ui, sans-serif">Connecting Marketing Sliders, Offer Coupons, Core Services &amp; Adventure Domain</text>
+  </g>
+
+  <!-- ROOT SUPER APP HUB -->
+  <g transform="translate(500, 140)">
+    <rect width="600" height="74" rx="14" fill="url(#rootCardGrad)" stroke="#3b82f6" stroke-width="2" filter="url(#cardShadow)"/>
+    <text x="300" y="32" text-anchor="middle" fill="#60a5fa" font-size="17" font-weight="800" font-family="system-ui, sans-serif">📱 Hipro Mobile App &amp; 💻 Web Admin Portal</text>
+    <text x="300" y="54" text-anchor="middle" fill="#94a3b8" font-size="12" font-family="system-ui, sans-serif">Express.js API Engine (Port 5000) • Prisma ORM • Real-time Socket.IO Events</text>
+  </g>
+
+  <!-- CONNECTOR LINES FROM ROOT TO CROSS-CUTTING -->
+  <path d="M 680 214 L 680 246 L 420 246 L 420 260" stroke="#60a5fa" stroke-width="2" fill="none" stroke-dasharray="4,4"/>
+  <path d="M 920 214 L 920 246 L 1180 246 L 1180 260" stroke="#60a5fa" stroke-width="2" fill="none" stroke-dasharray="4,4"/>
+
+  <!-- CROSS-CUTTING LAYER: SLIDERS & OFFERS -->
+  <!-- 1. Sliders & Banners -->
+  <g transform="translate(100, 260)">
+    <rect width="640" height="150" rx="14" fill="#1e293b" stroke="#f59e0b" stroke-width="2" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="640" height="6" fill="#f59e0b" rx="3"/>
+    <text x="24" y="34" fill="#fbbf24" font-size="16" font-weight="700" font-family="system-ui, sans-serif">🎠 Sliders &amp; Promo Banners</text>
+    <rect x="470" y="16" width="150" height="22" rx="6" fill="#78350f"/>
+    <text x="545" y="31" text-anchor="middle" fill="#fef3c7" font-size="10" font-weight="700" font-family="monospace">uploads/slides.json</text>
+    
+    <!-- Subcards -->
+    <g transform="translate(20, 50)">
+      <rect width="290" height="80" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+      <text x="14" y="24" fill="#94a3b8" font-size="10" font-weight="700" font-family="system-ui, sans-serif">SECTION: SERVICES</text>
+      <text x="14" y="44" fill="#e2e8f0" font-size="12" font-weight="600" font-family="system-ui, sans-serif">Terrace Scan &amp; Structural Repair</text>
+      <text x="14" y="64" fill="#38bdf8" font-size="10" font-family="monospace">targetRoute ➔ 'create_inspection'</text>
+    </g>
+
+    <g transform="translate(330, 50)">
+      <rect width="290" height="80" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+      <text x="14" y="24" fill="#94a3b8" font-size="10" font-weight="700" font-family="system-ui, sans-serif">SECTION: ADVENTURE</text>
+      <text x="14" y="44" fill="#e2e8f0" font-size="12" font-weight="600" font-family="system-ui, sans-serif">Tandem Flights &amp; Desert Camps</text>
+      <text x="14" y="64" fill="#fb7185" font-size="10" font-family="monospace">targetRoute ➔ 'adventure'</text>
+    </g>
+  </g>
+
+  <!-- 2. Coupons & Offers -->
+  <g transform="translate(860, 260)">
+    <rect width="640" height="150" rx="14" fill="#1e293b" stroke="#10b981" stroke-width="2" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="640" height="6" fill="#10b981" rx="3"/>
+    <text x="24" y="34" fill="#34d399" font-size="16" font-weight="700" font-family="system-ui, sans-serif">🏷️ Coupons &amp; Promotional Deals</text>
+    <rect x="470" y="16" width="150" height="22" rx="6" fill="#064e3b"/>
+    <text x="545" y="31" text-anchor="middle" fill="#d1fae5" font-size="10" font-weight="700" font-family="monospace">uploads/offers.json</text>
+    
+    <!-- Subcards -->
+    <g transform="translate(20, 50)">
+      <rect width="290" height="80" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+      <text x="14" y="24" fill="#94a3b8" font-size="10" font-weight="700" font-family="system-ui, sans-serif">CODE: HIPRO20 / CIVIL500</text>
+      <text x="14" y="44" fill="#e2e8f0" font-size="12" font-weight="600" font-family="system-ui, sans-serif">Flat 20% OFF Inspection Audits</text>
+      <text x="14" y="64" fill="#34d399" font-size="10" font-family="monospace">Applies to ➔ Service Checkout</text>
+    </g>
+
+    <g transform="translate(330, 50)">
+      <rect width="290" height="80" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+      <text x="14" y="24" fill="#94a3b8" font-size="10" font-weight="700" font-family="system-ui, sans-serif">CODE: THRILL20 / DESERT300</text>
+      <text x="14" y="44" fill="#e2e8f0" font-size="12" font-weight="600" font-family="system-ui, sans-serif">20% OFF Rafting &amp; Desert Camps</text>
+      <text x="14" y="64" fill="#fb7185" font-size="10" font-family="monospace">Applies to ➔ Adventure Pass</text>
+    </g>
+  </g>
+
+  <!-- CONNECTORS FROM CROSS-CUTTING TO MAIN DOMAINS -->
+  <!-- Left Side to Services -->
+  <path d="M 265 410 L 265 450 L 420 450 L 420 470" stroke="#f59e0b" stroke-width="2" fill="none"/>
+  <path d="M 1025 410 L 1025 440 L 440 440 L 440 470" stroke="#10b981" stroke-width="2" fill="none"/>
+
+  <!-- Right Side to Adventure -->
+  <path d="M 595 410 L 595 440 L 1160 440 L 1160 470" stroke="#f59e0b" stroke-width="2" fill="none"/>
+  <path d="M 1335 410 L 1335 450 L 1180 450 L 1180 470" stroke="#10b981" stroke-width="2" fill="none"/>
+
+  <!-- ============================================== -->
+  <!-- DOMAIN 1: SERVICES & MAINTENANCE (LEFT) -->
+  <!-- ============================================== -->
+  <g transform="translate(100, 470)">
+    <rect width="640" height="540" rx="16" fill="url(#servicesCardGrad)" stroke="#6366f1" stroke-width="2" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="640" height="6" fill="#6366f1" rx="3"/>
+    
+    <text x="24" y="38" fill="#818cf8" font-size="18" font-weight="800" font-family="system-ui, sans-serif">🛠️ Core Services &amp; Maintenance</text>
+    <rect x="460" y="18" width="160" height="24" rx="6" fill="#312e81"/>
+    <text x="540" y="34" text-anchor="middle" fill="#c7d2fe" font-size="11" font-weight="700" font-family="monospace">PostgreSQL / Prisma</text>
+
+    <!-- Node 1: Service Categories -->
+    <g transform="translate(24, 60)">
+      <rect width="592" height="110" rx="10" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+      <rect x="0" y="0" width="6" height="110" fill="#3b82f6" rx="2"/>
+      <text x="20" y="28" fill="#60a5fa" font-size="14" font-weight="700" font-family="system-ui, sans-serif">📁 1. Service Categories (Table: Service)</text>
+      <rect x="490" y="12" width="85" height="20" rx="4" fill="#1e3a8a"/>
+      <text x="532" y="26" text-anchor="middle" fill="#93c5fd" font-size="10" font-weight="700" font-family="monospace">PK: id</text>
+      <text x="20" y="52" fill="#94a3b8" font-size="11" font-family="system-ui, sans-serif">High-level divisions (Waterproofing, Civil Works, Structural Audit, Renovation)</text>
+      
+      <!-- Tags -->
+      <rect x="20" y="68" width="125" height="24" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="82" y="84" text-anchor="middle" fill="#cbd5e1" font-size="10" font-family="system-ui, sans-serif">Waterproofing</text>
+      <rect x="155" y="68" width="105" height="24" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="207" y="84" text-anchor="middle" fill="#cbd5e1" font-size="10" font-family="system-ui, sans-serif">Civil Works</text>
+      <rect x="270" y="68" width="125" height="24" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="332" y="84" text-anchor="middle" fill="#cbd5e1" font-size="10" font-family="system-ui, sans-serif">Structural Audit</text>
+      <rect x="405" y="68" width="105" height="24" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="457" y="84" text-anchor="middle" fill="#cbd5e1" font-size="10" font-family="system-ui, sans-serif">Renovation</text>
+    </g>
+
+    <!-- Arrow Down -->
+    <path d="M 320 170 L 320 200" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)" fill="none"/>
+    <text x="335" y="188" fill="#38bdf8" font-size="10" font-weight="700" font-family="monospace">1-to-Many (serviceId)</text>
+
+    <!-- Node 2: SubServices -->
+    <g transform="translate(24, 204)">
+      <rect width="592" height="120" rx="10" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+      <rect x="0" y="0" width="6" height="120" fill="#10b981" rx="2"/>
+      <text x="20" y="28" fill="#34d399" font-size="14" font-weight="700" font-family="system-ui, sans-serif">📑 2. Sub-Services (Table: SubService)</text>
+      <rect x="400" y="12" width="175" height="20" rx="4" fill="#064e3b"/>
+      <text x="487" y="26" text-anchor="middle" fill="#6ee7b7" font-size="10" font-weight="700" font-family="monospace">FK: serviceId ➔ Service.id</text>
+      <text x="20" y="52" fill="#94a3b8" font-size="11" font-family="system-ui, sans-serif">Granular packages with visiting charge, checklist, bookNowEnabled &amp; requiredFields</text>
+      
+      <!-- Pills -->
+      <rect x="20" y="70" width="165" height="34" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="30" y="86" fill="#34d399" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Terrace Leakage Scan</text>
+      <text x="30" y="99" fill="#94a3b8" font-size="9" font-family="system-ui, sans-serif">Visiting Fee: ₹199</text>
+
+      <rect x="195" y="70" width="175" height="34" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="205" y="86" fill="#34d399" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Wall Seepage Injection</text>
+      <text x="205" y="99" fill="#94a3b8" font-size="9" font-family="system-ui, sans-serif">Visiting Fee: ₹299</text>
+
+      <rect x="380" y="70" width="185" height="34" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="390" y="86" fill="#34d399" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Crack Stitching &amp; Patch</text>
+      <text x="390" y="99" fill="#94a3b8" font-size="9" font-family="system-ui, sans-serif">Visiting Fee: ₹399</text>
+    </g>
+
+    <!-- Arrow Down -->
+    <path d="M 320 324 L 320 354" stroke="#a855f7" stroke-width="2" fill="none"/>
+    <text x="335" y="342" fill="#d8b4fe" font-size="10" font-weight="700" font-family="monospace">Generates Orders &amp; Assigns Techs</text>
+
+    <!-- Node 3: Bookings & Technicians -->
+    <g transform="translate(24, 358)">
+      <rect width="592" height="150" rx="10" fill="#1e293b" stroke="#a855f7" stroke-width="2"/>
+      <rect x="0" y="0" width="6" height="150" fill="#a855f7" rx="2"/>
+      <text x="20" y="28" fill="#d8b4fe" font-size="14" font-weight="700" font-family="system-ui, sans-serif">👷 3. Execution: Partners, Bookings &amp; Quotes</text>
+      <rect x="380" y="12" width="195" height="20" rx="4" fill="#3b0764"/>
+      <text x="477" y="26" text-anchor="middle" fill="#d8b4fe" font-size="10" font-weight="700" font-family="monospace">DirectBooking, ServiceRequest</text>
+      
+      <g transform="translate(20, 48)">
+        <rect width="265" height="84" rx="6" fill="#0f172a" stroke="#334155"/>
+        <text x="14" y="24" fill="#c084fc" font-size="11" font-weight="700" font-family="system-ui, sans-serif">Instant Booking Desk</text>
+        <text x="14" y="44" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Auto-assigned Engineer</text>
+        <text x="14" y="60" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Preferred Slot &amp; Address</text>
+        <text x="14" y="74" fill="#34d399" font-size="10" font-family="system-ui, sans-serif">• Online Advance or Cash</text>
+      </g>
+
+      <g transform="translate(305, 48)">
+        <rect width="265" height="84" rx="6" fill="#0f172a" stroke="#334155"/>
+        <text x="14" y="24" fill="#c084fc" font-size="11" font-weight="700" font-family="system-ui, sans-serif">Assigned Lead Engineers</text>
+        <text x="14" y="44" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Er. Vikram Sharma (Civil)</text>
+        <text x="14" y="60" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Er. Rajesh Verma (Waterproof)</text>
+        <text x="14" y="74" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Er. Neha Gupta (Audit)</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ============================================== -->
+  <!-- DOMAIN 2: ADVENTURE & TOURISM (RIGHT) -->
+  <!-- ============================================== -->
+  <g transform="translate(860, 470)">
+    <rect width="640" height="540" rx="16" fill="url(#adventureCardGrad)" stroke="#e11d48" stroke-width="2" filter="url(#cardShadow)"/>
+    <rect x="0" y="0" width="640" height="6" fill="#e11d48" rx="3"/>
+    
+    <text x="24" y="38" fill="#fb7185" font-size="18" font-weight="800" font-family="system-ui, sans-serif">🧭 Adventure &amp; Sports Catalog</text>
+    <rect x="460" y="18" width="160" height="24" rx="6" fill="#4c0519"/>
+    <text x="540" y="34" text-anchor="middle" fill="#fecdd3" font-size="11" font-weight="700" font-family="monospace">uploads/ent_*.json</text>
+
+    <!-- Node 1: Dynamic Categories -->
+    <g transform="translate(24, 60)">
+      <rect width="592" height="110" rx="10" fill="#1e293b" stroke="#e11d48" stroke-width="2"/>
+      <rect x="0" y="0" width="6" height="110" fill="#e11d48" rx="2"/>
+      <text x="20" y="28" fill="#fb7185" font-size="14" font-weight="700" font-family="system-ui, sans-serif">📂 1. Dynamic Categories (ent_categories.json)</text>
+      <rect x="430" y="12" width="145" height="20" rx="4" fill="#881337"/>
+      <text x="502" y="26" text-anchor="middle" fill="#fda4af" font-size="10" font-weight="700" font-family="monospace">PK: id (cat_slug)</text>
+      <text x="20" y="52" fill="#94a3b8" font-size="11" font-family="system-ui, sans-serif">Dynamic category records with accent color, icon mapper, and live sports counter</text>
+      
+      <!-- Category Badges -->
+      <rect x="20" y="68" width="105" height="24" rx="6" fill="#0f172a" stroke="#0284c7"/>
+      <text x="72" y="84" text-anchor="middle" fill="#38bdf8" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Air Sports</text>
+
+      <rect x="135" y="68" width="115" height="24" rx="6" fill="#0f172a" stroke="#d97706"/>
+      <text x="192" y="84" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Desert Safari</text>
+
+      <rect x="260" y="68" width="115" height="24" rx="6" fill="#0f172a" stroke="#0d9488"/>
+      <text x="317" y="84" text-anchor="middle" fill="#2dd4bf" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Water Sports</text>
+
+      <rect x="385" y="68" width="105" height="24" rx="6" fill="#0f172a" stroke="#e11d48"/>
+      <text x="437" y="84" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Adventure</text>
+
+      <rect x="500" y="68" width="90" height="24" rx="6" fill="#0f172a" stroke="#7c3aed"/>
+      <text x="545" y="84" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Sightseeing</text>
+    </g>
+
+    <!-- Arrow Down -->
+    <path d="M 320 170 L 320 200" stroke="#fbbf24" stroke-width="2" fill="none"/>
+    <text x="335" y="188" fill="#fbbf24" font-size="10" font-weight="700" font-family="monospace">Linked by categoryId &amp; category</text>
+
+    <!-- Node 2: Adventure Services / Activities -->
+    <g transform="translate(24, 204)">
+      <rect width="592" height="120" rx="10" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+      <rect x="0" y="0" width="6" height="120" fill="#fbbf24" rx="2"/>
+      <text x="20" y="28" fill="#fcd34d" font-size="14" font-weight="700" font-family="system-ui, sans-serif">🪂 2. Adventure Activities &amp; Outings (ent_experiences.json)</text>
+      <rect x="420" y="12" width="155" height="20" rx="4" fill="#78350f"/>
+      <text x="497" y="26" text-anchor="middle" fill="#fef3c7" font-size="10" font-weight="700" font-family="monospace">FK: categoryId ➔ Category</text>
+      <text x="20" y="52" fill="#94a3b8" font-size="11" font-family="system-ui, sans-serif">Real-world sports bookable by city with pricing, rating, and duration</text>
+      
+      <!-- Pills -->
+      <rect x="20" y="70" width="180" height="34" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="30" y="86" fill="#38bdf8" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Tandem Paragliding</text>
+      <text x="30" y="99" fill="#94a3b8" font-size="9" font-family="system-ui, sans-serif">Dehradun • ₹3,200 (cat_air_sports)</text>
+
+      <rect x="210" y="70" width="180" height="34" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="220" y="86" fill="#fbbf24" font-size="10" font-weight="700" font-family="system-ui, sans-serif">Dune Bashing &amp; Camp</text>
+      <text x="220" y="99" fill="#94a3b8" font-size="9" font-family="system-ui, sans-serif">Jaisalmer • ₹2,499 (cat_desert_safari)</text>
+
+      <rect x="400" y="70" width="180" height="34" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="410" y="86" fill="#2dd4bf" font-size="10" font-weight="700" font-family="system-ui, sans-serif">River Rafting 16km</text>
+      <text x="410" y="99" fill="#94a3b8" font-size="9" font-family="system-ui, sans-serif">Rishikesh • ₹1,200 (cat_water_sports)</text>
+    </g>
+
+    <!-- Arrow Down -->
+    <path d="M 320 324 L 320 354" stroke="#e11d48" stroke-width="2" fill="none"/>
+    <text x="335" y="342" fill="#fda4af" font-size="10" font-weight="700" font-family="monospace">Embedded Package Parts &amp; Slots</text>
+
+    <!-- Node 3: Adventure Parts & Bookings -->
+    <g transform="translate(24, 358)">
+      <rect width="592" height="150" rx="10" fill="#1e293b" stroke="#e11d48" stroke-width="2"/>
+      <rect x="0" y="0" width="6" height="150" fill="#e11d48" rx="2"/>
+      <text x="20" y="28" fill="#fda4af" font-size="14" font-weight="700" font-family="system-ui, sans-serif">🧩 3. Adventure Parts, Schedules &amp; Bookings</text>
+      <rect x="390" y="12" width="185" height="20" rx="4" fill="#4c0519"/>
+      <text x="482" y="26" text-anchor="middle" fill="#fda4af" font-size="10" font-weight="700" font-family="monospace">ent_bookings.json (Tickets)</text>
+      
+      <g transform="translate(20, 48)">
+        <rect width="265" height="84" rx="6" fill="#0f172a" stroke="#334155"/>
+        <text x="14" y="24" fill="#fb7185" font-size="11" font-weight="700" font-family="system-ui, sans-serif">Package Components &amp; Guidelines</text>
+        <text x="14" y="44" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Inclusions: GoPro HD, Pilot, Gear</text>
+        <text x="14" y="60" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Guidelines: 35-95 kg, Age 12+</text>
+        <text x="14" y="74" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• Base Camp: Maldevta / Shivpuri</text>
+      </g>
+
+      <g transform="translate(305, 48)">
+        <rect width="265" height="84" rx="6" fill="#0f172a" stroke="#334155"/>
+        <text x="14" y="24" fill="#fb7185" font-size="11" font-weight="700" font-family="system-ui, sans-serif">Time Slots &amp; Adventure Pass</text>
+        <text x="14" y="44" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• 06:30 AM (Sunrise Thermal)</text>
+        <text x="14" y="60" fill="#94a3b8" font-size="10" font-family="system-ui, sans-serif">• 09:00 AM (Morning Breeze)</text>
+        <text x="14" y="74" fill="#34d399" font-size="10" font-family="system-ui, sans-serif">• Confirmed Pass &amp; QR Code</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- BOTTOM STATUS BAR -->
+  <g transform="translate(100, 1030)">
+    <rect width="1400" height="42" rx="10" fill="#1e293b" stroke="#334155"/>
+    <text x="30" y="26" fill="#94a3b8" font-size="12" font-family="system-ui, sans-serif">REST APIs: <tspan fill="#38bdf8" font-weight="700">/api/v1/services</tspan> &amp; <tspan fill="#fb7185" font-weight="700">/api/v1/ent</tspan></text>
+    <text x="480" y="26" fill="#94a3b8" font-size="12" font-family="system-ui, sans-serif">Sliders: <tspan fill="#fbbf24" font-weight="700">/api/v1/slides</tspan></text>
+    <text x="730" y="26" fill="#94a3b8" font-size="12" font-family="system-ui, sans-serif">Coupons: <tspan fill="#34d399" font-weight="700">/api/v1/offers</tspan></text>
+    <text x="1000" y="26" fill="#94a3b8" font-size="12" font-family="system-ui, sans-serif">Foreign Link: <tspan fill="#f43f5e" font-weight="700">categoryId ➔ AdventureCategory.id</tspan></text>
+  </g>
+
+</svg>
+

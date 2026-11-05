@@ -6,17 +6,16 @@ import {
   Check, PhoneCall, Sparkles, Inbox, Clock, FileCheck2,
   CheckCircle2, GitPullRequest, Zap, ArrowRight, ArrowLeft, MapPin,
   Calendar, Home, User, Phone, Info, Send, RotateCcw,
-  Server, Database, AlertCircle, Droplets, Image, Layers,
+  Server, Database, AlertCircle, Droplets, Image, Layers, Maximize,
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
   Edit, Edit2, Edit3, LogOut, CreditCard, Banknote, Briefcase
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? ''
-    : 'https://app.hindustanprojects.in');
+const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
 export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,6 +23,8 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [vendorRequests, setVendorRequests] = useState([]);
   const [vendorQuotes, setVendorQuotes] = useState([]);
   const [assignedJobs, setAssignedJobs] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [activePhotoModal, setActivePhotoModal] = useState(null);
@@ -33,180 +34,93 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [quoteNotes, setQuoteNotes] = useState('');
   const [quoteTimeline, setQuoteTimeline] = useState('1-2 Working Days');
 
-  // Multi-vendor / Operator support (Service Providers + Adventure Operators)
-  const DEMO_VENDORS = [
-    {
-      id: 'v_adv_01',
-      name: 'Captain Arvind Negi',
-      businessName: 'Himalayan Sky Gliders & Air Safari',
-      phone: '+91 98290 88801',
-      email: 'arvind.gliders@gmail.com',
-      city: 'Dehradun',
-      category: 'Adventure',
-      specialization: 'Paragliding & Microlight Flights',
-      experience: '12 Years',
-      status: 'active',
-      rating: 4.9,
-      minCharge: '2500',
-    },
-    {
-      id: 'v_adv_02',
-      name: 'Fateh Singh Bhati',
-      businessName: 'Thar Royal Desert Safari & Camps',
-      phone: '+91 94141 77702',
-      email: 'thar.safari@gmail.com',
-      city: 'Jaisalmer',
-      category: 'Adventure',
-      specialization: 'Desert Safari & Dune Bashing',
-      experience: '10 Years',
-      status: 'active',
-      rating: 4.9,
-      minCharge: '1800',
-    },
-    {
-      id: 'v_adv_03',
-      name: 'Rakesh Rawat',
-      businessName: 'Ganga White Water Adventure Club',
-      phone: '+91 98370 66603',
-      email: 'ganga.rafting@gmail.com',
-      city: 'Rishikesh',
-      category: 'Adventure',
-      specialization: 'River Rafting & Kayaking',
-      experience: '14 Years',
-      status: 'active',
-      rating: 5.0,
-      minCharge: '1200',
-    },
-    {
-      id: 'v_1',
-      name: 'Rajesh Kumar',
-      businessName: 'Rajesh Construction & Repairs',
-      phone: '+91 98765 43210',
-      email: 'rajesh@example.com',
-      city: 'Bhilwara',
-      category: 'Services',
-      specialization: 'Waterproofing & Leakage',
-      experience: '8 Years',
-      status: 'active',
-      rating: 4.8,
-      minCharge: '1000',
-    },
-  ];
+  // ==================== QUOTATION & BOQ BUILDER STATE ====================
+  const [builderRequestId, setBuilderRequestId] = useState('');
+  const [builderMode, setBuilderMode] = useState('boq'); // 'boq' | 'lumpsum'
+  const [builderLineItems, setBuilderLineItems] = useState([
+    { item: 'Surface Inspection, Deep Cleaning & Primer Base', qty: 120, unit: 'Sq Ft', rate: 25 },
+    { item: 'High-Performance Waterproof Chemical Coating (2 Coats)', qty: 120, unit: 'Sq Ft', rate: 65 },
+    { item: 'Skilled Labour, Scaffolding & Site Clean-Up', qty: 1, unit: 'Lump Sum', rate: 2500 }
+  ]);
+  const [builderGstRate, setBuilderGstRate] = useState(18);
+  const [builderWarranty, setBuilderWarranty] = useState('5 Years Leakage & Chemical Warranty');
+  const [builderTimeline, setBuilderTimeline] = useState('3-5 Working Days');
+  const [builderNotes, setBuilderNotes] = useState('');
+  const [builderCustomPrice, setBuilderCustomPrice] = useState('');
+  const [isSubmittingBuilderQuote, setIsSubmittingBuilderQuote] = useState(false);
 
-  const [selectedVendorId, setSelectedVendorId] = useState(() => {
+  const builderLineItemsTotal = builderLineItems.reduce((acc, li) => {
+    return acc + ((parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0));
+  }, 0);
+
+  const effectiveBuilderSubtotal = builderMode === 'boq'
+    ? builderLineItemsTotal
+    : (parseFloat(builderCustomPrice) || 0);
+
+  const builderTaxAmount = builderGstRate > 0
+    ? Math.round(effectiveBuilderSubtotal * (builderGstRate / 100))
+    : 0;
+
+  const builderGrandTotal = effectiveBuilderSubtotal + builderTaxAmount;
+
+  const selectedBuilderRequest = vendorRequests.find(r => r.id === builderRequestId) || null;
+
+  // Read authenticated partner profile from localStorage
+  const registeredVendor = (() => {
     try {
       const saved = localStorage.getItem('hipro_vendor');
       if (saved) {
         const v = JSON.parse(saved);
-        const match = DEMO_VENDORS.find(
-          item => item.id === v.id ||
-                  (v.phone && item.phone && item.phone.replace(/\D/g, '').includes(v.phone.replace(/\D/g, ''))) ||
-                  (v.email && item.email && item.email.toLowerCase() === v.email.toLowerCase())
-        );
-        if (match) return match.id;
+        if (v && (v.name || v.businessName)) {
+          return {
+            id: v.id || null,
+            name: v.name || null,
+            businessName: v.businessName || v.name || null,
+            phone: v.phone || null,
+            email: v.email || null,
+            city: v.city || null,
+            category: (v.category && v.category.toLowerCase().includes('adventure')) ? 'Adventure' : 'Services',
+            specialization: v.specialization || null,
+            experience: v.experience || null,
+            status: v.status || null,
+            rating: v.rating || null,
+            minCharge: v.minCharge || null
+          };
+        }
       }
     } catch (e) {}
-    return 'v_adv_01';
+    return null;
+  })();
+
+  // Build dynamic vendor list: registered profile first, then all vendors from backend
+  const availableVendors = React.useMemo(() => {
+    const fetched = vendors.filter(v =>
+      !registeredVendor || (v.id !== registeredVendor.id && v.phone !== registeredVendor.phone)
+    );
+    return registeredVendor ? [registeredVendor, ...fetched] : fetched;
+  }, [vendors, registeredVendor]);
+
+  const [selectedVendorId, setSelectedVendorId] = useState(() => {
+    if (registeredVendor && registeredVendor.id) return registeredVendor.id;
+    return vendors[0]?.id || null;
   });
 
-  const vendorProfile = DEMO_VENDORS.find(v => v.id === selectedVendorId) || DEMO_VENDORS[0];
-  const isAdventure = (vendorProfile.category || '').toLowerCase().includes('adventure');
+  const vendorProfile = availableVendors.find(v => v.id === selectedVendorId) || registeredVendor || availableVendors[0] || null;
+  const isAdventure = !!vendorProfile && (vendorProfile.category || '').toLowerCase().includes('adventure');
 
-  // Fallback demo adventure bookings when backend is offline
-  const DEFAULT_ADVENTURE_BOOKINGS = [
-    {
-      id: 'ent_bk_101',
-      bookingCode: 'ENT-SKY-821',
-      experienceTitle: 'Tandem Paragliding High Flight',
-      category: 'Air Sports',
-      city: 'Dehradun',
-      vendorId: 'v_adv_01',
-      vendorName: 'Captain Arvind Negi',
-      vendorBusiness: 'Himalayan Sky Gliders & Air Safari',
-      vendorPhone: '+91 98290 88801',
-      travelerName: 'Amit Sharma',
-      travelerPhone: '+91 94628 77757',
-      travelDate: '16 Nov 2026',
-      timeSlot: '09:00 AM (Morning Breeze)',
-      guests: 2,
-      price: 2700,
-      totalAmount: 5400,
-      paymentStatus: 'PAID',
-      status: 'CONFIRMED',
-      reportingPoint: 'Maldevta Adventure Base Camp, Raipur Road, Dehradun',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'ent_bk_102',
-      bookingCode: 'ENT-SKY-822',
-      experienceTitle: 'Motorized Paramotor Sunset Safari',
-      category: 'Air Sports',
-      city: 'Dehradun',
-      vendorId: 'v_adv_01',
-      vendorName: 'Captain Arvind Negi',
-      vendorBusiness: 'Himalayan Sky Gliders & Air Safari',
-      vendorPhone: '+91 98290 88801',
-      travelerName: 'Rohit Gupta',
-      travelerPhone: '+91 98290 11223',
-      travelDate: '17 Nov 2026',
-      timeSlot: '04:30 PM (Sunset Flight)',
-      guests: 1,
-      price: 3200,
-      totalAmount: 3200,
-      paymentStatus: 'PAID',
-      status: 'CHECKED_IN',
-      reportingPoint: 'Maldevta Adventure Base Camp, Raipur Road, Dehradun',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'ent_bk_103',
-      bookingCode: 'ENT-DES-419',
-      experienceTitle: 'Sunset Camel Safari & Thar Dunes',
-      category: 'Desert Safari',
-      city: 'Jaisalmer',
-      vendorId: 'v_adv_02',
-      vendorName: 'Fateh Singh Bhati',
-      vendorBusiness: 'Thar Royal Desert Safari & Camps',
-      vendorPhone: '+91 94141 77702',
-      travelerName: 'Pooja Rawat',
-      travelerPhone: '+91 98290 33344',
-      travelDate: '18 Nov 2026',
-      timeSlot: '04:30 PM (Evening Combo)',
-      guests: 3,
-      price: 1600,
-      totalAmount: 4800,
-      paymentStatus: 'PAID',
-      status: 'CONFIRMED',
-      reportingPoint: 'Hipro Desert Camp Milestone, Sam Sand Dunes Road, Jaisalmer',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'ent_bk_104',
-      bookingCode: 'ENT-RFT-305',
-      experienceTitle: 'Marine Drive to Shivpuri River Rafting',
-      category: 'Water Sports',
-      city: 'Rishikesh',
-      vendorId: 'v_adv_03',
-      vendorName: 'Rakesh Rawat',
-      vendorBusiness: 'Ganga White Water Adventure Club',
-      vendorPhone: '+91 98370 66603',
-      travelerName: 'Vikrant Mehta',
-      travelerPhone: '+91 97110 55443',
-      travelDate: '19 Nov 2026',
-      timeSlot: '10:00 AM (Rapid Run)',
-      guests: 4,
-      price: 1200,
-      totalAmount: 4800,
-      paymentStatus: 'PAID',
-      status: 'CONFIRMED',
-      reportingPoint: 'Shivpuri Adventure Beach, Badrinath Highway, Rishikesh',
-      createdAt: new Date().toISOString()
-    }
-  ];
+  // Guard: render loading state until vendor profile is available
+  if (!vendorProfile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-900 font-sans">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mx-auto mb-4"></div>
+          <p className="text-sm text-slate-600">Loading your partner profile...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const [adventureBookings, setAdventureBookings] = useState(() => {
-    return DEFAULT_ADVENTURE_BOOKINGS.filter(b => b.vendorId === 'v_adv_01');
-  });
+  const [adventureBookings, setAdventureBookings] = useState([]);
   const [adventureSearch, setAdventureSearch] = useState('');
   const [adventureStatusFilter, setAdventureStatusFilter] = useState('ALL');
 
@@ -215,7 +129,30 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const fetchVendors = async () => {
+    try {
+      setVendorsLoading(true);
+      const res = await fetch(`${API_BASE}/api/v1/vendors`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.vendors)) {
+        setVendors(data.vendors);
+        if (!selectedVendorId) {
+          setSelectedVendorId(registeredVendor ? registeredVendor.id : data.vendors[0]?.id || null);
+        }
+      }
+    } catch (e) {
+      console.error('fetchVendors error:', e);
+    } finally {
+      setVendorsLoading(false);
+    }
+  };
+
   useEffect(() => {
+    fetchVendors();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedVendorId) return;
     fetchVendorData();
     fetchAdventureBookings();
   }, [selectedVendorId]);
@@ -229,18 +166,18 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   }, [selectedVendorId, isAdventure]);
 
   const fetchAdventureBookings = async () => {
+    if (!selectedVendorId) return;
     try {
       const res = await fetch(`${API_BASE}/api/v1/ent/vendor/bookings?vendorId=${selectedVendorId}`);
       const data = await res.json();
-      if (data.success && Array.isArray(data.bookings) && data.bookings.length > 0) {
+      if (data.success && Array.isArray(data.bookings)) {
         setAdventureBookings(data.bookings);
         return;
       }
     } catch (e) {
-      console.warn('API error, loading default bookings for operator:', e);
+      console.warn('API error, loading bookings for operator:', e);
     }
-    const filtered = DEFAULT_ADVENTURE_BOOKINGS.filter(b => b.vendorId === selectedVendorId || selectedVendorId === 'ALL');
-    setAdventureBookings(filtered.length > 0 ? filtered : DEFAULT_ADVENTURE_BOOKINGS);
+    setAdventureBookings([]);
   };
 
   const handleUpdateAdventureStatus = async (bookingId, status) => {
@@ -293,89 +230,31 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   };
 
   const fetchVendorRequests = async () => {
+    if (!vendorProfile) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendor-requests`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/requests?vendorId=${vendorProfile.id}&city=${encodeURIComponent(vendorProfile.city || '')}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.requests)) {
         setVendorRequests(data.requests);
       } else {
-        // Demo data - customer requests shared with vendors
-        setVendorRequests([
-          {
-            id: 'req_101',
-            requestNumber: 'HIP-2026-0101',
-            customerName: 'Amit Sharma',
-            customerPhone: '+91 94628 77757',
-            addressline: 'B-42, Shastri Nagar, Bhilwara, Rajasthan',
-            location: 'Bhilwara',
-            propertyType: 'Residential Villa',
-            propertySize: '1500 sq.ft',
-            servicecode: 'cat_waterproof',
-            subServiceCode: 'Stop Roof & Terrace Water Leakage',
-            issueDescription: 'Severe water seepage from terrace slab during monsoon rains. Area ~450 sq.ft. Damp patches visible on ceiling of top floor bedroom.',
-            urgency: 'HIGH',
-            preferredDate: '16 Nov 2026',
-            preferredTime: '10:00 AM - 1:00 PM',
-            mediaUrl: [
-              'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
-              'https://images.unsplash.com/photo-1600607686527-6fb288596e9e?auto=format&fit=crop&w=600&q=80',
-            ],
-            status: 'QUOTE_REQUESTED',
-            sharedWithVendors: true,
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-          },
-          {
-            id: 'req_102',
-            requestNumber: 'HIP-2026-0102',
-            customerName: 'Priya Verma',
-            customerPhone: '+91 94628 77758',
-            addressline: 'Plot 12, Civil Lines, Bhilwara, Rajasthan',
-            location: 'Bhilwara',
-            propertyType: 'Independent House',
-            propertySize: '1200 sq.ft',
-            servicecode: 'cat_civil',
-            subServiceCode: 'Structural Crack & Beam Patch Work',
-            issueDescription: 'Hairline settlement cracks along main beam in living room, approx 12x10 ft area. Plaster flaking near window frame.',
-            urgency: 'NORMAL',
-            preferredDate: '18 Nov 2026',
-            preferredTime: '2:00 PM - 5:00 PM',
-            mediaUrl: [
-              'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-            ],
-            status: 'QUOTE_REQUESTED',
-            sharedWithVendors: true,
-            createdAt: new Date(Date.now() - 172800000).toISOString(),
-          },
-          {
-            id: 'req_103',
-            requestNumber: 'HIP-2026-0103',
-            customerName: 'Suresh Mehta',
-            customerPhone: '+91 94628 77759',
-            addressline: 'Flat 301, Royal Residency, Bhilwara, Rajasthan',
-            location: 'Bhilwara',
-            propertyType: 'Apartment',
-            propertySize: '900 sq.ft',
-            servicecode: 'cat_painting',
-            subServiceCode: 'Interior Moisture-Resistant Emulsion',
-            issueDescription: 'Interior hall repainting required with damp-proof primer. Moisture spots visible on east wall.',
-            urgency: 'NORMAL',
-            preferredDate: '20 Nov 2026',
-            preferredTime: 'Flexible',
-            mediaUrl: [],
-            status: 'QUOTE_REQUESTED',
-            sharedWithVendors: true,
-            createdAt: new Date(Date.now() - 259200000).toISOString(),
-          },
-        ]);
+        setVendorRequests([]);
       }
     } catch (e) {
       console.error('fetchVendorRequests error:', e);
+      setVendorRequests([]);
     }
   };
 
   const fetchVendorQuotes = async () => {
+    if (!vendorProfile) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendor-quotes`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/my-quotes?vendorId=${vendorProfile.id}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.quotes)) {
         setVendorQuotes(data.quotes);
@@ -384,12 +263,17 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
       }
     } catch (e) {
       console.error('fetchVendorQuotes error:', e);
+      setVendorQuotes([]);
     }
   };
 
   const fetchAssignedJobs = async () => {
+    if (!vendorProfile) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendor-assigned-jobs`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/my-jobs?vendorId=${vendorProfile.id}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.jobs)) {
         setAssignedJobs(data.jobs);
@@ -398,6 +282,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
       }
     } catch (e) {
       console.error('fetchAssignedJobs error:', e);
+      setAssignedJobs([]);
     }
   };
 
@@ -410,17 +295,21 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendor-quotes`, {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/quotes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           requestId: quotingRequestId,
           vendorId: vendorProfile.id,
           vendorName: vendorProfile.name,
+          vendorBusiness: vendorProfile.businessName,
           quotePrice: price,
           notes: quoteNotes,
           estimatedTimeline: quoteTimeline,
-          submittedBy: vendorProfile.businessName,
+          submittedBy: vendorProfile.businessName || vendorProfile.name,
         }),
       });
       const data = await res.json();
@@ -447,6 +336,126 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     setQuoteNotes('');
     setQuoteTimeline('1-2 Working Days');
     setQuoteModalOpen(true);
+  };
+
+  // ==================== QUOTATION BUILDER HANDLERS ====================
+  const handleStartBuildingQuote = (req) => {
+    setBuilderRequestId(req.id);
+    const serviceName = (req.servicecode || '').toLowerCase();
+    const area = parseFloat(req.propertySize) || 120;
+
+    if (serviceName.includes('waterproof')) {
+      setBuilderLineItems([
+        { item: 'Polymer Injection Grouting for Structural Cracks', qty: Math.max(1, Math.round(area * 0.1)), unit: 'Nos', rate: 450 },
+        { item: 'Elastomeric Waterproof Membrane (2 Coats)', qty: area, unit: 'Sq Ft', rate: 65 },
+        { item: 'Surface Grinding, Cleaning & Mesh Reinforcement', qty: area, unit: 'Sq Ft', rate: 25 },
+        { item: 'Skilled Waterproofing Labour & Clean-up', qty: 1, unit: 'Lump Sum', rate: 3000 }
+      ]);
+      setBuilderWarranty('5 Years Leakproof Guarantee with Chemical Seal');
+      setBuilderTimeline('3-5 Working Days');
+    } else if (serviceName.includes('paint')) {
+      setBuilderLineItems([
+        { item: 'Surface Scraping, Putty Base & Primer Application', qty: area, unit: 'Sq Ft', rate: 20 },
+        { item: 'Premium Weatherproof Emulsion / Wall Paint', qty: area, unit: 'Sq Ft', rate: 35 },
+        { item: 'Tape Masking, Scaffolding & Site Cleanup', qty: 1, unit: 'Lump Sum', rate: 2000 }
+      ]);
+      setBuilderWarranty('3 Years Paint Finish Warranty');
+      setBuilderTimeline('4-6 Working Days');
+    } else {
+      setBuilderLineItems([
+        { item: `${req.servicecode || 'Repair'} - Primary Scope & Surface Treatment`, qty: area, unit: 'Sq Ft', rate: 45 },
+        { item: 'High-Durability Raw Materials & Chemical Fixings', qty: 1, unit: 'Lump Sum', rate: 2500 },
+        { item: 'Execution Labour & Supervised Handover', qty: 1, unit: 'Lump Sum', rate: 2000 }
+      ]);
+      setBuilderWarranty('1 Year Comprehensive Service Warranty');
+      setBuilderTimeline('2-3 Working Days');
+    }
+    setActiveTab('builder');
+  };
+
+  const handleAddLineItem = () => {
+    setBuilderLineItems(prev => [
+      ...prev,
+      { item: '', qty: 1, unit: 'Sq Ft', rate: 0 }
+    ]);
+  };
+
+  const handleRemoveLineItem = (index) => {
+    setBuilderLineItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateLineItem = (index, field, value) => {
+    setBuilderLineItems(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleSubmitBuilderQuote = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!builderRequestId) {
+      showToastMsg('Please select a customer service request to quote on', 'error');
+      return;
+    }
+    if (builderGrandTotal <= 0) {
+      showToastMsg('Quotation total must be greater than ₹0', 'error');
+      return;
+    }
+
+    setIsSubmittingBuilderQuote(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const lineItemsSummary = builderLineItems
+        .filter(li => li.item && li.item.trim())
+        .map(li => `• ${li.item} (${li.qty} ${li.unit} @ ₹${li.rate}) = ₹${(parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)}`)
+        .join('\n');
+
+      const formattedNotes = [
+        `[DETAILED BOQ SPECIFICATION]`,
+        lineItemsSummary || 'Standard Scope of Work',
+        `Subtotal: ₹${effectiveBuilderSubtotal.toLocaleString('en-IN')}`,
+        builderGstRate > 0 ? `GST (${builderGstRate}%): ₹${builderTaxAmount.toLocaleString('en-IN')}` : 'GST: Exempted/Inclusive',
+        `Grand Total: ₹${builderGrandTotal.toLocaleString('en-IN')}`,
+        `Warranty: ${builderWarranty}`,
+        builderNotes ? `Vendor Remarks: ${builderNotes}` : ''
+      ].filter(Boolean).join('\n');
+
+      const payload = {
+        requestId: builderRequestId,
+        vendorId: vendorProfile.id,
+        vendorName: vendorProfile.name,
+        vendorBusiness: vendorProfile.businessName,
+        quotePrice: builderGrandTotal,
+        notes: formattedNotes,
+        estimatedTimeline: builderTimeline,
+        submittedBy: vendorProfile.businessName || vendorProfile.name
+      };
+
+      const res = await fetch(`${API_BASE}/api/v1/vendors/quotes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showToastMsg(`Quotation of ₹${builderGrandTotal.toLocaleString('en-IN')} submitted successfully!`, 'success');
+        await fetchVendorRequests();
+        await fetchVendorQuotes();
+        setActiveTab('quotes');
+      } else {
+        showToastMsg(data.message || 'Failed to submit quotation', 'error');
+      }
+    } catch (err) {
+      console.error('Submit quote error:', err);
+      showToastMsg('Network error submitting quotation', 'error');
+    } finally {
+      setIsSubmittingBuilderQuote(false);
+    }
   };
 
   const handleOpenPhotos = (photos) => {
@@ -568,6 +577,25 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
               </button>
 
               <button
+                onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'builder'
+                    ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-white' : 'text-slate-500'}`} />
+                  <span>Build Quotation</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                  activeTab === 'builder' ? 'bg-white/30 text-white' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  BOQ
+                </span>
+              </button>
+
+              <button
                 onClick={() => { setActiveTab('quotes'); setSidebarOpen(false); }}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
                   activeTab === 'quotes'
@@ -634,8 +662,18 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
               <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-slate-800 text-xs truncate leading-tight">{vendorProfile.name}</div>
+              <div className="flex items-center gap-2">
+                <div className="font-bold text-slate-800 text-xs truncate leading-tight">{vendorProfile.name}</div>
+                {vendorProfile.capacity && (
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${vendorProfile.capacity === 'LARGE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : vendorProfile.capacity === 'MEDIUM' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                    {vendorProfile.capacity}
+                  </span>
+                )}
+              </div>
               <div className="text-[10px] text-slate-400 truncate">{vendorProfile.businessName}</div>
+              <div className="text-[9px] text-slate-500 truncate">
+                {vendorProfile.currentJobCount}/{vendorProfile.maxConcurrentJobs} active jobs
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -692,20 +730,27 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                 value={selectedVendorId}
                 onChange={(e) => {
                   setSelectedVendorId(e.target.value);
-                  const found = DEMO_VENDORS.find(v => v.id === e.target.value);
+                  const found = availableVendors.find(v => v.id === e.target.value);
                   showToastMsg(`Switched to ${found?.name} (${found?.category})`, 'info');
                 }}
                 className="text-xs font-semibold text-slate-800 bg-white px-2.5 py-1 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-brand-500 shadow-xs"
               >
+                {registeredVendor && (
+                  <optgroup label="⭐ My Registered Partner Profile">
+                    <option value={registeredVendor.id}>
+                      {registeredVendor.name} ({registeredVendor.businessName}) [Your Profile]
+                    </option>
+                  </optgroup>
+                )}
                 <optgroup label="🪂 Adventure & Sports Operators">
-                  {DEMO_VENDORS.filter(v => v.category === 'Adventure').map((v) => (
+                  {availableVendors.filter(v => v.id !== registeredVendor?.id && v.category === 'Adventure').map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.businessName})
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="🛠️ Home & Civil Services Providers">
-                  {DEMO_VENDORS.filter(v => v.category !== 'Adventure').map((v) => (
+                  {availableVendors.filter(v => v.id !== registeredVendor?.id && v.category !== 'Adventure').map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.businessName})
                     </option>
@@ -962,6 +1007,16 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   <h3 className="font-heading font-bold text-sm text-slate-900 mb-4">Quick Actions</h3>
                   <div className="space-y-2">
                     <button
+                      onClick={() => { setActiveTab('builder'); }}
+                      className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center justify-between transition-all shadow-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Calculator className="w-4 h-4" />
+                        <span>Build New Quotation (BOQ)</span>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => { setActiveTab('requests'); }}
                       className="w-full py-3 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold flex items-center justify-between transition-all shadow-xs"
                     >
@@ -1044,7 +1099,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
                 {vendorRequests.map(req => {
-                  const alreadyQuoted = vendorQuotes.some(q => q.requestId === req.id);
+                  const alreadyQuoted = req.hasQuoted || !!req.myQuote || vendorQuotes.some(q => q.requestId === req.id);
                   const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
                   return (
                     <div key={req.id} className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
@@ -1090,36 +1145,42 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                         )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm pt-3 border-t border-slate-100 text-slate-600">
-                          <div className="flex items-center gap-2"><User className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-semibold text-slate-800">{req.customerName}</span></div>
-                          <div className="flex items-center gap-2 font-mono"><Phone className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.customerPhone}</span></div>
-                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.propertyType}</span></div>
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.preferredDate}</span></div>
-                          <div className="col-span-1 sm:col-span-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700 truncate" title={req.addressline}>{req.addressline}</span></div>
+                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.propertyType || 'Property'}</span></div>
+                          <div className="flex items-center gap-2"><Maximize className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-bold text-slate-800">{req.propertySize || '—'} Sq Ft</span></div>
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.preferredDate || 'Flexible'}</span></div>
                         </div>
                       </div>
 
                       <div className="pt-3.5 border-t border-slate-100 flex items-center justify-between gap-3">
                         {!alreadyQuoted ? (
-                          <button
-                            onClick={() => handleOpenQuote(req)}
-                            className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-all w-full justify-center"
-                          >
-                            <Calculator className="w-3.5 h-3.5" /> Submit Quotation
-                          </button>
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              onClick={() => handleStartBuildingQuote(req)}
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <Calculator className="w-3.5 h-3.5" /> Build BOQ Quote
+                            </button>
+                            <button
+                              onClick={() => handleOpenQuote(req)}
+                              className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all flex items-center justify-center gap-1"
+                              title="Quick Lump-Sum Quotation"
+                            >
+                              Quick
+                            </button>
+                          </div>
                         ) : (
-                          <button
-                            className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-bold cursor-not-allowed w-full justify-center"
-                          >
-                            <FileCheck2 className="w-3.5 h-3.5" /> Quotation Submitted
-                          </button>
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Quote: ₹{(req.myQuote?.quotePrice || vendorQuotes.find(q => q.requestId === req.id)?.quotePrice || 0).toLocaleString('en-IN')}
+                            </span>
+                            <button
+                              onClick={() => setActiveTab('quotes')}
+                              className="text-xs text-brand-600 hover:underline font-semibold"
+                            >
+                              View in Quotes →
+                            </button>
+                          </div>
                         )}
-                        <button
-                          onClick={() => openChatForRequest(req)}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-all"
-                          title="Contact Customer"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
                   );
@@ -1135,6 +1196,499 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
             </div>
           )}
 
+          {/* BUILD QUOTATION (BOQ) TAB */}
+          {activeTab === 'builder' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* 1. Header & Mode Switcher */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                    <Calculator className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-heading font-bold text-lg text-slate-900">Build Quotation & BOQ Specification</h2>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        Vendor Desk
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Create itemized Bill of Quantities (BOQ), material and labour estimates, and submit your official quote.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl self-start md:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setBuilderMode('boq')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      builderMode === 'boq'
+                        ? 'bg-white text-slate-900 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Itemized BOQ Mode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBuilderMode('lumpsum')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      builderMode === 'lumpsum'
+                        ? 'bg-white text-slate-900 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Quick Lump-Sum Mode
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Step 1: Select Service Request */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+                    <h3 className="font-heading font-bold text-sm text-slate-900">Select Customer Service Request to Quote On</h3>
+                  </div>
+                  {builderRequestId && (
+                    <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Request Selected
+                    </span>
+                  )}
+                </div>
+
+                {selectedBuilderRequest ? (
+                  <div className="p-4 rounded-xl bg-slate-50 border border-brand-200 relative">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-sm text-brand-600">{selectedBuilderRequest.requestNumber}</span>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-brand-100 text-brand-800">
+                            {selectedBuilderRequest.servicecode}
+                          </span>
+                          {selectedBuilderRequest.subServiceCode && (
+                            <span className="text-xs text-slate-600 font-medium">({selectedBuilderRequest.subServiceCode})</span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(selectedBuilderRequest.status)}`}>
+                            {selectedBuilderRequest.status}
+                          </span>
+                          {selectedBuilderRequest.urgency === 'HIGH' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">Urgent</span>
+                          )}
+                        </div>
+
+                        <p className="text-xs sm:text-sm text-slate-700 font-normal leading-relaxed">
+                          <strong className="text-slate-900">Customer Issue:</strong> {selectedBuilderRequest.issueDescription}
+                        </p>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-slate-600 pt-2 border-t border-slate-200/80">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Property</span>
+                            <span className="font-medium text-slate-800">{selectedBuilderRequest.propertyType || 'Villa/Flat'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Area Size</span>
+                            <span className="font-medium text-slate-800">{selectedBuilderRequest.propertySize || '150'} Sq Ft</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Location</span>
+                            <span className="font-medium text-slate-800">{selectedBuilderRequest.location || selectedBuilderRequest.addressline || 'Local City'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Preferred Date</span>
+                            <span className="font-medium text-slate-800">{selectedBuilderRequest.preferredDate || 'Flexible'}</span>
+                          </div>
+                        </div>
+
+                        {selectedBuilderRequest.mediaUrl && (Array.isArray(selectedBuilderRequest.mediaUrl) ? selectedBuilderRequest.mediaUrl : [selectedBuilderRequest.mediaUrl]).filter(Boolean).length > 0 && (
+                          <div className="pt-2">
+                            <span className="text-[11px] font-semibold text-slate-500 block mb-1">Inspection Photos:</span>
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                              {(Array.isArray(selectedBuilderRequest.mediaUrl) ? selectedBuilderRequest.mediaUrl : [selectedBuilderRequest.mediaUrl]).filter(Boolean).map((img, i) => (
+                                <img
+                                  key={i}
+                                  src={img}
+                                  alt="Damage inspection"
+                                  onClick={() => handleOpenPhotos(Array.isArray(selectedBuilderRequest.mediaUrl) ? selectedBuilderRequest.mediaUrl : [selectedBuilderRequest.mediaUrl])}
+                                  className="w-16 h-16 rounded-lg object-cover border border-slate-200 cursor-pointer hover:border-brand-500"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setBuilderRequestId('')}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all"
+                        >
+                          Change Request
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-500">
+                      Choose an open customer request from your city ({vendorProfile?.city || 'Hub'}) to start building your quote:
+                    </p>
+                    {vendorRequests.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                        {vendorRequests.map(r => {
+                          const isQuoted = r.hasQuoted || vendorQuotes.some(q => q.requestId === r.id);
+                          return (
+                            <div
+                              key={r.id}
+                              onClick={() => handleStartBuildingQuote(r)}
+                              className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition-all bg-white flex flex-col justify-between space-y-2 group"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-bold text-xs text-brand-600">{r.requestNumber}</span>
+                                {isQuoted ? (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Quoted</span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Select →</span>
+                                )}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-xs text-slate-900 group-hover:text-brand-600 transition-colors line-clamp-1">{r.servicecode}</h4>
+                                <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">{r.issueDescription || 'Repair inspection'}</p>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                                <span>{r.propertySize ? `${r.propertySize} Sq Ft` : (r.propertyType || 'Villa')}</span>
+                                <span className="text-slate-600 font-medium">{r.location || r.city || 'Local'}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                        <ClipboardList className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                        <p className="text-xs text-slate-600 font-medium">No open customer requests currently available in your hub.</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">As soon as customers book inspections or Super Admin shares requests, they will appear here.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Step 2: Line Items & BOQ Specification */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+                    <h3 className="font-heading font-bold text-sm text-slate-900">
+                      {builderMode === 'boq' ? 'Itemized Scope of Work & BOQ Line Items' : 'Quick Quotation Amount'}
+                    </h3>
+                  </div>
+
+                  {builderMode === 'boq' && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] text-slate-400 font-medium mr-1">Trade Presets:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBuilderLineItems([
+                            { item: 'Polymer Crack Injection Grouting', qty: 10, unit: 'Nos', rate: 450 },
+                            { item: 'Elastomeric Waterproof Coating (2 Coats)', qty: 250, unit: 'Sq Ft', rate: 65 },
+                            { item: 'Fibre Glass Mesh Reinforcement', qty: 250, unit: 'Sq Ft', rate: 20 },
+                            { item: 'Surface Cleaning, Grinding & Debris Disposal', qty: 1, unit: 'Lump Sum', rate: 2500 }
+                          ]);
+                          setBuilderWarranty('5 Years Leakage Warranty with Chemical Seal');
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
+                      >
+                        Waterproofing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBuilderLineItems([
+                            { item: 'Wall Scraping, Primer & Double Putty', qty: 300, unit: 'Sq Ft', rate: 22 },
+                            { item: 'Premium Weather-Shield Emulsion (2 Coats)', qty: 300, unit: 'Sq Ft', rate: 38 },
+                            { item: 'Scaffolding, Masking & Final Cleanup', qty: 1, unit: 'Lump Sum', rate: 2000 }
+                          ]);
+                          setBuilderWarranty('3 Years Exterior Paint Durability Warranty');
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
+                      >
+                        Painting
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBuilderLineItems([
+                            { item: 'Structural Brick Masonry & Plastering', qty: 150, unit: 'Sq Ft', rate: 75 },
+                            { item: 'Cement & High-Strength Concrete Mix', qty: 1, unit: 'Lump Sum', rate: 3500 },
+                            { item: 'Skilled Mason Labour & Material Handling', qty: 1, unit: 'Lump Sum', rate: 4000 }
+                          ]);
+                          setBuilderWarranty('2 Years Structural Masonry Warranty');
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
+                      >
+                        Civil / Masonry
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {builderMode === 'boq' ? (
+                  <div className="space-y-3">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                            <th className="py-2.5 px-3 font-semibold text-slate-700">Scope Item / Description</th>
+                            <th className="py-2.5 px-3 font-semibold text-slate-700 w-24">Qty</th>
+                            <th className="py-2.5 px-3 font-semibold text-slate-700 w-28">Unit</th>
+                            <th className="py-2.5 px-3 font-semibold text-slate-700 w-28">Rate (₹)</th>
+                            <th className="py-2.5 px-3 font-semibold text-slate-700 text-right w-28">Total (₹)</th>
+                            <th className="py-2.5 px-2 w-10 text-center"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {builderLineItems.map((li, idx) => {
+                            const lineTotal = (parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0);
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/50">
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="text"
+                                    value={li.item}
+                                    onChange={(e) => handleUpdateLineItem(idx, 'item', e.target.value)}
+                                    placeholder="e.g. 2 Coats Elastomeric Coating"
+                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={li.qty}
+                                    onChange={(e) => handleUpdateLineItem(idx, 'qty', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <select
+                                    value={li.unit}
+                                    onChange={(e) => handleUpdateLineItem(idx, 'unit', e.target.value)}
+                                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                  >
+                                    <option value="Sq Ft">Sq Ft</option>
+                                    <option value="Rft">Running Ft</option>
+                                    <option value="Lump Sum">Lump Sum</option>
+                                    <option value="Nos">Nos / Units</option>
+                                    <option value="Hours">Hours</option>
+                                    <option value="Days">Days</option>
+                                    <option value="Bags">Bags</option>
+                                    <option value="Ltrs">Ltrs</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={li.rate}
+                                    onChange={(e) => handleUpdateLineItem(idx, 'rate', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-800">
+                                  ₹{lineTotal.toLocaleString('en-IN')}
+                                </td>
+                                <td className="py-2 px-2 text-center">
+                                  {builderLineItems.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveLineItem(idx)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                      title="Remove Line Item"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <button
+                        type="button"
+                        onClick={handleAddLineItem}
+                        className="px-3 py-1.5 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-all inline-flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Scope Item
+                      </button>
+                      <div className="text-xs text-slate-600">
+                        Line Items Subtotal: <strong className="font-mono text-sm text-slate-900">₹{builderLineItemsTotal.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 max-w-md space-y-3">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Total Quotation Price (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">₹</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={builderCustomPrice}
+                        onChange={(e) => setBuilderCustomPrice(e.target.value)}
+                        placeholder="e.g. 12500"
+                        className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400">Enter a single consolidated package amount for this repair job.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Step 3: Terms, Taxes & Timeline */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center">3</span>
+                    <h3 className="font-heading font-bold text-sm text-slate-900">Execution Timeline & Warranty</h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Estimated Completion Timeline
+                      </label>
+                      <select
+                        value={builderTimeline}
+                        onChange={(e) => setBuilderTimeline(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      >
+                        <option value="1-2 Working Days">1-2 Working Days (Express)</option>
+                        <option value="3-5 Working Days">3-5 Working Days (Standard)</option>
+                        <option value="1 Week">1 Week</option>
+                        <option value="1-2 Weeks">1-2 Weeks</option>
+                        <option value="2-3 Weeks">2-3 Weeks</option>
+                        <option value="1 Month">1 Month (Major Structural)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Warranty Guarantee
+                      </label>
+                      <input
+                        type="text"
+                        value={builderWarranty}
+                        onChange={(e) => setBuilderWarranty(e.target.value)}
+                        placeholder="e.g. 5 Years Leakage Warranty"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Applicable Tax / GST
+                      </label>
+                      <select
+                        value={builderGstRate}
+                        onChange={(e) => setBuilderGstRate(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      >
+                        <option value={18}>18% GST (Standard Services / Works Contract)</option>
+                        <option value={12}>12% GST (Composite Works)</option>
+                        <option value={5}>5% GST (Concessional)</option>
+                        <option value={0}>0% GST (Inclusive / Composition / Exempt)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <span className="w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center">4</span>
+                    <h3 className="font-heading font-bold text-sm text-slate-900">Technical Approach & Remarks</h3>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Notes / Scope Clarification for Super Admin & Customer
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={builderNotes}
+                      onChange={(e) => setBuilderNotes(e.target.value)}
+                      placeholder="e.g. Quotation includes Dr. Fixit chemical waterproofing, surface grinding, primer coat and scaffolding. Debris will be cleared upon handover."
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed font-normal"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Summary & Submission Card */}
+              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-brand-900 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Final Quotation Commercials</span>
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-3xl font-mono font-bold tracking-tight">₹{builderGrandTotal.toLocaleString('en-IN')}</span>
+                    {builderGstRate > 0 && (
+                      <span className="text-xs text-slate-300">
+                        (₹{effectiveBuilderSubtotal.toLocaleString('en-IN')} + ₹{builderTaxAmount.toLocaleString('en-IN')} GST)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-300 flex-wrap pt-1">
+                    <span>Timeline: <strong>{builderTimeline}</strong></span>
+                    <span>•</span>
+                    <span>Warranty: <strong>{builderWarranty}</strong></span>
+                    <span>•</span>
+                    <span>Quoting Vendor: <strong>{vendorProfile.businessName || vendorProfile.name}</strong></span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBuilderRequestId('');
+                      setBuilderCustomPrice('');
+                      setBuilderNotes('');
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 transition-all"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmittingBuilderQuote || !builderRequestId || builderGrandTotal <= 0}
+                    onClick={handleSubmitBuilderQuote}
+                    className="px-6 py-3 rounded-xl text-xs font-bold text-slate-900 bg-amber-400 hover:bg-amber-300 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  >
+                    {isSubmittingBuilderQuote ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Submitting Quotation...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Submit Official Quotation</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* QUOTATIONS TAB */}
           {activeTab === 'quotes' && (
             <div className="space-y-5">
@@ -1143,6 +1697,12 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   <h2 className="font-heading font-semibold text-base text-slate-800">My Submitted Quotations</h2>
                   <p className="text-[11px] text-slate-400">Track quotations you have submitted to customers via Super Admin.</p>
                 </div>
+                <button
+                  onClick={() => setActiveTab('builder')}
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Build New Quotation
+                </button>
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">

@@ -1,175 +1,301 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const axios = require('axios');
 const prisma = require('../prisma');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_here';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('⛔ FATAL: JWT_SECRET environment variable is not set. Auth routes will fail.');
+}
 
-// POST /api/v1/auth/google
-router.post('/google', async (req, res) => {
+// Brute-force protection: rate limit auth attempts to 20 per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Too many authentication attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Ensure upload directory exists for vendor documents
+const vendorUploadDir = path.join(__dirname, '../uploads/vendor-docs');
+if (!fs.existsSync(vendorUploadDir)) {
+  fs.mkdirSync(vendorUploadDir, { recursive: true });
+}
+
+// Save a base64 document (data URL) to the vendor-docs folder with strict MIME allowlist
+function saveBase64Document(dataUrl, prefix, baseUrl) {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
   try {
-    const { name, email, googleId, photoUrl } = req.body;
-
-    if (!email || !googleId) {
-      return res.status(400).json({
-        success:false,
-        message:'Email and Google ID are required'
-      })
-      
+    const matches = dataUrl.match(/^data:([A-Za-z0-9\-+\/.]+);base64,(.+)$/);
+    if (!matches) return null;
+    const mime = matches[1].toLowerCase();
+    const ALLOWED_MIMES = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'application/pdf': 'pdf'
+    };
+    const ext = ALLOWED_MIMES[mime];
+    if (!ext) {
+      console.warn(`[Upload] Rejected unapproved base64 MIME type: ${mime}`);
+      return null;
     }
-    
-    // Check if user already exists by email or googleId
+
+    const buffer = Buffer.from(matches[2], 'base64');
+    // Max 10MB document size
+    if (buffer.length > 10 * 1024 * 1024) {
+      console.warn('[Upload] Rejected oversized base64 document');
+      return null;
+    }
+
+    const fileName = `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    const filePath = path.join(vendorUploadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    const host = baseUrl || process.env.BASE_URL || '';
+    return `${host.endsWith('/') ? host.slice(0, -1) : host}/uploads/vendor-docs/${fileName}`;
+  } catch (e) {
+    console.error('saveBase64Document error:', e.message);
+    return null;
+  }
+}
+
+// POST /api/v1/auth/google - Authenticate using verified Google ID token
+router.post('/google', authLimiter, async (req, res) => {
+  try {
+    const { idToken, id_token, credential, googleId, email } = req.body;
+    const tokenToVerify = idToken || id_token || credential;
+
+    let verifiedEmail = null;
+    let verifiedGoogleId = null;
+    let verifiedName = req.body.name || 'Google User';
+    let verifiedPhotoUrl = req.body.photoUrl || null;
+
+    if (tokenToVerify) {
+      // 1. Verify token server-side with Google OAuth API
+      try {
+        const gRes = await axios.get(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenToVerify)}`,
+          { timeout: 6000 }
+        );
+        const payload = gRes.data;
+
+        if (!payload || !payload.sub || !payload.email) {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid Google token payload: missing identity claims.'
+          });
+        }
+
+        if (payload.email_verified !== 'true' && payload.email_verified !== true) {
+          return res.status(403).json({
+            success: false,
+            message: 'Google email address is not verified by Google.'
+          });
+        }
+
+        verifiedGoogleId = payload.sub;
+        verifiedEmail = payload.email.toLowerCase().trim();
+        verifiedName = payload.name || verifiedName;
+        verifiedPhotoUrl = payload.picture || verifiedPhotoUrl;
+      } catch (gErr) {
+        console.warn('[GoogleAuth] Token verification failed:', gErr.response?.data || gErr.message);
+        return res.status(401).json({
+          success: false,
+          message: 'Failed to verify Google identity token with Google authentication servers.'
+        });
+      }
+    } else if (process.env.NODE_ENV !== 'production' && googleId && email) {
+      // In local dev/test only: allow fallback if explicitly running in development
+      console.warn('⚠️ [GoogleAuth] Development fallback used: verifying client-supplied credentials without idToken');
+      verifiedGoogleId = googleId;
+      verifiedEmail = email.toLowerCase().trim();
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Google idToken is required for secure authentication.'
+      });
+    }
+
+    // 2. Query user strictly by verified Google ID or verified Email
     let user = await prisma.user.findFirst({
       where: {
         OR: [
-          { email: email },
-          { googleId: googleId }
+          { googleId: verifiedGoogleId },
+          { email: verifiedEmail }
         ]
       }
     });
 
     if (!user) {
-      // If they don't exist, create a new user dynamically!
       user = await prisma.user.create({
         data: {
-          name: name || 'Google User',
-          email: email,
-          googleId: googleId,
-          photoUrl: photoUrl,
+          name: verifiedName,
+          email: verifiedEmail,
+          googleId: verifiedGoogleId,
+          photoUrl: verifiedPhotoUrl,
           authProvider: 'google',
         }
       });
     } else {
-       // Optionally update the existing user with google info if it was a local user
-       if (!user.googleId) {
-          user = await prisma.user.update({
-             where: { id: user.id },
-             data: {
-                googleId: googleId,
-                photoUrl: photoUrl,
-                authProvider: 'google',
-             }
-          });
-       }
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          googleId: verifiedGoogleId,
+          photoUrl: verifiedPhotoUrl || user.photoUrl,
+          authProvider: 'google',
+        }
+      });
     }
 
-    // Generate an Auth Token for the app
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, {
-      expiresIn: '30d'
-    });
+    // 3. Issue signed JWT session token
+    const token = jwt.sign(
+      { id: user.id, role: user.role || 'CUSTOMER' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
 
     res.status(200).json({
       success: true,
       token,
-      user :{
+      user: {
         id: user.id,
         name: user.name,
-        email:user.email,
-        phoneNumber:user.phoneNumber,
-        photoUrl:user.photoUrl,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        photoUrl: user.photoUrl,
         authProvider: user.authProvider,
-        
+        role: user.role
       }
     });
-
   } catch (error) {
     console.error('Google Auth Error:', error);
-    res.status(500).json({ success: false, message: 'Server Error', error: error.message });
+    res.status(500).json({ success: false, message: 'Internal authentication error' });
   }
 });
 
 // POST /api/v1/auth/register (Standard Name/Email/Password Signup)
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password, phoneNumber } = req.body;
-   
 
     if (!email || !password || !phoneNumber) {
-      return res.status(400).json({ success: false, message: 'Email and password and phone number are required' });
+      return res.status(400).json({ success: false, message: 'Email, password, and phone number are required' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long' });
     }
 
     // Check if user already exists
     const existingemail = await prisma.user.findUnique({
-      where: 
-          { 
-            email: email,
-           
-           },
+      where: { email: email.toLowerCase().trim() },
     });
     if (existingemail) {
       return res.status(400).json({ success: false, message: 'An account with this email already exists. Please login.' });
     }
-  const existingnum = await prisma.user.findUnique({
-      where: 
-          { 
-            phoneNumber: phoneNumber,
-           
-           },
+
+    const existingnum = await prisma.user.findUnique({
+      where: { phoneNumber: phoneNumber.trim() },
     });
     if (existingnum) {
-      return res.status(400).json({ success: false, message: 'An account with this phonenumber already exists. Please login.' });
+      return res.status(400).json({ success: false, message: 'An account with this phone number already exists. Please login.' });
     }
-  
+
+    // Hash password with bcryptjs before saving to database
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const newUser = await prisma.user.create({
       data: {
-        name: name ,
-        email,
-        password,
-        phoneNumber: phoneNumber ,
+        name: name ? name.trim() : 'Customer',
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        phoneNumber: phoneNumber.trim(),
         authProvider: 'email'
       }
     });
 
-    const token = jwt.sign({ id: newUser.id }, JWT_SECRET, {
-      expiresIn: '30d'
+    const token = jwt.sign({ id: newUser.id, role: 'CUSTOMER' }, JWT_SECRET, {
+      expiresIn: '7d'
     });
 
     res.status(201).json({
       success: true,
       message: 'Account created successfully',
       token,
-      user: newUser
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        phoneNumber: newUser.phoneNumber,
+        authProvider: newUser.authProvider
+      }
     });
   } catch (error) {
     console.error('Register error:', error);
-    res.status(500).json({ success: false, message: 'Registration failed', error: error.message });
+    res.status(500).json({ success: false, message: 'Registration failed', error: 'Internal server error' });
   }
 });
 
 // POST /api/v1/auth/login (Standard Email/Password)
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
     
     // Find user by email
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email: email.toLowerCase().trim() }
     });
 
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    if (!user || !user.password) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // Check if password matches 
-    // IMPORTANT: In production, compare hashed passwords!
-    if (user.password !== password) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    // Secure bcrypt comparison
+    let passwordMatches = false;
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      passwordMatches = await bcrypt.compare(password, user.password);
+    } else {
+      // Legacy plaintext passwords are not accepted for login
+      return res.status(401).json({
+        success: false,
+        message: 'Security update: Plaintext passwords are no longer supported. Please reset your password.'
+      });
+    }
+
+    if (!passwordMatches) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
     // Generate token
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, {
-      expiresIn: '30d'
+    const token = jwt.sign({ id: user.id, role: user.role || 'CUSTOMER' }, JWT_SECRET, {
+      expiresIn: '7d'
     });
 
     res.status(200).json({
       success: true,
       token,
-      user
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role || 'CUSTOMER'
+      }
     });
-
   } catch (error) {
     console.error('Login Error:', error);
-    res.status(500).json({ success: false, message: 'Server Error' });
+    res.status(500).json({ success: false, message: 'Authentication failed', error: 'Internal server error' });
   }
 });
 
@@ -253,7 +379,7 @@ router.patch('/phone', authenticateUser, async (req, res) => {
 // ==========================================
 
 // POST /api/v1/auth/admin/login - Authenticate Super Admin from DB
-router.post('/admin/login', async (req, res) => {
+router.post('/admin/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -296,44 +422,23 @@ router.post('/admin/login', async (req, res) => {
       }
     }
 
-    // 3. Environment variable fallback (auto-upserts into Admin table if DB is fresh)
-    const defaultAdminEmail = (process.env.ADMIN_EMAIL || 'admin@hipro.in').toLowerCase().trim();
-    const defaultAdminPassword = process.env.ADMIN_PASSWORD || 'hipro@admin2026';
-
-    if (!admin && cleanEmail === defaultAdminEmail && password === defaultAdminPassword) {
-      try {
-        admin = await prisma.admin.upsert({
-          where: { email: defaultAdminEmail },
-          update: { password: defaultAdminPassword },
-          create: {
-            email: defaultAdminEmail,
-            name: 'Super Administrator',
-            password: defaultAdminPassword,
-            role: 'ADMIN',
-            isActive: true
-          }
-        });
-      } catch (err) {
-        admin = {
-          id: 'super_admin_01',
-          name: 'Super Administrator',
-          email: defaultAdminEmail,
-          password: defaultAdminPassword,
-          role: 'ADMIN',
-          isActive: true
-        };
-      }
-    }
-
-    // 4. Validate credentials
-    if (!admin) {
+    // 3. Validate credentials
+    if (!admin || !admin.password) {
       return res.status(401).json({
         success: false,
-        message: 'Access Denied: No administrator account registered with this email in database.'
+        message: 'Access Denied: Invalid administrator credentials.'
       });
     }
 
-    if (admin.password && admin.password !== password) {
+    if (!admin.password.startsWith('$2a$') && !admin.password.startsWith('$2b$')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Security update: Administrator password must be securely hashed. Please reset password via CLI.'
+      });
+    }
+
+    const passwordMatches = await bcrypt.compare(password, admin.password);
+    if (!passwordMatches) {
       return res.status(401).json({
         success: false,
         message: 'Access Denied: Invalid administrator password.'
@@ -371,14 +476,14 @@ router.post('/admin/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Admin login error:', error);
-    res.status(500).json({ success: false, message: 'Admin authentication failed', error: error.message });
+    res.status(500).json({ success: false, message: 'Admin authentication failed', error: 'Internal server error' });
   }
 });
 
 // POST /api/v1/auth/vendor/login - Authenticate Vendor & Operator from DB
-router.post('/vendor/login', async (req, res) => {
+router.post('/vendor/login', authLimiter, async (req, res) => {
   try {
-    const { phone, email, passcode } = req.body;
+    const { phone, email, passcode, category } = req.body;
     if (!phone && !email) {
       return res.status(400).json({ success: false, message: 'Vendor phone number or email is required' });
     }
@@ -402,63 +507,60 @@ router.post('/vendor/login', async (req, res) => {
       console.warn('Database vendor lookup error, checking active cache:', dbErr.message);
     }
 
-    // 2. If vendor not yet persisted in DB, check standard onboarded operators and sync to DB
-    if (!vendor) {
-      const PRESET_OPERATORS = [
-        { id: 'v_adv_01', name: 'Captain Arvind Negi', businessName: 'Himalayan Sky Gliders & Air Safari', phone: '+91 98290 88801', email: 'arvind.gliders@gmail.com', city: 'Dehradun', category: 'Adventure', specialization: 'Paragliding & Microlight Flights', passcode: '123456' },
-        { id: 'v_adv_02', name: 'Fateh Singh Bhati', businessName: 'Thar Royal Desert Safari & Camps', phone: '+91 94141 77702', email: 'thar.safari@gmail.com', city: 'Jaisalmer', category: 'Adventure', specialization: 'Desert Safari & Dune Bashing', passcode: '123456' },
-        { id: 'v_adv_03', name: 'Rakesh Rawat', businessName: 'Ganga White Water Adventure Club', phone: '+91 98370 66603', email: 'ganga.rafting@gmail.com', city: 'Rishikesh', category: 'Adventure', specialization: 'River Rafting & Kayaking', passcode: '123456' },
-        { id: 'v_1', name: 'Rajesh Kumar', businessName: 'Rajesh Construction & Repairs', phone: '+91 98765 43210', email: 'rajesh@example.com', city: 'Bhilwara', category: 'Services', specialization: 'Waterproofing & Leakage', passcode: '123456' }
-      ];
-
-      const matched = PRESET_OPERATORS.find(p =>
-        (cleanPhone.length >= 10 && p.phone.replace(/\D/g, '').includes(cleanPhone.slice(-10))) ||
-        (contactInput.includes('@') && p.email && p.email.toLowerCase() === contactInput.toLowerCase())
-      );
-
-      if (matched) {
-        // Automatically persist into DB so credentials reside in the database
-        try {
-          vendor = await prisma.vendor.upsert({
-            where: { phone: matched.phone },
-            update: { category: matched.category, passcode: matched.passcode },
-            create: {
-              id: matched.id,
-              name: matched.name,
-              businessName: matched.businessName,
-              phone: matched.phone,
-              email: matched.email,
-              city: matched.city,
-              category: matched.category,
-              specialization: matched.specialization,
-              passcode: matched.passcode,
-              experience: '8 Years',
-              status: 'active',
-              rating: 4.9,
-              minCharge: 1500
-            }
-          });
-        } catch (syncErr) {
-          vendor = matched;
-        }
-      }
-    }
-
     if (!vendor) {
       return res.status(401).json({
         success: false,
-        message: 'Access Denied: No vendor or operator is registered in the database with this contact. Please contact Hipro Super Admin to onboard.'
+        message: 'Access Denied: No vendor or operator is registered with this contact. Please register a new account.'
       });
     }
 
-    // 3. Security PIN / Passcode Verification from DB (if provided or vendor has passcode set)
-    if (passcode && vendor.passcode) {
-      if (vendor.passcode !== passcode.trim() && vendor.password !== passcode.trim()) {
-        return res.status(401).json({
+    // Category verification (if specific category was requested by user)
+    if (category && category !== 'All' && vendor.category) {
+      const selectedCategoryNorm = category.trim().toLowerCase();
+      const vendorCategoryNorm = vendor.category.trim().toLowerCase();
+      if (selectedCategoryNorm !== vendorCategoryNorm) {
+        return res.status(400).json({
           success: false,
-          message: 'Access Denied: Invalid security PIN / passcode.'
+          message: `This account is registered under ${vendor.category}, not ${category}. Please switch to the ${vendor.category} tab.`
         });
       }
+    }
+
+    // 3. Security PIN / Passcode Verification from DB (Strictly Required)
+    if (!passcode || typeof passcode !== 'string' || !passcode.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vendor security PIN / passcode is required.'
+      });
+    }
+
+    if (!vendor.passcode) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access Denied: No security PIN has been established for this account.'
+      });
+    }
+
+    let pinMatches = false;
+    if (vendor.passcode.startsWith('$2a$') || vendor.passcode.startsWith('$2b$')) {
+      pinMatches = await bcrypt.compare(passcode.trim(), vendor.passcode);
+    } else {
+      pinMatches = vendor.passcode === passcode.trim() || vendor.password === passcode.trim();
+      if (pinMatches) {
+        try {
+          const hashed = await bcrypt.hash(passcode.trim(), 10);
+          await prisma.vendor.update({
+            where: { id: vendor.id },
+            data: { passcode: hashed }
+          });
+        } catch (e) {}
+      }
+    }
+    if (!pinMatches) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access Denied: Invalid security PIN / passcode.'
+      });
     }
 
     // 4. Check vendor active status
@@ -480,12 +582,12 @@ router.post('/vendor/login', async (req, res) => {
         role: 'VENDOR'
       },
       JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: '7d' }
     );
 
     res.json({
       success: true,
-      message: 'Vendor authenticated successfully from database credentials',
+      message: 'Vendor authenticated successfully',
       token,
       vendor: {
         id: vendor.id,
@@ -503,7 +605,172 @@ router.post('/vendor/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Vendor login error:', error);
-    res.status(500).json({ success: false, message: 'Vendor authentication failed', error: error.message });
+    res.status(500).json({ success: false, message: 'Vendor authentication failed', error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/auth/vendor/register - Self-onboarding registration for new vendors / operators
+router.post('/vendor/register', authLimiter, async (req, res) => {
+  try {
+    const {
+      name,
+      businessName,
+      phone,
+      email,
+      category, // 'Adventure' | 'Services'
+      city,
+      specialization,
+      experience,
+      passcode,
+      aadhaarNumber,
+      panNumber,
+      aadhaarFile,      // base64 data URL
+      panFile,          // base64 data URL
+      bankPassbookFile  // base64 data URL
+    } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Contact person name is required' });
+    }
+    if (!businessName || !businessName.trim()) {
+      return res.status(400).json({ success: false, message: 'Business or operator name is required' });
+    }
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ success: false, message: 'Mobile phone number is required' });
+    }
+    if (!city || !city.trim()) {
+      return res.status(400).json({ success: false, message: 'Operating city is required' });
+    }
+
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid 10-digit mobile number' });
+    }
+
+    // Security passcode is mandatory for vendor account activation
+    if (!passcode || !passcode.trim()) {
+      return res.status(400).json({ success: false, message: 'Security PIN is required' });
+    }
+    const cleanPasscode = passcode.trim();
+    if (cleanPasscode.length < 4 || cleanPasscode.length > 6) {
+      return res.status(400).json({ success: false, message: 'Security PIN must be between 4 and 6 digits' });
+    }
+    if (!/^\d+$/.test(cleanPasscode)) {
+      return res.status(400).json({ success: false, message: 'Security PIN must contain only digits' });
+    }
+
+    // Validate Aadhaar number (12 digits) if provided
+    if (aadhaarNumber && aadhaarNumber.trim()) {
+      const cleanAadhaar = aadhaarNumber.trim().replace(/\s/g, '');
+      if (!/^\d{12}$/.test(cleanAadhaar)) {
+        return res.status(400).json({ success: false, message: 'Aadhaar number must be 12 digits' });
+      }
+    }
+
+    // Validate PAN number (format: 5 letters + 4 digits + 1 letter) if provided
+    if (panNumber && panNumber.trim()) {
+      const cleanPan = panNumber.trim().toUpperCase();
+      if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+        return res.status(400).json({ success: false, message: 'Invalid PAN number format' });
+      }
+    }
+
+    // Document files are optional for vendor verification
+    // Determine base URL for document links
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+
+    // Save uploaded documents (optional — process only if provided)
+    const aadhaarUrl = aadhaarFile ? saveBase64Document(aadhaarFile, 'aadhaar', baseUrl) : null;
+    const panUrl = panFile ? saveBase64Document(panFile, 'pan', baseUrl) : null;
+    const bankPassbookUrl = bankPassbookFile ? saveBase64Document(bankPassbookFile, 'bank-passbook', baseUrl) : null;
+
+    const selectedCategory = (category && category.trim().toLowerCase() === 'adventure') ? 'Adventure' : 'Services';
+
+    // Check if phone or email already registered
+    const existing = await prisma.vendor.findFirst({
+      where: {
+        OR: [
+          { phone: { contains: cleanPhone.slice(-10) } },
+          ...(email && email.trim() ? [{ email: { equals: email.trim(), mode: 'insensitive' } }] : [])
+        ]
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'A partner account with this phone number or email is already registered. Please log in.'
+      });
+    }
+
+    // Hash security passcode
+    const hashedPasscode = await bcrypt.hash(cleanPasscode, 10);
+
+    const newVendor = await prisma.vendor.create({
+      data: {
+        name: name.trim(),
+        businessName: businessName.trim(),
+        phone: phone.trim(),
+        email: (email && email.trim()) || null,
+        category: selectedCategory,
+        city: city.trim(),
+        specialization: (specialization && specialization.trim()) || (selectedCategory === 'Adventure' ? 'Adventure Activities & Tours' : 'Construction & Home Services'),
+        experience: (experience && experience.trim()) || '1+ Years',
+        passcode: hashedPasscode,
+        status: 'active',
+        rating: 5.0,
+        minCharge: selectedCategory === 'Adventure' ? 1200 : 500,
+        // Document verification fields
+        aadhaarNumber: aadhaarNumber ? aadhaarNumber.trim().replace(/\s/g, '') : null,
+        aadhaarUrl,
+        panNumber: panNumber ? panNumber.trim().toUpperCase() : null,
+        panUrl,
+        bankPassbookUrl,
+        documentsVerified: false
+      }
+    });
+
+    // Sign JWT session token
+    const token = jwt.sign(
+      {
+        id: newVendor.id,
+        vendorId: newVendor.id,
+        name: newVendor.name,
+        businessName: newVendor.businessName,
+        phone: newVendor.phone,
+        category: newVendor.category,
+        role: 'VENDOR'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `Welcome to Hipro! ${newVendor.businessName} has been registered. Your documents are pending admin verification.`,
+      token,
+      vendor: {
+        id: newVendor.id,
+        name: newVendor.name,
+        businessName: newVendor.businessName,
+        phone: newVendor.phone,
+        email: newVendor.email,
+        city: newVendor.city,
+        category: newVendor.category,
+        specialization: newVendor.specialization,
+        rating: newVendor.rating,
+        status: newVendor.status,
+        documentsVerified: newVendor.documentsVerified,
+        role: 'VENDOR'
+      }
+    });
+  } catch (error) {
+    console.error('Vendor registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message ? `Vendor registration failed: ${error.message}` : 'Vendor registration failed',
+      error: error.message
+    });
   }
 });
 
