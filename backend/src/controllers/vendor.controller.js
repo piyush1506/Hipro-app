@@ -524,8 +524,8 @@ const createVendorQuote = async (req, res) => {
         type: 'QUOTATION',
         referenceId: quote.id,
         requestId,
-        projectName: request.servicecode || 'Service Request',
-        location: request.addressline || request.location || 'Site Location',
+        projectName: request.servicecode || '',
+        location: request.addressline || request.location || '',
         unread: true,
         timestamp: new Date().toISOString()
       }, io);
@@ -692,8 +692,8 @@ const assignVendorToRequest = async (req, res) => {
           type: 'ASSIGNMENT',
           referenceId: request.id,
           requestId,
-          projectName: request.servicecode || 'Service Request',
-          location: request.addressline || request.location || 'Site Location',
+          projectName: request.servicecode || '',
+          location: request.addressline || request.location || '',
           unread: true,
           timestamp: new Date().toISOString()
         }, io);

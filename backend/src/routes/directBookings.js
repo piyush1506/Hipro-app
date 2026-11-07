@@ -954,7 +954,7 @@ router.post('/:id/rate', optionalAuth, async (req, res) => {
       return res.status(403).json({ success: false, message: 'You are not authorized to rate this booking' });
     }
 
-    const customerName = req.user?.name || booking.customerName || 'Valued Customer';
+    const customerName = req.user?.name || booking.customerName || 'Customer';
     const customerPhone = req.user?.phone || booking.customerPhone || null;
 
     // Resolve assigned Vendor (technician)

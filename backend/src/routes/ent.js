@@ -551,7 +551,7 @@ router.post('/bookings', authenticate, async (req, res) => {
       vendorName: ent.vendorName || '',
       vendorBusiness: ent.vendorBusiness || '',
       vendorPhone: ent.vendorPhone || '',
-      userId: userId || 'guest_user',
+      userId,
       travelerName,
       travelerPhone,
       travelDate: date,

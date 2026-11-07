@@ -623,9 +623,9 @@ router.get('/settings', (req, res) => {
         IMAGEKIT_PUBLIC_KEY: env.IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '',
         IMAGEKIT_CONFIGURED: Boolean(env.IMAGEKIT_PRIVATE_KEY || process.env.IMAGEKIT_PRIVATE_KEY),
         IMAGEKIT_URL_ENDPOINT: env.IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '',
-        COMPANY_NAME: env.COMPANY_NAME || process.env.COMPANY_NAME || 'Hind Building Solutions',
-        SUPPORT_PHONE: env.SUPPORT_PHONE || process.env.SUPPORT_PHONE || '+91 94628 77757',
-        SUPPORT_EMAIL: env.SUPPORT_EMAIL || process.env.SUPPORT_EMAIL || 'support@hindbuilding.com'
+        COMPANY_NAME: env.COMPANY_NAME || process.env.COMPANY_NAME || '',
+        SUPPORT_PHONE: env.SUPPORT_PHONE || process.env.SUPPORT_PHONE || '',
+        SUPPORT_EMAIL: env.SUPPORT_EMAIL || process.env.SUPPORT_EMAIL || ''
       }
     });
   } catch (error) {
@@ -678,9 +678,9 @@ router.post('/settings', (req, res) => {
         IMAGEKIT_PUBLIC_KEY: env.IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '',
         IMAGEKIT_CONFIGURED: Boolean(env.IMAGEKIT_PRIVATE_KEY || process.env.IMAGEKIT_PRIVATE_KEY),
         IMAGEKIT_URL_ENDPOINT: env.IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '',
-        COMPANY_NAME: env.COMPANY_NAME || process.env.COMPANY_NAME || 'Hind Building Solutions',
-        SUPPORT_PHONE: env.SUPPORT_PHONE || process.env.SUPPORT_PHONE || '+91 94628 77757',
-        SUPPORT_EMAIL: env.SUPPORT_EMAIL || process.env.SUPPORT_EMAIL || 'support@hindbuilding.com'
+        COMPANY_NAME: env.COMPANY_NAME || process.env.COMPANY_NAME || '',
+        SUPPORT_PHONE: env.SUPPORT_PHONE || process.env.SUPPORT_PHONE || '',
+        SUPPORT_EMAIL: env.SUPPORT_EMAIL || process.env.SUPPORT_EMAIL || ''
       }
     });
   } catch (error) {
