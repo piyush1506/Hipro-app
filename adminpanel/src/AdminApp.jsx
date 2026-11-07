@@ -353,7 +353,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     const alreadySharedIds = (req.sharedVendors || []).map(s => s.vendorId);
     setSelectedShareVendorIds(alreadySharedIds);
     setShareDispatchNotes('');
-    setShareVendorCityFilter('ALL');
+    const reqCity = (req.city || req.location || '').trim();
+    const matchedCity = operationalCities.find(c => 
+      c.name && reqCity.toLowerCase().includes(c.name.toLowerCase())
+    );
+    setShareVendorCityFilter(matchedCity ? matchedCity.name : (reqCity || 'ALL'));
     setShareVendorSearch('');
     setShareVendorModalOpen(true);
   };
