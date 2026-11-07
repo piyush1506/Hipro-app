@@ -14268,99 +14268,130 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
             {/* MODAL 1: SHARE INSPECTION REQUEST WITH SELECTED VENDORS */}
       {shareVendorModalOpen && shareModalRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200/80 overflow-hidden">
             
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-primary-500/20 text-primary-300 border border-primary-400/30 font-mono">
-                    #{shareModalRequest.requestNumber}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-200 border border-white/10">
-                    {shareModalRequest.propertyType || 'Residential'} • {shareModalRequest.propertySize || 'Standard'}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    <span>{shareModalRequest.city || shareModalRequest.location || 'Site Hub'}</span>
-                  </span>
+            <div className="px-5 py-4 sm:px-6 sm:py-5 bg-white border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 border border-primary-100 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Share2 className="w-5 h-5" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-heading font-bold text-white flex items-center gap-2">
-                  <Share2 className="w-5 h-5 text-primary-400" />
-                  <span>Share Inspection with Selected Vendors</span>
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Select certified local vendors in this city to invite itemized quotations. Vendors only receive non-sensitive damage details (photos, scope & square footage).
-                </p>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                      #{shareModalRequest.requestNumber}
+                    </span>
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200/80">
+                      {shareModalRequest.propertyType || 'Residential'} • {shareModalRequest.propertySize || 'Standard Size'}
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      <span>{shareModalRequest.city || shareModalRequest.location || 'Site Hub'}</span>
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-heading font-bold text-slate-900 tracking-tight">
+                    Invite Local Contractors to Quote
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Share site damage photos and scope details with verified local partners to collect itemized bids.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => { setShareVendorModalOpen(false); setShareModalRequest(null); }}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 flex items-center justify-center transition-colors shrink-0"
+                aria-label="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Customer Damage Scope Summary */}
-            <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
-              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
-                <div className="space-y-1 flex-1 min-w-[240px]">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                    <Wrench className="w-3 h-3 text-primary-600" />
-                    <span>Requirement: {shareModalRequest.servicecode}</span>
-                    {shareModalRequest.subServiceCode && <span className="text-primary-700">({shareModalRequest.subServiceCode})</span>}
-                  </div>
-                  <p className="text-xs text-slate-700 font-medium line-clamp-2">
-                    {shareModalRequest.issueDescription || 'Damage reported requiring on-site contractor quotation.'}
-                  </p>
-                </div>
-                {Array.isArray(shareModalRequest.mediaUrl) && shareModalRequest.mediaUrl.length > 0 && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {shareModalRequest.mediaUrl.slice(0, 3).map((img, idx) => (
-                      <img key={idx} src={img} alt="Damage evidence" className="w-12 h-12 rounded-lg object-cover border border-slate-300" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }} />
-                    ))}
-                    {shareModalRequest.mediaUrl.length > 3 && (
-                      <div className="w-12 h-12 rounded-lg bg-slate-200 border border-slate-300 flex items-center justify-center text-[11px] font-bold text-slate-600">
-                        +{shareModalRequest.mediaUrl.length - 3}
-                      </div>
+            {/* Project Scope & Inspection Evidence Card */}
+            <div className="px-5 py-3.5 sm:px-6 bg-slate-50/60 border-b border-slate-100 shrink-0">
+              <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/80 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Project Trade</span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-primary-50 text-primary-800 border border-primary-200/60">
+                      <Wrench className="w-3 h-3 text-primary-600" />
+                      <span>{shareModalRequest.servicecode}</span>
+                    </span>
+                    {shareModalRequest.subServiceCode && (
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                        {shareModalRequest.subServiceCode}
+                      </span>
                     )}
                   </div>
-                )}
+                  {Array.isArray(shareModalRequest.mediaUrl) && shareModalRequest.mediaUrl.length > 0 && (
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {shareModalRequest.mediaUrl.length} site photo{shareModalRequest.mediaUrl.length > 1 ? 's' : ''} attached
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-700 font-normal leading-relaxed line-clamp-2 bg-slate-50/80 px-3 py-2 rounded-lg border border-slate-200/60 text-slate-600 italic">
+                      "{shareModalRequest.issueDescription || 'Customer inspection completed. Awaiting contractor scope of work and quotation.'}"
+                    </p>
+                  </div>
+
+                  {Array.isArray(shareModalRequest.mediaUrl) && shareModalRequest.mediaUrl.length > 0 && (
+                    <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                      {shareModalRequest.mediaUrl.slice(0, 3).map((img, idx) => (
+                        <div key={idx} className="relative group overflow-hidden rounded-lg border border-slate-200 shadow-2xs">
+                          <img
+                            src={img}
+                            alt="Damage evidence"
+                            className="w-10 h-10 sm:w-11 sm:h-11 object-cover group-hover:scale-105 transition-transform"
+                            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                          />
+                        </div>
+                      ))}
+                      {shareModalRequest.mediaUrl.length > 3 && (
+                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-[11px] font-bold text-slate-600 shadow-2xs">
+                          +{shareModalRequest.mediaUrl.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Filter Bar */}
-            <div className="p-3 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-xs font-bold text-slate-700 shrink-0">Filter City:</span>
+            <div className="px-5 py-3 sm:px-6 bg-white border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
+              <div className="relative w-full sm:w-60">
+                <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select
                   value={shareVendorCityFilter}
                   onChange={(e) => setShareVendorCityFilter(e.target.value)}
-                  className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full text-xs font-medium pl-8 pr-8 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-slate-800 transition-colors focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 appearance-none cursor-pointer"
                 >
-                  <option value="ALL">All Operational Hubs</option>
+                  <option value="ALL">All Hubs ({operationalCities.filter(c => c.isActive !== false).length})</option>
                   {operationalCities.filter(c => c.isActive !== false).map(c => (
                     <option key={c.id || c.name} value={c.name}>{c.name}</option>
                   ))}
                 </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <div className="relative w-full sm:flex-1 sm:max-w-md">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search vendor name, specialization..."
+                  placeholder="Search contractor, business, or specialty..."
                   value={shareVendorSearch}
                   onChange={(e) => setShareVendorSearch(e.target.value)}
-                  className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full text-xs pl-8 pr-3 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 transition-colors focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                 />
               </div>
             </div>
 
             {/* Vendor List (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-2.5">
+            <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 space-y-2.5 bg-slate-50/30">
               {(() => {
                 const searchLower = shareVendorSearch.toLowerCase().trim();
                 const filteredVendors = vendors.filter(v => {
@@ -14381,24 +14412,31 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
                 return (
                   <>
-                    <div className="flex items-center justify-between pb-1 text-xs">
-                      <span className="font-semibold text-slate-600">
-                        Available Vendors: <strong className="text-slate-900">{filteredVendors.length}</strong>
-                      </span>
+                    <div className="flex items-center justify-between pb-1 px-0.5 text-xs">
+                      <div className="flex items-center gap-1.5 font-semibold text-slate-600">
+                        <span>Contractors Available:</span>
+                        <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-[11px] shadow-2xs">
+                          {filteredVendors.length}
+                        </span>
+                      </div>
                       {filteredVendors.length > 0 && (
                         <button
                           type="button"
                           onClick={() => handleSelectAllCityVendors(filteredVendors)}
-                          className="text-xs font-bold text-primary-600 hover:text-primary-800"
+                          className="text-xs font-semibold text-primary-700 hover:text-primary-800 transition-colors hover:underline"
                         >
-                          {allSelected ? 'Deselect All' : 'Select All in View'}
+                          {allSelected ? 'Deselect All' : `Select All (${filteredVendors.length})`}
                         </button>
                       )}
                     </div>
 
                     {filteredVendors.length === 0 ? (
-                      <div className="text-center py-10 text-slate-400 text-xs">
-                        No registered vendors found matching current filter.
+                      <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 bg-white">
+                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <h5 className="font-bold text-sm text-slate-700">No matching contractors</h5>
+                        <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
+                          Try adjusting your hub filter or search query to find registered partners.
+                        </p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -14406,56 +14444,73 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           const isSelected = selectedShareVendorIds.includes(v.id);
                           const alreadyShared = (shareModalRequest.sharedVendors || []).find(s => s.vendorId === v.id);
                           const hasQuoted = (shareModalRequest.vendorQuotes || []).find(q => q.vendorId === v.id);
+                          const displayName = v.businessName || v.name || 'Contractor';
+                          const initial = displayName.charAt(0).toUpperCase();
 
                           return (
                             <div
                               key={v.id}
                               onClick={() => handleToggleSelectVendor(v.id)}
-                              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              className={`group p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                                 isSelected
-                                  ? 'bg-primary-50/70 border-primary-300 ring-2 ring-primary-500/20 shadow-xs'
-                                  : 'bg-white hover:bg-slate-50 border-slate-200'
+                                  ? 'bg-primary-50/50 border-primary-500 ring-1 ring-primary-500/40 shadow-xs'
+                                  : 'bg-white hover:bg-slate-50/80 border-slate-200/90 hover:border-slate-300 shadow-2xs'
                               }`}
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                                  isSelected ? 'bg-primary-600 border-primary-600 text-white' : 'border-slate-300 bg-white'
+                                {/* Checkbox Indicator */}
+                                <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+                                  isSelected
+                                    ? 'bg-primary-600 border-primary-600 text-white shadow-xs'
+                                    : 'border-slate-300 bg-white group-hover:border-slate-400'
                                 }`}>
                                   {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                                 </div>
 
+                                {/* Avatar */}
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 transition-colors ${
+                                  isSelected
+                                    ? 'bg-primary-100 text-primary-800 border border-primary-200'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                }`}>
+                                  {initial}
+                                </div>
+
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <h4 className="font-heading font-bold text-sm text-slate-900 truncate">
-                                      {v.businessName || v.name}
+                                      {displayName}
                                     </h4>
-                                    <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                      {v.city || 'Regional'}
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                      {v.city || 'Regional Hub'}
                                     </span>
                                     {alreadyShared && (
-                                      <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
                                         Shared Earlier
                                       </span>
                                     )}
                                     {hasQuoted && (
-                                      <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
                                         Quote: ₹{hasQuoted.quotePrice.toLocaleString('en-IN')}
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-slate-500 mt-0.5 truncate">
-                                    Contact: <strong className="text-slate-700">{v.name}</strong> • {v.phone || 'N/A'} • <span className="text-primary-700 font-medium">{v.specialization || 'General Contractor'}</span>
+                                  <p className="text-xs text-slate-500 mt-0.5 truncate flex items-center gap-1.5 flex-wrap">
+                                    <span>Contact: <strong className="text-slate-700 font-semibold">{v.name}</strong></span>
+                                    {v.phone && <span>• {v.phone}</span>}
+                                    <span className="text-primary-700 font-medium">• {v.specialization || 'General Contractor'}</span>
                                   </p>
                                 </div>
                               </div>
 
-                              <div className="text-right shrink-0">
-                                <div className="text-xs font-bold text-slate-800 flex items-center justify-end gap-1">
+                              <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                                <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
                                   <span className="text-amber-500">★</span>
                                   <span>{v.rating || '4.8'}</span>
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-                                  {v.currentJobCount || 0}/{v.maxConcurrentJobs || 5} active jobs
+                                <div className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                  <span>{v.currentJobCount || 0}/{v.maxConcurrentJobs || 5} active jobs</span>
                                 </div>
                               </div>
                             </div>
@@ -14469,30 +14524,56 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             </div>
 
             {/* Dispatch Instructions & Action Footer */}
-            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 shrink-0 space-y-3">
+            <div className="px-5 py-4 sm:px-6 bg-white border-t border-slate-200/90 shrink-0 space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Optional Dispatch Instructions for Vendors:
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Instructions for Invited Contractors (Optional):</span>
+                  </label>
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShareDispatchNotes('Urgent requirement. Please submit your lowest itemized quote before 6:00 PM today.')}
+                      className="text-[10px] font-medium text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200/80 px-2 py-0.5 rounded transition-colors"
+                    >
+                      + Urgent 6 PM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShareDispatchNotes('Site inspection required prior to quote finalization.')}
+                      className="text-[10px] font-medium text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200/80 px-2 py-0.5 rounded transition-colors"
+                    >
+                      + Site Visit Required
+                    </button>
+                  </div>
+                </div>
                 <input
                   type="text"
                   placeholder="e.g. Urgent customer requirement. Please submit lowest itemized quote before 6:00 PM."
                   value={shareDispatchNotes}
                   onChange={(e) => setShareDispatchNotes(e.target.value)}
-                  className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full text-xs px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                 />
               </div>
 
               <div className="flex items-center justify-between gap-3 pt-1">
-                <div className="text-xs font-semibold text-slate-600">
-                  Selected Vendors: <strong className="text-primary-700 text-sm">{selectedShareVendorIds.length}</strong>
+                <div className="text-xs font-medium text-slate-600 flex items-center gap-2">
+                  {selectedShareVendorIds.length === 0 ? (
+                    <span className="text-slate-400">No contractors selected</span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-primary-600 animate-pulse"></span>
+                      <span>Selected: <strong className="text-primary-700 font-bold">{selectedShareVendorIds.length}</strong> contractor{selectedShareVendorIds.length > 1 ? 's' : ''}</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => { setShareVendorModalOpen(false); setShareModalRequest(null); }}
-                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all"
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all"
                   >
                     Cancel
                   </button>
@@ -14500,10 +14581,10 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     type="button"
                     disabled={isSharingDispatching || selectedShareVendorIds.length === 0}
                     onClick={handleDispatchShareVendors}
-                    className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-primary-500/20"
+                    className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-all flex items-center gap-2 shadow-sm shadow-primary-500/20"
                   >
                     <Send className={`w-3.5 h-3.5 ${isSharingDispatching ? 'animate-spin' : ''}`} />
-                    <span>{isSharingDispatching ? 'Dispatching...' : `Dispatch to ${selectedShareVendorIds.length} Vendor(s)`}</span>
+                    <span>{isSharingDispatching ? 'Sending Invites...' : `Invite ${selectedShareVendorIds.length} Contractor(s) to Quote`}</span>
                   </button>
                 </div>
               </div>
@@ -14515,38 +14596,43 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
       {/* MODAL 2: VENDOR QUOTATIONS COMPARISON & PROJECT ASSIGNMENT */}
       {vendorQuotesModalOpen && quotesModalRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200/80 overflow-hidden">
             
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-primary-500/20 text-primary-300 border border-primary-400/30 font-mono">
-                    #{quotesModalRequest.requestNumber}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-200 border border-white/10">
-                    {quotesModalRequest.servicecode}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    <span>{quotesModalRequest.city || quotesModalRequest.location || 'Site Hub'}</span>
-                  </span>
+            <div className="px-5 py-4 sm:px-6 sm:py-5 bg-white border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Tag className="w-5 h-5" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-heading font-bold text-white flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-emerald-400" />
-                  <span>Vendor Quotations & Project Assignment</span>
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Compare all quotations submitted by invited vendors for this inspection request. Select the most competitive quote to award and assign the project.
-                </p>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                      #{quotesModalRequest.requestNumber}
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                      {quotesModalRequest.servicecode}
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      <span>{quotesModalRequest.city || quotesModalRequest.location || 'Site Hub'}</span>
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-heading font-bold text-slate-900 tracking-tight">
+                    Vendor Quotations & Project Assignment
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Compare submitted bids from invited contractors and award the project to the best partner.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => { setVendorQuotesModalOpen(false); setQuotesModalRequest(null); }}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 flex items-center justify-center transition-colors shrink-0"
+                aria-label="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
