@@ -561,7 +561,7 @@ async function main() {
 
   const SUBSERVICE_IMAGES = {
     // Civil Construction
-    "RCC Slab & Beam Casting": "https://images.unsplash.com/photo-1541888946425-d0fbb18615f3?auto=format&fit=crop&w=800&q=80",
+    "RCC Slab & Beam Casting": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80",
     "Column Jacketing & Retrofitting": "https://images.unsplash.com/photo-1590381105924-c72589b9ef3f?auto=format&fit=crop&w=800&q=80",
     "Boundary Wall & Plinth Work": "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80",
     "Core Cutting & Alterations": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80",
@@ -573,7 +573,7 @@ async function main() {
     "Basement & Retaining Wall Defense": "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80",
 
     // Structure Repair
-    "Sagging Slab & Beam Rehabilitation": "https://images.unsplash.com/photo-1541888946425-d0fbb18615f3?auto=format&fit=crop&w=800&q=80",
+    "Sagging Slab & Beam Rehabilitation": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80",
     "Rebar Rust Removal & Anti-Corrosion": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80",
     "Foundation Settlement Audit": "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80",
 
@@ -636,9 +636,9 @@ async function main() {
     "Balcony Glass Railings & Spiders": "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80",
 
     // Solar & Inverter Setup
-    "Rooftop On-Grid Solar Plant": "https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80",
-    "Solar Water Heater Setup & Repair": "https://images.unsplash.com/photo-1508873696983-2df570464756?auto=format&fit=crop&w=800&q=80",
-    "Hybrid Inverter & Lithium Battery Sync": "https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=800&q=80",
+    "Rooftop On-Grid Solar Plant": "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=800&q=80",
+    "Solar Water Heater Setup & Repair": "https://images.unsplash.com/photo-1559302504-64aae6ca6b6d?auto=format&fit=crop&w=800&q=80",
+    "Hybrid Inverter & Lithium Battery Sync": "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=800&q=80",
 
     // Carpentry & Doors
     "Main Door & Digital Smart Lock": "https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=800&q=80",
@@ -652,7 +652,7 @@ async function main() {
 
     // Home Quality Inspection
     "Pre-Possession Snagging Inspection": "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80",
-    "Concrete Rebound Hammer Test": "https://images.unsplash.com/photo-1541888946425-d0fbb18615f3?auto=format&fit=crop&w=800&q=80",
+    "Concrete Rebound Hammer Test": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80",
     "Thermal Thermal Heat & Moisture Audit": "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80"
   };
 
