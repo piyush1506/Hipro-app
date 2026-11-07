@@ -154,6 +154,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     businessName: '',
     phone: '',
     email: '',
+    state: 'Rajasthan',
     city: 'Bhilwara',
     category: 'Services',
     specialization: 'General Repair',
@@ -7834,7 +7835,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               </div>
                             </td>
                             <td className="py-4 px-4">
-                              <div className="text-slate-700 font-medium">{vendor.city}</div>
+                              <div className="text-slate-700 font-medium">{[vendor.city, vendor.state].filter(Boolean).join(', ')}</div>
                               <div className="text-[10px] text-slate-500">{vendor.experience}</div>
                             </td>
                             <td className="py-4 px-4">
@@ -8470,14 +8471,24 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">State (India)</label>
+                          <input
+                            name="state"
+                            value={vendorForm.state || ''}
+                            onChange={(e) => setVendorForm(prev => ({ ...prev, state: e.target.value }))}
+                            placeholder="e.g. Rajasthan, Maharashtra"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                          />
+                        </div>
                         <div className="space-y-2">
                           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">City</label>
                           <input
                             name="city"
                             value={vendorForm.city}
                             onChange={(e) => setVendorForm(prev => ({ ...prev, city: e.target.value }))}
-                            placeholder="Bhilwara"
+                            placeholder="e.g. Bhilwara, Pune"
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                           />
                         </div>

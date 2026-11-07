@@ -14,10 +14,13 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   // Category Dropdown Selection: 'Adventure' vs 'Services'
   const [category, setCategory] = useState('Adventure');
 
-  // Dynamic reference data (fetched from backend — no hardcoded cities/specializations)
+  // Dynamic reference data (fetched from backend API — live All-India States & Cities)
+  const [states, setStates] = useState([]);
+  const [statesLoading, setStatesLoading] = useState(true);
+  const [selectedState, setSelectedState] = useState('');
   const [cities, setCities] = useState([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
   const [specializations, setSpecializations] = useState([]);
-  const [citiesLoading, setCitiesLoading] = useState(true);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -29,6 +32,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   const [specialization, setSpecialization] = useState('');
   const [customSpecialization, setCustomSpecialization] = useState('');
   const [experience, setExperience] = useState('3-5 Years');
+  const [capacity, setCapacity] = useState('SMALL');
   const [passcode, setPasscode] = useState('');
   const [confirmPasscode, setConfirmPasscode] = useState('');
 
@@ -44,19 +48,22 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Fetch dynamic cities and specialization suggestions from the backend
+  // Fetch dynamic Indian states and specialization suggestions from the backend API
   useEffect(() => {
     let cancelled = false;
     const loadReferenceData = async () => {
       try {
-        // Dynamic cities from backend City model
-        const citiesRes = await fetch(`${API_BASE}/api/v1/services/cities`);
-        const citiesData = await citiesRes.json();
-        if (citiesData.success && Array.isArray(citiesData.cities)) {
-          setCities(citiesData.cities.map(c => c.name || c));
+        setStatesLoading(true);
+        // Live Indian States & UTs API
+        const statesRes = await fetch(`${API_BASE}/api/v1/locations/india/states`);
+        const statesData = await statesRes.json();
+        if (statesData.success && Array.isArray(statesData.states)) {
+          if (!cancelled) setStates(statesData.states.map(s => s.name || s));
         }
       } catch (e) {
-        console.warn('Failed to fetch cities:', e);
+        console.warn('Failed to fetch Indian states from API:', e);
+      } finally {
+        if (!cancelled) setStatesLoading(false);
       }
 
       try {
@@ -65,17 +72,48 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         const vendorsData = await vendorsRes.json();
         if (vendorsData.success && Array.isArray(vendorsData.vendors)) {
           const specs = [...new Set(vendorsData.vendors.map(v => v.specialization).filter(Boolean))];
-          setSpecializations(specs);
+          if (!cancelled) setSpecializations(specs);
         }
       } catch (e) {
         console.warn('Failed to fetch specializations:', e);
-      } finally {
-        if (!cancelled) setCitiesLoading(false);
       }
     };
     loadReferenceData();
     return () => { cancelled = true; };
   }, []);
+
+  // Fetch dynamic cities whenever the selected Indian State changes
+  useEffect(() => {
+    if (!selectedState) {
+      setCities([]);
+      setCity('');
+      setCustomCity('');
+      return;
+    }
+
+    let cancelled = false;
+    const loadCitiesForState = async () => {
+      try {
+        setCitiesLoading(true);
+        const res = await fetch(`${API_BASE}/api/v1/locations/india/cities?state=${encodeURIComponent(selectedState)}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.cities)) {
+          if (!cancelled) {
+            setCities(data.cities);
+            setCity('');
+            setCustomCity('');
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch cities for state:', selectedState, e);
+      } finally {
+        if (!cancelled) setCitiesLoading(false);
+      }
+    };
+
+    loadCitiesForState();
+    return () => { cancelled = true; };
+  }, [selectedState]);
 
   const handleCategoryChange = (newCat) => {
     setCategory(newCat);
@@ -142,10 +180,16 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
       return;
     }
 
-    // City: must be selected from dynamic list or entered as custom
+    // State: must be selected from All-India states
+    if (!selectedState.trim()) {
+      setError('Please select your state in India');
+      return;
+    }
+
+    // City: must be selected from state cities or entered as custom
     const finalCity = customCity.trim() || city.trim();
     if (!finalCity) {
-      setError('Please specify your operational city');
+      setError('Please select or specify your operational city');
       return;
     }
 
@@ -201,10 +245,12 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
           businessName: businessName.trim(),
           phone: phone.trim(),
           email: email.trim() || undefined,
+          state: selectedState.trim(),
           city: finalCity,
           category,
           specialization: finalSpecialization,
           experience,
+          capacity,
           passcode: passcode.trim(),
           aadhaarNumber: cleanAadhaar || undefined,
           panNumber: cleanPan || undefined,
@@ -427,34 +473,81 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
             </div>
 
-            {/* STEP 3: OPERATING LOCATION & SPECIALIZATION DROPDOWN */}
+            {/* STEP 3: OPERATING LOCATION (ALL-INDIA STATE & CITY API) & SPECIALIZATION */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
-                Step 3: Operating Location & Activity Specialization
-              </label>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Step 3: Operating Location (All-India Coverage) & Trade Specialization
+                </label>
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  <span>Pan-India Vendor Network</span>
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Operating City Dropdown */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Indian State Selection (Dynamic API) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    State (India) *
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <select
+                      value={selectedState}
+                      onChange={(e) => setSelectedState(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="">Select Indian State...</option>
+                      {statesLoading ? (
+                        <option disabled>Loading states from API...</option>
+                      ) : (
+                        states.map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))
+                      )}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {states.length > 0 ? `${states.length} States & UTs available` : 'Select your home state'}
+                  </p>
+                </div>
+
+                {/* 2. City Selection in Selected State (Dynamic API) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                     Operating City *
                   </label>
                   <div className="relative">
-                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <select
                       value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
+                      onChange={(e) => { setCity(e.target.value); setCustomCity(''); }}
+                      disabled={!selectedState || citiesLoading}
+                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <option value="">Select your city...</option>
-                      {citiesLoading ? (
-                        <option disabled>Loading cities...</option>
+                      {!selectedState ? (
+                        <option value="">First select State...</option>
+                      ) : citiesLoading ? (
+                        <option value="">Fetching cities from API...</option>
                       ) : cities.length === 0 ? (
-                        <option disabled>No cities available</option>
+                        <option value="">No cities found for {selectedState}</option>
                       ) : (
-                        cities.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))
+                        <>
+                          <option value="">Select City ({cities.length} in {selectedState})...</option>
+                          {cities.map((c) => {
+                            const cName = c.name || c;
+                            const isLive = c.isOperationalHub;
+                            return (
+                              <option key={cName} value={cName}>
+                                {cName} {isLive ? '⭐ (Active Hub)' : ''}
+                              </option>
+                            );
+                          })}
+                        </>
                       )}
                     </select>
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -464,16 +557,16 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   <input
                     type="text"
                     value={customCity}
-                    onChange={(e) => setCustomCity(e.target.value)}
-                    placeholder="Or type your city name (if not listed above)"
+                    onChange={(e) => { setCustomCity(e.target.value); if (e.target.value) setCity(''); }}
+                    placeholder="Or type city/town name (if not in list)"
                     className="w-full mt-2 px-3 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium"
                   />
                 </div>
 
-                {/* Specialization Dropdown */}
+                {/* 3. Specialization Dropdown */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Specialization Dropdown *
+                    Specialization Trade *
                   </label>
                   <div className="relative">
                     <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -504,7 +597,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   />
                 </div>
 
-                {/* Experience Dropdown */}
+                {/* 4. Experience & Work Capacity */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                     Years of Experience
@@ -523,6 +616,24 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                     </select>
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                       <ChevronDown className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+
+                  <div className="mt-2">
+                    <div className="relative">
+                      <Layers className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <select
+                        value={capacity}
+                        onChange={(e) => setCapacity(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="SMALL">Capacity: Small (up to 3 jobs)</option>
+                        <option value="MEDIUM">Capacity: Medium (up to 8 jobs)</option>
+                        <option value="LARGE">Capacity: Large (up to 20 jobs)</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                   </div>
                 </div>

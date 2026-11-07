@@ -405,6 +405,7 @@ model Vendor {
     email           String?   @unique
     password        String?  // Optional vendor password
     passcode        String?  // 6-digit security PIN (hashed)
+    state           String?  // Indian state / UT (e.g. "Rajasthan", "Maharashtra")
     city            String
     cityId          String?  // Links vendor to a specific city for multi-city routing
     category        String   @default("Services") // "Services" | "Adventure"
