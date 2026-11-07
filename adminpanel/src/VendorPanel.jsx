@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
 import {
   LayoutDashboard, ClipboardList, Receipt, Calculator,
   Wrench, Users, Activity, ShieldCheck, Plus, RefreshCw,
@@ -123,6 +124,112 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [adventureBookings, setAdventureBookings] = useState([]);
   const [adventureSearch, setAdventureSearch] = useState('');
   const [adventureStatusFilter, setAdventureStatusFilter] = useState('ALL');
+
+  // ==================== REAL-TIME SUPER ADMIN CHAT STATE ====================
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInputText, setChatInputText] = useState('');
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatMessagesEndRef = useRef(null);
+  const vendorSocketRef = useRef(null);
+
+  const fetchVendorChatMessages = async (tId) => {
+    const thread = tId || (vendorProfile?.id ? `thread_vendor_${vendorProfile.id}` : null);
+    if (!thread) return;
+    try {
+      setChatLoading(true);
+      const res = await fetch(`${API_BASE}/api/v1/chat/threads/${thread}/messages`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setChatMessages(data.data);
+      }
+    } catch (e) {
+      console.error('Fetch vendor chat messages error:', e);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!vendorProfile?.id) return;
+    const currentThreadId = `thread_vendor_${vendorProfile.id}`;
+    fetchVendorChatMessages(currentThreadId);
+
+    const socketBase = import.meta.env.VITE_SOCKET_URL || 
+      (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:5000'
+        : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in'));
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+    const socket = io(socketBase, {
+      transports: ['websocket', 'polling'],
+      auth: { token, role: 'vendor', vendorId: vendorProfile.id }
+    });
+    vendorSocketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('join_thread', currentThreadId);
+    });
+
+    socket.on('new_message', (msg) => {
+      if (msg.threadId === currentThreadId) {
+        setChatMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+      vendorSocketRef.current = null;
+    };
+  }, [vendorProfile?.id]);
+
+  useEffect(() => {
+    if (activeTab === 'support') {
+      chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, activeTab]);
+
+  const handleSendVendorMessage = async (e) => {
+    if (e) e.preventDefault();
+    const text = chatInputText.trim();
+    if (!text || !vendorProfile?.id || isSendingChat) return;
+
+    const currentThreadId = `thread_vendor_${vendorProfile.id}`;
+    setIsSendingChat(true);
+    setChatInputText('');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/chat/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threadId: currentThreadId,
+          sender: 'vendor',
+          senderName: vendorProfile.businessName || vendorProfile.name,
+          customerName: vendorProfile.businessName || vendorProfile.name,
+          customerPhone: vendorProfile.phone || '',
+          contextType: 'VENDOR',
+          contextTag: `${vendorProfile.businessName || vendorProfile.name} (Vendor Desk)`,
+          vendorId: vendorProfile.id,
+          text
+        })
+      });
+      const data = await res.json();
+      if (data && data.success && data.data) {
+        setChatMessages(prev => {
+          if (prev.some(m => m.id === data.data.id)) return prev;
+          return [...prev, data.data];
+        });
+      }
+    } catch (err) {
+      console.error('Send vendor message error:', err);
+    } finally {
+      setIsSendingChat(false);
+    }
+  };
 
   const showToastMsg = (message, type = 'info') => {
     setToast({ message, type });
@@ -1842,71 +1949,126 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
             </div>
           )}
 
-          {/* SUPPORT TAB */}
+          {/* SUPPORT TAB - REAL-TIME SUPER ADMIN CHAT */}
           {activeTab === 'support' && (
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-heading font-semibold text-base text-slate-800">
-                    {isAdventure ? 'Adventure Operations Desk' : 'Service Support Desk'}
+                  <h2 className="font-heading font-semibold text-base text-slate-800 flex items-center gap-2">
+                    <MessageCircle className={`w-5 h-5 ${isAdventure ? 'text-rose-600' : 'text-brand-600'}`} />
+                    <span>{isAdventure ? 'Adventure Operations Desk' : 'Vendor Partner Support Desk'}</span>
                   </h2>
-                  <p className="text-[11px] text-slate-400">
-                    {isAdventure
-                      ? 'Direct communication channel between Adventure Operator and Super Admin Operations Desk.'
-                      : 'Chat with the Super Admin desk for any questions about customer repair requests or quotations.'}
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Live direct communication between {vendorProfile.businessName || vendorProfile.name} and Super Admin Technical Desk.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => fetchVendorChatMessages()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${chatLoading ? 'animate-spin text-brand-600' : 'text-slate-500'}`} />
+                  <span>Refresh Chat</span>
+                </button>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col h-[600px]">
-                <div className="p-4 border-b border-slate-200/50 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Shield className={`w-4 h-4 ${isAdventure ? 'text-rose-600' : 'text-brand-600'}`} />
-                    <span className="font-semibold text-slate-800">
-                      {isAdventure ? 'Super Admin Adventure Control Desk' : 'Super Admin Technical Desk'}
-                    </span>
+
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col h-[620px] overflow-hidden">
+                {/* Header */}
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      <Shield className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs sm:text-sm">
+                        {isAdventure ? 'Hipro Adventure Central Control Desk' : 'Hipro Super Admin Operations Desk'}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Official Partner Dispatch • Room: {`thread_vendor_${vendorProfile.id}`}
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold text-success-600 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse"></span> Online
+                  <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Admin Online
                   </span>
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto bg-slate-50 space-y-3">
-                  {isAdventure ? (
-                    <>
-                      <div className="flex justify-start">
-                        <div className="bg-rose-600 text-white px-4 py-2.5 rounded-2xl rounded-br-none text-sm max-w-[80%] shadow-xs">
-                          Hello {vendorProfile.name}! This is the Hipro Adventure Central Desk. Your operator profile for <strong>{vendorProfile.businessName}</strong> is verified and active.
+
+                {/* Message Stream */}
+                <div className="flex-1 p-4 sm:p-5 overflow-y-auto bg-slate-50/70 space-y-3.5">
+                  {/* Pinned Welcome Greeting */}
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-slate-200/90 text-slate-800 p-3.5 rounded-2xl rounded-tl-xs text-xs max-w-[85%] sm:max-w-[75%] shadow-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <Shield className="w-3 h-3 text-emerald-600" />
+                        <span>Hipro Official Desk</span>
+                      </div>
+                      <p className="leading-relaxed">
+                        Hello <strong>{vendorProfile.name}</strong>! Welcome to the Super Admin Desk for <strong>{vendorProfile.businessName}</strong>. You can message us here anytime regarding customer job allocations, BOQ quote clarification, site inspections, or payments.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Real-time Dynamic Messages */}
+                  {chatMessages.map(msg => {
+                    const isFromVendor = msg.sender === 'vendor';
+                    return (
+                      <div
+                        key={msg.id || msg.createdAt}
+                        className={`flex flex-col ${isFromVendor ? 'items-end' : 'items-start'}`}
+                      >
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 mb-1 px-1">
+                          <span>{isFromVendor ? 'You (Partner Desk)' : (msg.senderName || 'Super Admin Desk')}</span>
+                          <span>•</span>
+                          <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}</span>
+                        </div>
+                        <div
+                          className={`max-w-[85%] sm:max-w-[75%] p-3.5 rounded-2xl text-xs sm:text-sm font-medium shadow-xs ${
+                            isFromVendor
+                              ? (isAdventure ? 'bg-rose-600 text-white rounded-tr-xs' : 'bg-brand-600 text-white rounded-tr-xs')
+                              : 'bg-white border border-slate-200/90 text-slate-800 rounded-tl-xs'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                          {isFromVendor && (
+                            <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-white/80">
+                              <CheckCheck className="w-3 h-3" />
+                              <span>Delivered to Admin</span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex justify-start">
-                        <div className="bg-white border border-slate-200 text-slate-800 px-4 py-2.5 rounded-2xl rounded-bl-none text-sm max-w-[80%] shadow-xs">
-                          Travelers booking your activity slots on the Hipro portal will have their passes dispatched directly to your console. For any weather updates or slot rescheduling, message us directly here.
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex justify-start">
-                        <div className="bg-brand-600 text-white px-4 py-2.5 rounded-2xl rounded-br-none text-sm max-w-[80%] shadow-xs">
-                          Hello {vendorProfile.name}! I'm the Super Admin Desk. We share verified customer repair requests here for your quotations.
-                        </div>
-                      </div>
-                      <div className="flex justify-start">
-                        <div className="bg-white border border-slate-200 text-slate-800 px-4 py-2.5 rounded-2xl rounded-bl-none text-sm max-w-[80%] shadow-xs">
-                          We have reviewed your profile for {vendorProfile.businessName}. Submit your best quotations to win customer jobs.
-                        </div>
-                      </div>
-                    </>
-                  )}
+                    );
+                  })}
+                  <div ref={chatMessagesEndRef} />
                 </div>
-                <div className="p-3 border-t border-slate-200/50">
-                  <form onSubmit={(e) => { e.preventDefault(); }} className="flex gap-2">
+
+                {/* Input Bar */}
+                <div className="p-3 sm:p-4 bg-white border-t border-slate-200/80 shrink-0">
+                  <form onSubmit={handleSendVendorMessage} className="flex gap-2">
                     <input
                       type="text"
-                      placeholder={isAdventure ? "Message Adventure Central Desk..." : "Type a message to Super Admin..."}
-                      className="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      value={chatInputText}
+                      onChange={(e) => setChatInputText(e.target.value)}
+                      placeholder={isAdventure ? "Message Adventure Central Desk..." : "Message Super Admin Technical Desk..."}
+                      className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium"
+                      disabled={isSendingChat}
                     />
-                    <button className={`px-4 py-2 rounded-xl ${isAdventure ? 'bg-rose-600 hover:bg-rose-700' : 'bg-brand-600 hover:bg-brand-700'} text-white text-sm font-bold transition-all shadow-xs`}>
-                      Send
+                    <button
+                      type="submit"
+                      disabled={isSendingChat || !chatInputText.trim()}
+                      className={`px-4 py-2.5 rounded-xl ${
+                        isAdventure
+                          ? 'bg-rose-600 hover:bg-rose-700'
+                          : 'bg-brand-600 hover:bg-brand-700'
+                      } disabled:opacity-50 text-white text-xs sm:text-sm font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0`}
+                    >
+                      {isSendingChat ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                      <span>Send</span>
                     </button>
                   </form>
                 </div>

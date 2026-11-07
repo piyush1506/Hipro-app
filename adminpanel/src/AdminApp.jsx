@@ -2666,7 +2666,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
           requestNumber: currentThread?.requestNumber,
           bookingNumber: currentThread?.bookingNumber,
           customerName: currentThread?.customerName,
-          customerPhone: currentThread?.customerPhone
+          customerPhone: currentThread?.customerPhone,
+          vendorId: currentThread?.vendorId
         })
       });
       const data = await res.json();
@@ -8901,6 +8902,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs font-semibold">
                       {[
                         { id: 'ALL', label: 'All' },
+                        { id: 'VENDOR', label: 'Vendors' },
                         { id: 'REQUEST', label: 'Requests' },
                         { id: 'BOOKING', label: 'Bookings' },
                         { id: 'QUOTATION', label: 'Quotes' },
@@ -8990,7 +8992,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               </div>
 
                               <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                                {t.bookingNumber ? (
+                                {t.contextType === 'VENDOR' ? (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                    🏢 Vendor Desk
+                                  </span>
+                                ) : t.bookingNumber ? (
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-warning-50 text-warning-800 border border-warning-200">
                                     Booking #{t.bookingNumber}
                                   </span>
