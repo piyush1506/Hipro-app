@@ -1056,8 +1056,8 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
                   </div>
                   <div className="text-[11.5px] text-slate-600 leading-relaxed font-light">
                     <strong>Client:</strong> {selectedBuilderReq.user?.name} ({selectedBuilderReq.user?.phoneNumber}) &nbsp;|&nbsp;
-                    <strong>Property:</strong> {selectedBuilderReq.propertyType || 'House'} ({selectedBuilderReq.propertySize || 'Standard Area'}) &nbsp;|&nbsp;
-                    <strong>Address:</strong> {selectedBuilderReq.addressline || 'Main Residence'} <br />
+                    <strong>Property:</strong> {[selectedBuilderReq.propertyType, selectedBuilderReq.propertySize].filter(Boolean).join(' • ') || '—'} &nbsp;|&nbsp;
+                    <strong>Address:</strong> {selectedBuilderReq.addressline || selectedBuilderReq.location || '—'} <br />
                     <strong>Issue:</strong> "{selectedBuilderReq.issueDescription}"
                   </div>
                 </div>

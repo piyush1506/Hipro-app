@@ -203,7 +203,7 @@ router.post('/services', async (req, res) => {
     if (!code || !name) {
       return res.status(400).json({ success: false, message: 'Code and Name are required' });
     }
-    const finalImage = imageUrl || iconImage || image || icon || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80';
+    const finalImage = imageUrl || iconImage || image || icon || '';
     const service = await prisma.service.create({
       data: {
         code: code.toUpperCase().trim(),
@@ -212,7 +212,7 @@ router.post('/services', async (req, res) => {
         icon: finalImage,
         iconImage: finalImage,
         imageUrl: finalImage,
-        rating: parseFloat(rating || 4.8)
+        rating: parseFloat(rating || 0)
       }
     });
     res.status(201).json({ success: true, message: 'Service created successfully', data: service });

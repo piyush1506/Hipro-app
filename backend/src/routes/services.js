@@ -134,8 +134,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticate, requireAdmin, async (req, res) => {
     try {
         const { code, name, description, icon, iconImage, imageUrl, rating, cities } = req.body;
-        const iconVal = iconImage || imageUrl || icon || 'https://cdn-icons-png.flaticon.com/512/2830/2830305.png';
-        const parsedCities = Array.isArray(cities) ? cities : (cities ? [cities] : ['Udaipur', 'Bhilwara']);
+        const iconVal = iconImage || imageUrl || icon || '';
+        const parsedCities = Array.isArray(cities) ? cities : (cities ? [cities] : []);
 
         const newService = await prisma.service.create({
             data: {

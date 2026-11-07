@@ -5237,11 +5237,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             </div>
                             <div className="flex items-start justify-between py-2 border-b border-slate-100">
                               <span className="text-slate-500">Property Type:</span>
-                              <span className="font-semibold text-slate-800">{req.propertyType || 'Residential Villa / House'}</span>
+                              <span className="font-semibold text-slate-800">{req.propertyType || '—'}</span>
                             </div>
                             <div className="flex items-start justify-between py-2 border-b border-slate-100">
                               <span className="text-slate-500">Property Area / Scale:</span>
-                              <span className="font-semibold text-slate-800">{req.propertySize || 'Standard Area'}</span>
+                              <span className="font-semibold text-slate-800">{req.propertySize || '—'}</span>
                             </div>
                             <div className="flex items-start justify-between py-2 border-b border-slate-100">
                               <span className="text-slate-500">Requested Inspection Slot:</span>
@@ -8620,8 +8620,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
                   <div className="text-[11.5px] text-slate-600 leading-relaxed font-normal">
                     <strong>Client:</strong> {selectedBuilderReq.user?.name} ({selectedBuilderReq.user?.phoneNumber}) &nbsp;|&nbsp;
-                    <strong>Property:</strong> {selectedBuilderReq.propertyType || 'House'} ({selectedBuilderReq.propertySize || 'Standard Area'}) &nbsp;|&nbsp;
-                    <strong>Address:</strong> {selectedBuilderReq.addressline || 'Main Residence'} <br />
+                    <strong>Property:</strong> {[selectedBuilderReq.propertyType, selectedBuilderReq.propertySize].filter(Boolean).join(' • ') || '—'} &nbsp;|&nbsp;
+                    <strong>Address:</strong> {selectedBuilderReq.addressline || selectedBuilderReq.location || '—'} <br />
                     <strong>Issue:</strong> "{selectedBuilderReq.issueDescription}"
                   </div>
                 </div>
@@ -14283,11 +14283,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       #{shareModalRequest.requestNumber}
                     </span>
                     <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200/80">
-                      {shareModalRequest.propertyType || 'Residential'} • {shareModalRequest.propertySize || 'Standard Size'}
+                      {[shareModalRequest.propertyType, shareModalRequest.propertySize].filter(Boolean).join(' • ') || 'Inspection'}
                     </span>
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
-                      <span>{shareModalRequest.city || shareModalRequest.location || 'Site Hub'}</span>
+                      <span>{shareModalRequest.city || shareModalRequest.location || shareModalRequest.addressline || 'Site Location'}</span>
                     </span>
                   </div>
                   <h3 className="text-base sm:text-lg font-heading font-bold text-slate-900 tracking-tight">

@@ -233,9 +233,11 @@ router.post('/', authenticateUser,
         }
       }
     }
-    if (mediaList.length === 0 && req.files && req.files.length > 0) {
-      mediaList = req.files.map(file => `${baseURL}/uploads/${file.filename}`);
+    if (req.files && req.files.length > 0) {
+      const fileUrls = req.files.map(file => `${baseURL}/uploads/${file.filename}`);
+      mediaList = [...mediaList, ...fileUrls];
     }
+    mediaList = Array.from(new Set(mediaList.filter(Boolean)));
 
     const requestNumber = `REQ-${(Date.now())+ Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -251,14 +253,14 @@ router.post('/', authenticateUser,
         urgency: req.body.urgency || 'NORMAL',
         status: status || 'SUBMITTED',
         mediaUrl: mediaList,
-        propertyType: propertyType || 'Residential',
-        propertySize: propertySize || 'Standard Area',
-        location: location || addressline || req.body.address || 'Bhilwara, Rajasthan',
+        propertyType: propertyType || '',
+        propertySize: propertySize || '',
+        location: location || addressline || req.body.address || '',
         latitude: req.body.latitude ? parseFloat(req.body.latitude) : null,
         longitude: req.body.longitude ? parseFloat(req.body.longitude) : null,
         preferredDate: preferredDate || new Date().toISOString().split('T')[0],
-        preferredTime: preferredTime || 'Morning (09:00 AM - 12:00 PM)',
-        addressline: addressline || req.body.address || 'Site Address'
+        preferredTime: preferredTime || '',
+        addressline: addressline || req.body.address || ''
       },
       include: {
         user: {
