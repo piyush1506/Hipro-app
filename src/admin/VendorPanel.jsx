@@ -6,7 +6,7 @@ import {
   Check, PhoneCall, Sparkles, Inbox, Clock, FileCheck2,
   CheckCircle2, GitPullRequest, Zap, ArrowRight, ArrowLeft, MapPin,
   Calendar, Home, User, Phone, Info, Send, RotateCcw,
-  Server, Database, AlertCircle, Droplets, Image, Layers,
+  Server, Database, AlertCircle, Droplets, Image, Layers, Maximize,
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
@@ -43,7 +43,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     { item: 'Skilled Labour, Scaffolding & Site Clean-Up', qty: 1, unit: 'Lump Sum', rate: 2500 }
   ]);
   const [builderGstRate, setBuilderGstRate] = useState(18);
-  const [builderWarranty, setBuilderWarranty] = useState('5 Years Leakage & Chemical Warranty');
+  const [builderWarranty, setBuilderWarranty] = useState('');
   const [builderTimeline, setBuilderTimeline] = useState('3-5 Working Days');
   const [builderNotes, setBuilderNotes] = useState('');
   const [builderCustomPrice, setBuilderCustomPrice] = useState('');
@@ -136,7 +136,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
       const data = await res.json();
       if (data.success && Array.isArray(data.vendors)) {
         setVendors(data.vendors);
-        // Auto-select registered vendor or first available vendor on first load
         if (!selectedVendorId) {
           setSelectedVendorId(registeredVendor ? registeredVendor.id : data.vendors[0]?.id || null);
         }
@@ -233,8 +232,10 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const fetchVendorRequests = async () => {
     if (!vendorProfile) return;
     try {
-      // Only requests shared with vendors, optionally scoped to this vendor's city
-      const res = await fetch(`${API_BASE}/api/v1/vendors/requests?vendorId=${vendorProfile.id}&city=${encodeURIComponent(vendorProfile.city || '')}`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/requests?vendorId=${vendorProfile.id}&city=${encodeURIComponent(vendorProfile.city || '')}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.requests)) {
         setVendorRequests(data.requests);
@@ -250,7 +251,10 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const fetchVendorQuotes = async () => {
     if (!vendorProfile) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendors/my-quotes?vendorId=${vendorProfile.id}`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/my-quotes?vendorId=${vendorProfile.id}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.quotes)) {
         setVendorQuotes(data.quotes);
@@ -266,7 +270,10 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const fetchAssignedJobs = async () => {
     if (!vendorProfile) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/vendors/my-jobs?vendorId=${vendorProfile.id}`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/vendors/my-jobs?vendorId=${vendorProfile.id}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.jobs)) {
         setAssignedJobs(data.jobs);
@@ -288,17 +295,21 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
       return;
     }
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE}/api/v1/vendors/quotes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           requestId: quotingRequestId,
           vendorId: vendorProfile.id,
           vendorName: vendorProfile.name,
+          vendorBusiness: vendorProfile.businessName,
           quotePrice: price,
           notes: quoteNotes,
           estimatedTimeline: quoteTimeline,
-          submittedBy: vendorProfile.businessName,
+          submittedBy: vendorProfile.businessName || vendorProfile.name,
         }),
       });
       const data = await res.json();
@@ -325,6 +336,126 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     setQuoteNotes('');
     setQuoteTimeline('1-2 Working Days');
     setQuoteModalOpen(true);
+  };
+
+  // ==================== QUOTATION BUILDER HANDLERS ====================
+  const handleStartBuildingQuote = (req) => {
+    setBuilderRequestId(req.id);
+    const serviceName = (req.servicecode || '').toLowerCase();
+    const area = parseFloat(req.propertySize) || 120;
+
+    if (serviceName.includes('waterproof')) {
+      setBuilderLineItems([
+        { item: 'Polymer Injection Grouting for Structural Cracks', qty: Math.max(1, Math.round(area * 0.1)), unit: 'Nos', rate: 450 },
+        { item: 'Elastomeric Waterproof Membrane (2 Coats)', qty: area, unit: 'Sq Ft', rate: 65 },
+        { item: 'Surface Grinding, Cleaning & Mesh Reinforcement', qty: area, unit: 'Sq Ft', rate: 25 },
+        { item: 'Skilled Waterproofing Labour & Clean-up', qty: 1, unit: 'Lump Sum', rate: 3000 }
+      ]);
+      setBuilderWarranty('');
+      setBuilderTimeline('3-5 Working Days');
+    } else if (serviceName.includes('paint')) {
+      setBuilderLineItems([
+        { item: 'Surface Scraping, Putty Base & Primer Application', qty: area, unit: 'Sq Ft', rate: 20 },
+        { item: 'Premium Weatherproof Emulsion / Wall Paint', qty: area, unit: 'Sq Ft', rate: 35 },
+        { item: 'Tape Masking, Scaffolding & Site Cleanup', qty: 1, unit: 'Lump Sum', rate: 2000 }
+      ]);
+      setBuilderWarranty('');
+      setBuilderTimeline('4-6 Working Days');
+    } else {
+      setBuilderLineItems([
+        { item: `${req.servicecode || 'Repair'} - Primary Scope & Surface Treatment`, qty: area, unit: 'Sq Ft', rate: 45 },
+        { item: 'High-Durability Raw Materials & Chemical Fixings', qty: 1, unit: 'Lump Sum', rate: 2500 },
+        { item: 'Execution Labour & Supervised Handover', qty: 1, unit: 'Lump Sum', rate: 2000 }
+      ]);
+      setBuilderWarranty('');
+      setBuilderTimeline('2-3 Working Days');
+    }
+    setActiveTab('builder');
+  };
+
+  const handleAddLineItem = () => {
+    setBuilderLineItems(prev => [
+      ...prev,
+      { item: '', qty: 1, unit: 'Sq Ft', rate: 0 }
+    ]);
+  };
+
+  const handleRemoveLineItem = (index) => {
+    setBuilderLineItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateLineItem = (index, field, value) => {
+    setBuilderLineItems(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleSubmitBuilderQuote = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!builderRequestId) {
+      showToastMsg('Please select a customer service request to quote on', 'error');
+      return;
+    }
+    if (builderGrandTotal <= 0) {
+      showToastMsg('Quotation total must be greater than ₹0', 'error');
+      return;
+    }
+
+    setIsSubmittingBuilderQuote(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const lineItemsSummary = builderLineItems
+        .filter(li => li.item && li.item.trim())
+        .map(li => `• ${li.item} (${li.qty} ${li.unit} @ ₹${li.rate}) = ₹${(parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)}`)
+        .join('\n');
+
+      const formattedNotes = [
+        `[DETAILED BOQ SPECIFICATION]`,
+        lineItemsSummary || 'Standard Scope of Work',
+        `Subtotal: ₹${effectiveBuilderSubtotal.toLocaleString('en-IN')}`,
+        builderGstRate > 0 ? `GST (${builderGstRate}%): ₹${builderTaxAmount.toLocaleString('en-IN')}` : 'GST: Exempted/Inclusive',
+        `Grand Total: ₹${builderGrandTotal.toLocaleString('en-IN')}`,
+        builderWarranty && builderWarranty.trim() ? `Warranty / Guarantee: ${builderWarranty.trim()}` : null,
+        builderNotes ? `Vendor Remarks: ${builderNotes}` : ''
+      ].filter(Boolean).join('\n');
+
+      const payload = {
+        requestId: builderRequestId,
+        vendorId: vendorProfile.id,
+        vendorName: vendorProfile.name,
+        vendorBusiness: vendorProfile.businessName,
+        quotePrice: builderGrandTotal,
+        notes: formattedNotes,
+        estimatedTimeline: builderTimeline,
+        submittedBy: vendorProfile.businessName || vendorProfile.name
+      };
+
+      const res = await fetch(`${API_BASE}/api/v1/vendors/quotes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showToastMsg(`Quotation of ₹${builderGrandTotal.toLocaleString('en-IN')} submitted successfully!`, 'success');
+        await fetchVendorRequests();
+        await fetchVendorQuotes();
+        setActiveTab('quotes');
+      } else {
+        showToastMsg(data.message || 'Failed to submit quotation', 'error');
+      }
+    } catch (err) {
+      console.error('Submit quote error:', err);
+      showToastMsg('Network error submitting quotation', 'error');
+    } finally {
+      setIsSubmittingBuilderQuote(false);
+    }
   };
 
   const handleOpenPhotos = (photos) => {
@@ -531,8 +662,18 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
               <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-slate-800 text-xs truncate leading-tight">{vendorProfile.name}</div>
+              <div className="flex items-center gap-2">
+                <div className="font-bold text-slate-800 text-xs truncate leading-tight">{vendorProfile.name}</div>
+                {vendorProfile.capacity && (
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${vendorProfile.capacity === 'LARGE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : vendorProfile.capacity === 'MEDIUM' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                    {vendorProfile.capacity}
+                  </span>
+                )}
+              </div>
               <div className="text-[10px] text-slate-400 truncate">{vendorProfile.businessName}</div>
+              <div className="text-[9px] text-slate-500 truncate">
+                {vendorProfile.currentJobCount}/{vendorProfile.maxConcurrentJobs} active jobs
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -1004,36 +1145,42 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                         )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm pt-3 border-t border-slate-100 text-slate-600">
-                          <div className="flex items-center gap-2"><User className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-semibold text-slate-800">{req.customerName}</span></div>
-                          <div className="flex items-center gap-2 font-mono"><Phone className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.customerPhone}</span></div>
-                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.propertyType}</span></div>
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.preferredDate}</span></div>
-                          <div className="col-span-1 sm:col-span-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700 truncate" title={req.addressline}>{req.addressline}</span></div>
+                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.propertyType || 'Property'}</span></div>
+                          <div className="flex items-center gap-2"><Maximize className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-bold text-slate-800">{req.propertySize || '—'} Sq Ft</span></div>
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-400 shrink-0" /><span className="font-medium text-slate-700">{req.preferredDate || 'Flexible'}</span></div>
                         </div>
                       </div>
 
                       <div className="pt-3.5 border-t border-slate-100 flex items-center justify-between gap-3">
                         {!alreadyQuoted ? (
-                          <button
-                            onClick={() => handleOpenQuote(req)}
-                            className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-all w-full justify-center"
-                          >
-                            <Calculator className="w-3.5 h-3.5" /> Submit Quotation
-                          </button>
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              onClick={() => handleStartBuildingQuote(req)}
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <Calculator className="w-3.5 h-3.5" /> Build BOQ Quote
+                            </button>
+                            <button
+                              onClick={() => handleOpenQuote(req)}
+                              className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all flex items-center justify-center gap-1"
+                              title="Quick Lump-Sum Quotation"
+                            >
+                              Quick
+                            </button>
+                          </div>
                         ) : (
-                          <button
-                            className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-bold cursor-not-allowed w-full justify-center"
-                          >
-                            <FileCheck2 className="w-3.5 h-3.5" /> Quotation Submitted
-                          </button>
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Quote: ₹{(req.myQuote?.quotePrice || vendorQuotes.find(q => q.requestId === req.id)?.quotePrice || 0).toLocaleString('en-IN')}
+                            </span>
+                            <button
+                              onClick={() => setActiveTab('quotes')}
+                              className="text-xs text-brand-600 hover:underline font-semibold"
+                            >
+                              View in Quotes →
+                            </button>
+                          </div>
                         )}
-                        <button
-                          onClick={() => openChatForRequest(req)}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-all"
-                          title="Contact Customer"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
                   );
@@ -1251,7 +1398,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                             { item: 'Fibre Glass Mesh Reinforcement', qty: 250, unit: 'Sq Ft', rate: 20 },
                             { item: 'Surface Cleaning, Grinding & Debris Disposal', qty: 1, unit: 'Lump Sum', rate: 2500 }
                           ]);
-                          setBuilderWarranty('5 Years Leakage Warranty with Chemical Seal');
                         }}
                         className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                       >
@@ -1265,7 +1411,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                             { item: 'Premium Weather-Shield Emulsion (2 Coats)', qty: 300, unit: 'Sq Ft', rate: 38 },
                             { item: 'Scaffolding, Masking & Final Cleanup', qty: 1, unit: 'Lump Sum', rate: 2000 }
                           ]);
-                          setBuilderWarranty('3 Years Exterior Paint Durability Warranty');
                         }}
                         className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                       >
@@ -1279,7 +1424,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                             { item: 'Cement & High-Strength Concrete Mix', qty: 1, unit: 'Lump Sum', rate: 3500 },
                             { item: 'Skilled Mason Labour & Material Handling', qty: 1, unit: 'Lump Sum', rate: 4000 }
                           ]);
-                          setBuilderWarranty('2 Years Structural Masonry Warranty');
                         }}
                         className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                       >
@@ -1434,17 +1578,52 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Warranty Guarantee
-                      </label>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                          <span>Warranty / Guarantee</span>
+                          <span className="text-[10px] font-normal text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Optional</span>
+                        </label>
+                        {builderWarranty && (
+                          <button
+                            type="button"
+                            onClick={() => setBuilderWarranty('')}
+                            className="text-[10px] font-bold text-red-600 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={builderWarranty}
                         onChange={(e) => setBuilderWarranty(e.target.value)}
-                        placeholder="e.g. 5 Years Leakage Warranty"
+                        placeholder="Optional: e.g. 1 Year Leakproof Guarantee (leave blank if none)"
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                       />
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Quick options:</span>
+                        {[
+                          'No Warranty',
+                          '6 Months Guarantee',
+                          '1 Year Warranty',
+                          '3 Years Warranty',
+                          '5 Years Guarantee'
+                        ].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setBuilderWarranty(preset === 'No Warranty' ? '' : preset)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                              (preset === 'No Warranty' && !builderWarranty) || builderWarranty === preset
+                                ? 'bg-brand-50 border-brand-300 text-brand-700 font-bold'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div>
@@ -1501,7 +1680,13 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   <div className="flex items-center gap-2 text-xs text-slate-300 flex-wrap pt-1">
                     <span>Timeline: <strong>{builderTimeline}</strong></span>
                     <span>•</span>
-                    <span>Warranty: <strong>{builderWarranty}</strong></span>
+                    <span>
+                      Warranty: {builderWarranty ? (
+                        <strong className="text-emerald-300">{builderWarranty}</strong>
+                      ) : (
+                        <span className="text-slate-400 font-normal">None (Optional)</span>
+                      )}
+                    </span>
                     <span>•</span>
                     <span>Quoting Vendor: <strong>{vendorProfile.businessName || vendorProfile.name}</strong></span>
                   </div>

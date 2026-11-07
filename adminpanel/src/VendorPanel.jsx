@@ -43,7 +43,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
     { item: 'Skilled Labour, Scaffolding & Site Clean-Up', qty: 1, unit: 'Lump Sum', rate: 2500 }
   ]);
   const [builderGstRate, setBuilderGstRate] = useState(18);
-  const [builderWarranty, setBuilderWarranty] = useState('5 Years Leakage & Chemical Warranty');
+  const [builderWarranty, setBuilderWarranty] = useState('');
   const [builderTimeline, setBuilderTimeline] = useState('3-5 Working Days');
   const [builderNotes, setBuilderNotes] = useState('');
   const [builderCustomPrice, setBuilderCustomPrice] = useState('');
@@ -351,7 +351,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         { item: 'Surface Grinding, Cleaning & Mesh Reinforcement', qty: area, unit: 'Sq Ft', rate: 25 },
         { item: 'Skilled Waterproofing Labour & Clean-up', qty: 1, unit: 'Lump Sum', rate: 3000 }
       ]);
-      setBuilderWarranty('5 Years Leakproof Guarantee with Chemical Seal');
+      setBuilderWarranty('');
       setBuilderTimeline('3-5 Working Days');
     } else if (serviceName.includes('paint')) {
       setBuilderLineItems([
@@ -359,7 +359,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         { item: 'Premium Weatherproof Emulsion / Wall Paint', qty: area, unit: 'Sq Ft', rate: 35 },
         { item: 'Tape Masking, Scaffolding & Site Cleanup', qty: 1, unit: 'Lump Sum', rate: 2000 }
       ]);
-      setBuilderWarranty('3 Years Paint Finish Warranty');
+      setBuilderWarranty('');
       setBuilderTimeline('4-6 Working Days');
     } else {
       setBuilderLineItems([
@@ -367,7 +367,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         { item: 'High-Durability Raw Materials & Chemical Fixings', qty: 1, unit: 'Lump Sum', rate: 2500 },
         { item: 'Execution Labour & Supervised Handover', qty: 1, unit: 'Lump Sum', rate: 2000 }
       ]);
-      setBuilderWarranty('1 Year Comprehensive Service Warranty');
+      setBuilderWarranty('');
       setBuilderTimeline('2-3 Working Days');
     }
     setActiveTab('builder');
@@ -420,7 +420,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         `Subtotal: ₹${effectiveBuilderSubtotal.toLocaleString('en-IN')}`,
         builderGstRate > 0 ? `GST (${builderGstRate}%): ₹${builderTaxAmount.toLocaleString('en-IN')}` : 'GST: Exempted/Inclusive',
         `Grand Total: ₹${builderGrandTotal.toLocaleString('en-IN')}`,
-        `Warranty: ${builderWarranty}`,
+        builderWarranty && builderWarranty.trim() ? `Warranty / Guarantee: ${builderWarranty.trim()}` : null,
         builderNotes ? `Vendor Remarks: ${builderNotes}` : ''
       ].filter(Boolean).join('\n');
 
@@ -1398,7 +1398,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                             { item: 'Fibre Glass Mesh Reinforcement', qty: 250, unit: 'Sq Ft', rate: 20 },
                             { item: 'Surface Cleaning, Grinding & Debris Disposal', qty: 1, unit: 'Lump Sum', rate: 2500 }
                           ]);
-                          setBuilderWarranty('5 Years Leakage Warranty with Chemical Seal');
                         }}
                         className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                       >
@@ -1412,7 +1411,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                             { item: 'Premium Weather-Shield Emulsion (2 Coats)', qty: 300, unit: 'Sq Ft', rate: 38 },
                             { item: 'Scaffolding, Masking & Final Cleanup', qty: 1, unit: 'Lump Sum', rate: 2000 }
                           ]);
-                          setBuilderWarranty('3 Years Exterior Paint Durability Warranty');
                         }}
                         className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                       >
@@ -1426,7 +1424,6 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                             { item: 'Cement & High-Strength Concrete Mix', qty: 1, unit: 'Lump Sum', rate: 3500 },
                             { item: 'Skilled Mason Labour & Material Handling', qty: 1, unit: 'Lump Sum', rate: 4000 }
                           ]);
-                          setBuilderWarranty('2 Years Structural Masonry Warranty');
                         }}
                         className="px-2.5 py-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                       >
@@ -1581,17 +1578,52 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Warranty Guarantee
-                      </label>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                          <span>Warranty / Guarantee</span>
+                          <span className="text-[10px] font-normal text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Optional</span>
+                        </label>
+                        {builderWarranty && (
+                          <button
+                            type="button"
+                            onClick={() => setBuilderWarranty('')}
+                            className="text-[10px] font-bold text-red-600 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={builderWarranty}
                         onChange={(e) => setBuilderWarranty(e.target.value)}
-                        placeholder="e.g. 5 Years Leakage Warranty"
+                        placeholder="Optional: e.g. 1 Year Leakproof Guarantee (leave blank if none)"
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                       />
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Quick options:</span>
+                        {[
+                          'No Warranty',
+                          '6 Months Guarantee',
+                          '1 Year Warranty',
+                          '3 Years Warranty',
+                          '5 Years Guarantee'
+                        ].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setBuilderWarranty(preset === 'No Warranty' ? '' : preset)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                              (preset === 'No Warranty' && !builderWarranty) || builderWarranty === preset
+                                ? 'bg-brand-50 border-brand-300 text-brand-700 font-bold'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div>
@@ -1648,7 +1680,13 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   <div className="flex items-center gap-2 text-xs text-slate-300 flex-wrap pt-1">
                     <span>Timeline: <strong>{builderTimeline}</strong></span>
                     <span>•</span>
-                    <span>Warranty: <strong>{builderWarranty}</strong></span>
+                    <span>
+                      Warranty: {builderWarranty ? (
+                        <strong className="text-emerald-300">{builderWarranty}</strong>
+                      ) : (
+                        <span className="text-slate-400 font-normal">None (Optional)</span>
+                      )}
+                    </span>
                     <span>•</span>
                     <span>Quoting Vendor: <strong>{vendorProfile.businessName || vendorProfile.name}</strong></span>
                   </div>

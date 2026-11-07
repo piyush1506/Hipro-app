@@ -325,6 +325,7 @@ export default function App() {
 
     // Auto-fetch existing requests from Neon backend
     loadAdminRequests();
+    loadCustomerBookings();
   }, []);
 
   // Scheduling: Date & Time
@@ -358,6 +359,112 @@ export default function App() {
 
   // Requests Tab & Chat Modal State
   const [requestsTab, setRequestsTab] = useState('requests');
+  const [customerBookings, setCustomerBookings] = useState([]);
+  const [ratingInputs, setRatingInputs] = useState({});
+
+  const handleRatingStarClick = (itemId, star) => {
+    setRatingInputs(prev => ({
+      ...prev,
+      [itemId]: { ...(prev[itemId] || { review: '' }), rating: star }
+    }));
+  };
+
+  const handleRatingReviewChange = (itemId, review) => {
+    setRatingInputs(prev => ({
+      ...prev,
+      [itemId]: { ...(prev[itemId] || { rating: 5 }), review }
+    }));
+  };
+
+  const loadCustomerBookings = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const res = await fetch('http://localhost:5000/api/v1/direct-bookings', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.bookings)) {
+        setCustomerBookings(data.bookings);
+      }
+    } catch (e) {
+      console.log('Failed to fetch direct bookings:', e);
+    }
+  };
+
+  const handleSubmitRequestRating = async (requestId) => {
+    const input = ratingInputs[requestId] || { rating: 5, review: '' };
+    setRatingInputs(prev => ({
+      ...prev,
+      [requestId]: { ...prev[requestId], isSubmitting: true }
+    }));
+
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const res = await fetch(`http://localhost:5000/api/v1/requests/${requestId}/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          rating: input.rating || 5,
+          review: input.review || ''
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Thank you! Your rating and feedback have been submitted successfully to the contractor.');
+        await loadAdminRequests();
+      } else {
+        alert(data.message || 'Failed to submit rating');
+      }
+    } catch (e) {
+      alert('Error submitting rating. Please verify server connection.');
+    } finally {
+      setRatingInputs(prev => ({
+        ...prev,
+        [requestId]: { ...prev[requestId], isSubmitting: false }
+      }));
+    }
+  };
+
+  const handleSubmitBookingRating = async (bookingId) => {
+    const input = ratingInputs[bookingId] || { rating: 5, review: '' };
+    setRatingInputs(prev => ({
+      ...prev,
+      [bookingId]: { ...prev[bookingId], isSubmitting: true }
+    }));
+
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const res = await fetch(`http://localhost:5000/api/v1/direct-bookings/${bookingId}/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          rating: input.rating || 5,
+          review: input.review || ''
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Thank you! Your rating and feedback have been submitted successfully to the vendor.');
+        await loadCustomerBookings();
+      } else {
+        alert(data.message || 'Failed to submit rating');
+      }
+    } catch (e) {
+      alert('Error submitting rating. Please verify server connection.');
+    } finally {
+      setRatingInputs(prev => ({
+        ...prev,
+        [bookingId]: { ...prev[bookingId], isSubmitting: false }
+      }));
+    }
+  };
+
   const [activeChat, setActiveChat] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInputText, setChatInputText] = useState('');
@@ -1861,9 +1968,9 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 2-Section Switcher: [ Requests ] & [ Quotations ] */}
+              {/* 3-Section Switcher: [ Requests ] & [ Direct Bookings ] & [ Quotations ] */}
               <div style={{ padding: '8px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#F1F5F9', borderRadius: '12px', padding: '3px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', background: '#F1F5F9', borderRadius: '12px', padding: '3px', gap: '2px' }}>
                   <button
                     onClick={() => setRequestsTab('requests')}
                     style={{
@@ -1871,14 +1978,32 @@ export default function App() {
                       color: requestsTab === 'requests' ? '#0B2545' : '#64748B',
                       border: 'none',
                       borderRadius: '10px',
-                      padding: '8px',
-                      fontSize: '12px',
+                      padding: '8px 4px',
+                      fontSize: '11px',
                       fontWeight: requestsTab === 'requests' ? '700' : '600',
                       cursor: 'pointer',
-                      boxShadow: requestsTab === 'requests' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none'
+                      boxShadow: requestsTab === 'requests' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    📋 Requests ({allBackendRequests.length || 1})
+                    📋 Requests ({allBackendRequests.length})
+                  </button>
+                  <button
+                    onClick={() => setRequestsTab('direct_bookings')}
+                    style={{
+                      background: requestsTab === 'direct_bookings' ? '#fff' : 'transparent',
+                      color: requestsTab === 'direct_bookings' ? '#0B2545' : '#64748B',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '8px 4px',
+                      fontSize: '11px',
+                      fontWeight: requestsTab === 'direct_bookings' ? '700' : '600',
+                      cursor: 'pointer',
+                      boxShadow: requestsTab === 'direct_bookings' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    ⚡ Bookings ({customerBookings.length})
                   </button>
                   <button
                     onClick={() => setRequestsTab('quotations')}
@@ -1887,60 +2012,351 @@ export default function App() {
                       color: requestsTab === 'quotations' ? '#0B2545' : '#64748B',
                       border: 'none',
                       borderRadius: '10px',
-                      padding: '8px',
-                      fontSize: '12px',
+                      padding: '8px 4px',
+                      fontSize: '11px',
                       fontWeight: requestsTab === 'quotations' ? '700' : '600',
                       cursor: 'pointer',
-                      boxShadow: requestsTab === 'quotations' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none'
+                      boxShadow: requestsTab === 'quotations' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    🧾 Quotations ({liveQuotation ? 1 : 0})
+                    🧾 Quotes ({liveQuotation ? 1 : 0})
                   </button>
                 </div>
               </div>
 
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {requestsTab === 'requests' ? (
+                {requestsTab === 'requests' && (
                   // REQUESTS SECTION
                   <>
-                    <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
-                            {activeCategory.title} ({selectedSubcategories.length} Sub-Services)
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>
-                            {selectedDate} Apr 2025 • {selectedTimeSlot}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: '10px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '3px 8px', borderRadius: '6px' }}>
-                          Under Review
-                        </span>
+                    {allBackendRequests.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B' }}>
+                        <p style={{ fontSize: '13px', fontWeight: '600' }}>No Inspection Requests Yet</p>
+                        <p style={{ fontSize: '11.5px', marginTop: '4px' }}>Submit an inspection request from Home to book repairs.</p>
                       </div>
+                    ) : (
+                      allBackendRequests.map((reqItem) => {
+                        const isCompleted = (reqItem.status || '').toUpperCase() === 'COMPLETED' || (reqItem.status || '').toUpperCase() === 'WORK_DONE';
+                        const hasRated = reqItem.customerRating !== null && reqItem.customerRating !== undefined;
+                        const currentRatingInput = ratingInputs[reqItem.id] || { rating: 5, review: '' };
 
-                      <div style={{ fontSize: '11px', color: '#334155', background: '#F8FAFC', padding: '8px', borderRadius: '8px', marginBottom: '10px' }}>
-                        {selectedSubcategories.map(s => s.name).join(' • ')}
-                      </div>
+                        return (
+                          <div key={reqItem.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
+                                  {reqItem.subServiceCode || reqItem.servicecode || 'Inspection Request'}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>
+                                  #{reqItem.requestNumber || reqItem.id?.slice(0, 8)} • {reqItem.preferredDate || 'Scheduled'} {reqItem.preferredTime ? `(${reqItem.preferredTime})` : ''}
+                                </div>
+                              </div>
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: '700',
+                                background: isCompleted ? '#ECFDF5' : '#EFF6FF',
+                                color: isCompleted ? '#047857' : '#1D4ED8',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: isCompleted ? '1px solid #A7F3D0' : '1px solid #BFDBFE'
+                              }}>
+                                {reqItem.status}
+                              </span>
+                            </div>
 
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => openChatModal({ title: 'Inspection Support', type: 'REQUEST', tag: activeCategory.title })}
-                          style={{ flex: 1, background: '#EFF6FF', color: '#1864E8', border: '1px solid #BFDBFE', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
-                        >
-                          💬 Chat with Engineer
-                        </button>
-                        {liveQuotation && (
-                          <button
-                            onClick={() => setCurrentScreen('estimation_review')}
-                            style={{ flex: 1, background: '#10B981', color: '#fff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
-                          >
-                            View Quotation
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                            {reqItem.addressline && (
+                              <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '6px' }}>
+                                📍 {reqItem.addressline} {reqItem.location ? `• ${reqItem.location}` : ''}
+                              </div>
+                            )}
+
+                            {reqItem.assignedVendorName && (
+                              <div style={{ fontSize: '11px', color: '#0F172A', background: '#F8FAFC', padding: '6px 10px', borderRadius: '8px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span>👷 Contractor: <strong>{reqItem.assignedVendorName}</strong></span>
+                                {isCompleted && <span style={{ fontSize: '10px', color: '#16A34A', fontWeight: '700' }}>✓ Handover Done</span>}
+                              </div>
+                            )}
+
+                            {/* RATING SECTION WHEN SERVICE IS COMPLETED */}
+                            {isCompleted && (
+                              <div style={{ marginTop: '8px', padding: '12px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px' }}>
+                                {hasRated ? (
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#92400E' }}>Your Service Rating & Review</span>
+                                      <span style={{ fontSize: '13px', fontWeight: '800', color: '#D97706' }}>
+                                        {'★'.repeat(Math.round(reqItem.customerRating))}
+                                        <span style={{ fontSize: '11px', marginLeft: '4px', color: '#78350F' }}>({reqItem.customerRating.toFixed(1)} / 5.0)</span>
+                                      </span>
+                                    </div>
+                                    {reqItem.customerReview && (
+                                      <div style={{ fontSize: '11.5px', color: '#78350F', fontStyle: 'italic', background: '#FEF3C7', padding: '6px 8px', borderRadius: '6px', marginTop: '4px' }}>
+                                        "{reqItem.customerReview}"
+                                      </div>
+                                    )}
+                                    <div style={{ fontSize: '10px', color: '#B45309', marginTop: '6px' }}>
+                                      ✓ Rating stored in contractor profile
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400E', marginBottom: '4px' }}>
+                                      ⭐ Service Completed! How was your experience?
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#B45309', marginBottom: '8px' }}>
+                                      Please rate {reqItem.assignedVendorName || 'the assigned contractor'} to complete your feedback:
+                                    </div>
+
+                                    {/* Star Selector */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                          key={star}
+                                          type="button"
+                                          onClick={() => handleRatingStarClick(reqItem.id, star)}
+                                          style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontSize: '22px',
+                                            color: star <= (currentRatingInput.rating || 5) ? '#F59E0B' : '#D1D5DB',
+                                            padding: '0 2px'
+                                          }}
+                                        >
+                                          ★
+                                        </button>
+                                      ))}
+                                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#92400E', marginLeft: '6px' }}>
+                                        ({currentRatingInput.rating || 5} Stars)
+                                      </span>
+                                    </div>
+
+                                    {/* Review Text */}
+                                    <textarea
+                                      rows={2}
+                                      placeholder="Share your experience (e.g. Work quality, punctuality, professionalism)..."
+                                      value={currentRatingInput.review || ''}
+                                      onChange={(e) => handleRatingReviewChange(reqItem.id, e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        boxSizing: 'border-box',
+                                        borderRadius: '8px',
+                                        border: '1px solid #FCD34D',
+                                        padding: '8px',
+                                        fontSize: '11.5px',
+                                        outline: 'none',
+                                        fontFamily: 'inherit',
+                                        background: '#fff',
+                                        resize: 'none'
+                                      }}
+                                    />
+
+                                    <button
+                                      type="button"
+                                      disabled={currentRatingInput.isSubmitting}
+                                      onClick={() => handleSubmitRequestRating(reqItem.id)}
+                                      style={{
+                                        marginTop: '8px',
+                                        width: '100%',
+                                        background: '#D97706',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        padding: '8px',
+                                        fontSize: '12px',
+                                        fontWeight: '700',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {currentRatingInput.isSubmitting ? 'Submitting Rating...' : 'Submit Rating & Feedback'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                              <button
+                                onClick={() => openChatModal({ title: 'Inspection Support', type: 'REQUEST', tag: reqItem.servicecode, requestId: reqItem.id })}
+                                style={{ flex: 1, background: '#EFF6FF', color: '#1864E8', border: '1px solid #BFDBFE', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                              >
+                                💬 Chat with Engineer
+                              </button>
+                              {liveQuotation && (
+                                <button
+                                  onClick={() => setCurrentScreen('estimation_review')}
+                                  style={{ flex: 1, background: '#10B981', color: '#fff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
+                                >
+                                  View Quotation
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </>
-                ) : (
+                )}
+
+                {requestsTab === 'direct_bookings' && (
+                  // DIRECT BOOKINGS SECTION
+                  <>
+                    {customerBookings.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B' }}>
+                        <p style={{ fontSize: '13px', fontWeight: '600' }}>No Direct Maintenance Bookings Yet</p>
+                        <p style={{ fontSize: '11.5px', marginTop: '4px' }}>Book instant home repair or maintenance service anytime.</p>
+                      </div>
+                    ) : (
+                      customerBookings.map((b) => {
+                        const isCompleted = (b.status || '').toUpperCase() === 'COMPLETED';
+                        const hasRated = b.customerRating !== null && b.customerRating !== undefined;
+                        const currentRatingInput = ratingInputs[b.id] || { rating: 5, review: '' };
+
+                        return (
+                          <div key={b.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0B2545' }}>
+                                  {b.subServiceName || b.serviceName || 'Direct Service Booking'}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>
+                                  #{b.bookingNumber} • {b.scheduledDate || 'Date TBD'} ({b.scheduledSlot || 'Slot TBD'})
+                                </div>
+                              </div>
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: '700',
+                                background: isCompleted ? '#ECFDF5' : '#EFF6FF',
+                                color: isCompleted ? '#047857' : '#1D4ED8',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: isCompleted ? '1px solid #A7F3D0' : '1px solid #BFDBFE'
+                              }}>
+                                {b.status}
+                              </span>
+                            </div>
+
+                            {b.technicianName && (
+                              <div style={{ fontSize: '11px', color: '#0F172A', background: '#F8FAFC', padding: '6px 10px', borderRadius: '8px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span>👷 Assigned Specialist: <strong>{b.technicianName}</strong></span>
+                                {b.technicianPhone && <span style={{ fontSize: '10px', color: '#64748B' }}>{b.technicianPhone}</span>}
+                              </div>
+                            )}
+
+                            {/* RATING SECTION FOR DIRECT BOOKING WHEN COMPLETED */}
+                            {isCompleted && (
+                              <div style={{ marginTop: '8px', padding: '12px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px' }}>
+                                {hasRated ? (
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#92400E' }}>Your Service Rating & Review</span>
+                                      <span style={{ fontSize: '13px', fontWeight: '800', color: '#D97706' }}>
+                                        {'★'.repeat(Math.round(b.customerRating))}
+                                        <span style={{ fontSize: '11px', marginLeft: '4px', color: '#78350F' }}>({b.customerRating.toFixed(1)} / 5.0)</span>
+                                      </span>
+                                    </div>
+                                    {b.customerReview && (
+                                      <div style={{ fontSize: '11.5px', color: '#78350F', fontStyle: 'italic', background: '#FEF3C7', padding: '6px 8px', borderRadius: '6px', marginTop: '4px' }}>
+                                        "{b.customerReview}"
+                                      </div>
+                                    )}
+                                    <div style={{ fontSize: '10px', color: '#B45309', marginTop: '6px' }}>
+                                      ✓ Rating stored in contractor profile
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400E', marginBottom: '4px' }}>
+                                      ⭐ Service Completed! How was your experience?
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#B45309', marginBottom: '8px' }}>
+                                      Please rate {b.technicianName || 'the assigned contractor'} for this maintenance service:
+                                    </div>
+
+                                    {/* Star Selector */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                          key={star}
+                                          type="button"
+                                          onClick={() => handleRatingStarClick(b.id, star)}
+                                          style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontSize: '22px',
+                                            color: star <= (currentRatingInput.rating || 5) ? '#F59E0B' : '#D1D5DB',
+                                            padding: '0 2px'
+                                          }}
+                                        >
+                                          ★
+                                        </button>
+                                      ))}
+                                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#92400E', marginLeft: '6px' }}>
+                                        ({currentRatingInput.rating || 5} Stars)
+                                      </span>
+                                    </div>
+
+                                    {/* Review Text */}
+                                    <textarea
+                                      rows={2}
+                                      placeholder="Share your experience (e.g. Quick arrival, neat work, highly recommended)..."
+                                      value={currentRatingInput.review || ''}
+                                      onChange={(e) => handleRatingReviewChange(b.id, e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        boxSizing: 'border-box',
+                                        borderRadius: '8px',
+                                        border: '1px solid #FCD34D',
+                                        padding: '8px',
+                                        fontSize: '11.5px',
+                                        outline: 'none',
+                                        fontFamily: 'inherit',
+                                        background: '#fff',
+                                        resize: 'none'
+                                      }}
+                                    />
+
+                                    <button
+                                      type="button"
+                                      disabled={currentRatingInput.isSubmitting}
+                                      onClick={() => handleSubmitBookingRating(b.id)}
+                                      style={{
+                                        marginTop: '8px',
+                                        width: '100%',
+                                        background: '#D97706',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        padding: '8px',
+                                        fontSize: '12px',
+                                        fontWeight: '700',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {currentRatingInput.isSubmitting ? 'Submitting Rating...' : 'Submit Rating & Feedback'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                              <button
+                                onClick={() => openChatModal({ title: 'Maintenance Support', type: 'GENERAL', tag: b.subServiceName })}
+                                style={{ flex: 1, background: '#EFF6FF', color: '#1864E8', border: '1px solid #BFDBFE', padding: '8px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                              >
+                                💬 Support Chat
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </>
+                )}
+
+                {requestsTab === 'quotations' && (
                   // QUOTATIONS SECTION
                   <>
                     {liveQuotation ? (

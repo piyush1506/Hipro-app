@@ -9,9 +9,9 @@ import {
   Calendar, Home, User, Phone, Mail, Info, Send, RotateCcw,
   Server, Database, AlertCircle, Droplets, Image, Layers, Scale,
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
-  MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown,
+  MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown, ChevronLeft, ChevronRight,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut, Video, Play
+  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (
@@ -119,6 +119,25 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [requestsStatusFilter, setRequestsStatusFilter] = useState('ALL');
   const [requestsSearch, setRequestsSearch] = useState('');
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+
+  // ==================== DEDICATED INSPECTION REQUEST DETAIL PAGE STATE ====================
+  const [viewRequestDetail, setViewRequestDetail] = useState(false);
+  const [selectedRequestDetail, setSelectedRequestDetail] = useState(null);
+  const [requestDetailTab, setRequestDetailTab] = useState('overview'); // 'overview' | 'media' | 'quotes' | 'timeline'
+
+  const handleOpenRequestDetail = (req, initialTab = 'overview') => {
+    if (!req) return;
+    setActiveTab('requests');
+    const fresh = requests.find(r => r.id === req.id || r.requestNumber === req.requestNumber) || req;
+    setSelectedRequestDetail(fresh);
+    setViewRequestDetail(true);
+    setRequestDetailTab(initialTab);
+  };
+
+  const handleCloseRequestDetail = () => {
+    setViewRequestDetail(false);
+    setSelectedRequestDetail(null);
+  };
 
   // ==================== VENDOR MULTI-PANEL MANAGEMENT STATE ====================
   // Super Admin: Connected local vendors who receive customer requests & submit quotations
@@ -231,6 +250,89 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   };
   const [priorityVendors, setPriorityVendors] = useState([]);
 
+  // ==================== DYNAMIC OPERATIONAL CITY HUBS (100% HIPRO) ====================
+  const [operationalCities, setOperationalCities] = useState([]);
+  const [cityModalOpen, setCityModalOpen] = useState(false);
+  const [isSavingCity, setIsSavingCity] = useState(false);
+  const [cityForm, setCityForm] = useState({
+    name: '',
+    state: 'Rajasthan',
+    tagline: '',
+    badge: 'ACTIVE HUB'
+  });
+
+  const fetchOperationalCities = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/cities?all=true`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.cities)) {
+        setOperationalCities(data.cities);
+      }
+    } catch (e) {
+      console.error('Failed to fetch operational cities:', e);
+    }
+  };
+
+  const handleSaveCity = async (e) => {
+    e?.preventDefault();
+    if (!cityForm.name.trim()) {
+      showToastMsg('City name is required', 'error');
+      return;
+    }
+    setIsSavingCity(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/cities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cityForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`City Hub "${cityForm.name}" added successfully!`, 'success');
+        setCityModalOpen(false);
+        setCityForm({ name: '', state: 'Rajasthan', tagline: '', badge: 'ACTIVE HUB' });
+        await fetchOperationalCities();
+      } else {
+        showToastMsg(data.message || 'Failed to add city', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Error saving city hub', 'error');
+    } finally {
+      setIsSavingCity(false);
+    }
+  };
+
+  const handleToggleCityStatus = async (cityId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/cities/${cityId}/toggle`, {
+        method: 'PATCH'
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`City Hub status updated`, 'success');
+        fetchOperationalCities();
+      }
+    } catch (err) {
+      showToastMsg('Failed to update city status', 'error');
+    }
+  };
+
+  const handleDeleteCity = async (cityId, cityName) => {
+    if (!window.confirm(`Are you sure you want to delete ${cityName} hub?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/cities/${cityId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`City Hub ${cityName} removed`, 'success');
+        fetchOperationalCities();
+      }
+    } catch (err) {
+      showToastMsg('Failed to delete city', 'error');
+    }
+  };
+
   // ==================== REQUEST SHARING & VENDOR QUOTATION MODAL STATE ====================
   const [shareVendorModalOpen, setShareVendorModalOpen] = useState(false);
   const [shareModalRequest, setShareModalRequest] = useState(null);
@@ -329,14 +431,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     }
   };
 
-  const handleAssignVendorFromQuote = async (quote) => {
-    if (!quotesModalRequest) return;
+  const handleAssignVendorFromQuote = async (quote, targetReq = null) => {
+    const target = targetReq || quotesModalRequest || selectedRequestDetail;
+    if (!target) return;
     setIsAssigningFromQuotes(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE}/api/v1/requests/${quotesModalRequest.id}/assign-vendor`, {
+      const res = await fetch(`${API_BASE}/api/v1/requests/${target.id}/assign-vendor`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
@@ -349,10 +452,17 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       });
       const data = await res.json();
       if (data.success) {
-        showToastMsg(`Project #${quotesModalRequest.requestNumber} awarded to ${quote.vendorName || quote.vendor?.businessName || 'vendor'} for ₹${quote.quotePrice.toLocaleString('en-IN')}!`, 'success');
+        showToastMsg(`Project #${target.requestNumber} awarded to ${quote.vendorName || quote.vendor?.businessName || 'vendor'} for ₹${quote.quotePrice.toLocaleString('en-IN')}!`, 'success');
         setVendorQuotesModalOpen(false);
         setQuotesModalRequest(null);
         await fetchRequests();
+        setSelectedRequestDetail(prev => (prev && prev.id === target.id) ? {
+          ...prev,
+          vendorId: quote.vendorId,
+          assignedVendorName: quote.vendorName || quote.vendor?.businessName || quote.vendor?.name,
+          assignedQuotePrice: quote.quotePrice,
+          status: 'ASSIGNED'
+        } : prev);
       } else {
         showToastMsg(data.message || 'Failed to assign project', 'error');
       }
@@ -823,7 +933,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [statusModalBooking, setStatusModalBooking] = useState(null);
   const [refundModalBooking, setRefundModalBooking] = useState(null);
   const [adjustChargeModalBooking, setAdjustChargeModalBooking] = useState(null);
-  const [techForm, setTechForm] = useState({ name: '', phone: '', role: 'Senior Field Specialist' });
+  const [techForm, setTechForm] = useState({ vendorId: '', name: '', phone: '', role: 'Authorized Service Provider', rating: 4.9 });
   const [statusForm, setStatusForm] = useState({ status: 'CONFIRMED', reason: '' });
   const [refundForm, setRefundForm] = useState({ amount: '', reason: 'Customer requested cancellation' });
   const [adjustForm, setAdjustForm] = useState({ additionalAmount: '', note: '' });
@@ -853,6 +963,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [builderEstimator, setBuilderEstimator] = useState('Hipro Technical Admin Desk');
   const [builderTimeline, setBuilderTimeline] = useState('1-2 Working Days');
   const [builderScope, setBuilderScope] = useState('Standard Engineering Specifications');
+  const [builderWarranty, setBuilderWarranty] = useState('');
   const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service terms apply upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
   const [lineItems, setLineItems] = useState([
     { item: 'Surface Preparation & Moisture Tracing', qty: 1, unit: 'Lumpsum', rate: 1200 },
@@ -1058,7 +1169,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         fetchVendors(),
         fetchEntCategories(),
         fetchEntExperiences(),
-        fetchEntBookings()
+        fetchEntBookings(),
+        fetchOperationalCities()
       ]);
       if (showFeedback) showToastMsg('Database synced successfully', 'success');
     } catch (err) {
@@ -1536,6 +1648,12 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     if (!requestId || !vendorId) return;
     const vendor = vendors.find(v => v.id === vendorId);
     if (!vendor) return;
+
+    const confirmed = window.confirm(
+      `Direct Contractor Award Confirmation:\n\nAre you sure you want to directly award this project to "${vendor.businessName || vendor.name}"?\n\nThis will bypass contractor bidding and immediately award the project.`
+    );
+    if (!confirmed) return;
+
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
       const headers = { 'Content-Type': 'application/json' };
@@ -1555,14 +1673,20 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       });
       const data = await res.json();
       if (data.success) {
-        showToastMsg(`Assigned to ${vendor.name} (${vendor.businessName})`, 'success');
+        showToastMsg(`Project successfully awarded to ${vendor.name} (${vendor.businessName})`, 'success');
         fetchRequests();
+        setSelectedRequestDetail(prev => (prev && prev.id === requestId) ? {
+          ...prev,
+          vendorId,
+          assignedVendorName: vendor.name,
+          assignedQuotePrice: 0,
+          status: 'ASSIGNED'
+        } : prev);
       } else {
         showToastMsg(data.message || 'Failed to assign vendor', 'error');
       }
     } catch (e) {
-      showToastMsg(`Assigned to ${vendor.name}`, 'success');
-      fetchRequests();
+      showToastMsg('Error assigning vendor', 'error');
     }
   };
 
@@ -1898,22 +2022,28 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const handleAssignTechnician = async (e) => {
     e.preventDefault();
     if (!assignTechModalBooking) return;
+    if (!techForm.name || !techForm.phone) {
+      showToastMsg('Please select an authorized vendor from the dropdown', 'error');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/v1/direct-bookings/${assignTechModalBooking.id}/technician`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          technicianId: techForm.vendorId || undefined,
           technicianName: techForm.name,
           technicianPhone: techForm.phone,
           technicianRole: techForm.role || 'Authorized Service Provider',
+          technicianRating: techForm.rating || 4.9,
           assignedBy: 'Admin Desk'
         })
       });
       const data = await res.json();
       if (data.success) {
-        showToastMsg(`Service Provider ${techForm.name} assigned to #${assignTechModalBooking.bookingNumber}!`, 'success');
+        showToastMsg(`Authorized Vendor ${techForm.name} assigned to #${assignTechModalBooking.bookingNumber}!`, 'success');
         setAssignTechModalBooking(null);
-        setTechForm({ name: '', phone: '', role: 'Senior Field Specialist' });
+        setTechForm({ vendorId: '', name: '', phone: '', role: 'Authorized Service Provider', rating: 4.9 });
         if (selectedBookingForDrawer && selectedBookingForDrawer.id === assignTechModalBooking.id) {
           setSelectedBookingForDrawer(data.booking);
         }
@@ -1924,6 +2054,45 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       }
     } catch (err) {
       showToastMsg('Network error assigning service provider', 'error');
+    }
+  };
+
+  const handleQuickAssignBookingVendor = async (bookingId, vendorId) => {
+    if (!bookingId || !vendorId) return;
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor) return;
+
+    const confirmed = window.confirm(
+      `Instant Booking Assignment Confirmation:\n\nAre you sure you want to assign authorized contractor "${vendor.businessName || vendor.name}" (${vendor.phone}) to this instant booking?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/direct-bookings/${bookingId}/technician`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          technicianId: vendor.id,
+          technicianName: vendor.name,
+          technicianPhone: vendor.phone,
+          technicianRole: `${vendor.businessName || vendor.name} • ${vendor.specialization || 'Authorized Specialist'}`,
+          technicianRating: vendor.rating || 4.9,
+          assignedBy: 'Admin Desk'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg(`Authorized vendor ${vendor.name} assigned successfully!`, 'success');
+        if (selectedBookingForDrawer && selectedBookingForDrawer.id === bookingId) {
+          setSelectedBookingForDrawer(data.booking);
+        }
+        fetchDirectBookings();
+        fetchDirectBookingStats();
+      } else {
+        showToastMsg(data.message || 'Failed to assign vendor', 'error');
+      }
+    } catch (e) {
+      showToastMsg('Error assigning vendor', 'error');
     }
   };
 
@@ -2702,6 +2871,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         showToastMsg(`Status updated to ${status}`, 'success');
         fetchRequests();
         fetchStats();
+        setSelectedRequestDetail(prev => (prev && prev.id === requestId) ? { ...prev, status } : prev);
       }
     } catch (e) {
       showToastMsg('Error updating status', 'error');
@@ -2785,6 +2955,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     setLabCost(0);
     setDiscount(0);
     setCustomAdvanceAmt(null);
+    setBuilderWarranty('');
     setActiveTab('builder');
   };
 
@@ -2898,7 +3069,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       estimatedTimeline: builderTimeline,
       termsAndConditions: builderTerms || `Standard service terms apply. ${effectiveAdvancePct}% advance (₹${effectiveAdvanceAmount.toLocaleString('en-IN')}) required to mobilize materials & start work, remaining on completion.`,
       created_by: builderEstimator,
-      service_scope: builderScope
+      service_scope: builderWarranty && builderWarranty.trim() ? `${builderScope} (Warranty: ${builderWarranty.trim()})` : builderScope
     };
 
     try {
@@ -2911,6 +3082,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       if (data.success) {
         showToastMsg('Quotation created and dispatched!', 'success');
         setBuilderRequestId('');
+        setBuilderWarranty('');
         fetchAllData();
         setActiveTab('quotations');
       } else {
@@ -2927,13 +3099,24 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       case 'AUDIT_SCHEDULED':
       case 'SITE_AUDIT': return 'bg-warning-100 text-warning-900 border-warning-300 font-bold';
       case 'ESTIMATING': return 'bg-warning-50 text-warning-700 border-warning-200';
+      case 'QUOTE_REQUESTED': return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'QUOTED': return 'bg-primary-50 text-primary-700 border-primary-200';
+      case 'ASSIGNED': return 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold';
       case 'ACCEPTED': return 'bg-success-50 text-success-700 border-success-200';
       case 'IN_PROGRESS': return 'bg-primary-50 text-primary-700 border-primary-200';
       case 'COMPLETED': return 'bg-success-50 text-success-700 border-success-200';
       case 'REJECTED': return 'bg-red-50 text-red-700 border-red-200';
       default: return 'bg-slate-50 text-slate-700 border-slate-200';
     }
+  };
+
+  // Explicit guard: A project is strictly AWARDED only if admin approved it, has an accepted quote, or assigned quote price
+  const isProjectAwarded = (r) => {
+    if (!r) return false;
+    const hasAssignedStatus = (r.status || '').toUpperCase() === 'ASSIGNED';
+    const hasAcceptedQuote = Array.isArray(r.vendorQuotes) && r.vendorQuotes.some(q => q.status === 'accepted' || q.status === 'assigned');
+    const hasAwardedPrice = r.assignedQuotePrice !== null && r.assignedQuotePrice !== undefined && Number(r.assignedQuotePrice) > 0;
+    return hasAssignedStatus && (hasAcceptedQuote || hasAwardedPrice || (Boolean(r.vendorId) && (!r.vendorQuotes || r.vendorQuotes.length === 0)));
   };
 
   const TIMELINE_STAGES = [
@@ -2957,6 +3140,153 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       case 'COMPLETED': return 4;
       default: return 0;
     }
+  };
+
+  const renderQuotationBreakdown = (rawNotes) => {
+    if (!rawNotes) return null;
+    const raw = String(rawNotes).trim();
+    if (!raw) return null;
+
+    // Normalize: split bullets and standard headers into clean lines even if newlines were lost
+    let normalized = raw
+      .replace(/\s*•\s*/g, '\n• ')
+      .replace(/\s+(Grand Total:)/gi, '\nGrand Total:')
+      .replace(/\s+(Subtotal:)/gi, '\nSubtotal:')
+      .replace(/\s+(GST\s*\(?[^:]*\)?:)/gi, (m, g) => '\n' + g)
+      .replace(/\s+(Warranty[^:]*:)/gi, (m, g) => '\n' + g)
+      .replace(/\s+(Vendor Remarks:|Remarks:)/gi, (m, g) => '\n' + g)
+      .replace(/\s+(?<!Grand\s+)(Total:)/gi, '\nTotal:');
+
+    const lines = normalized.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    const boqItems = [];
+    let subtotal = null;
+    let gst = null;
+    let grandTotal = null;
+    let warranty = null;
+    let remarks = null;
+    const generalLines = [];
+
+    for (const line of lines) {
+      if (/^\[?DETAILED\s+BOQ\s+SPECIFICATION\]?$/i.test(line)) {
+        continue;
+      } else if (line.startsWith('•') || line.startsWith('-')) {
+        const cleanItem = line.replace(/^[•\-]\s*/, '').trim();
+        if (cleanItem) boqItems.push(cleanItem);
+      } else if (/^subtotal\s*:/i.test(line)) {
+        subtotal = line.replace(/^subtotal\s*:\s*/i, '').trim();
+      } else if (/^gst\b/i.test(line)) {
+        gst = line;
+      } else if (/^grand\s+total\s*:/i.test(line)) {
+        grandTotal = line.replace(/^grand\s+total\s*:\s*/i, '').trim();
+      } else if (/^total\s*:/i.test(line) && !grandTotal) {
+        grandTotal = line.replace(/^total\s*:\s*/i, '').trim();
+      } else if (/^warranty\b/i.test(line)) {
+        warranty = line.replace(/^warranty(\s*\/\s*guarantee)?\s*:\s*/i, '').trim();
+      } else if (/^(vendor\s+)?remarks\s*:/i.test(line)) {
+        remarks = line.replace(/^(vendor\s+)?remarks\s*:\s*/i, '').trim();
+      } else {
+        generalLines.push(line);
+      }
+    }
+
+    if (boqItems.length > 0 || subtotal || grandTotal || remarks || warranty) {
+      return (
+        <div className="bg-slate-50/95 rounded-xl border border-slate-200/90 p-3 space-y-2.5 text-xs font-normal">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/80">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+              <ClipboardList className="w-3.5 h-3.5 text-primary-600" />
+              <span>BOQ Specification & Breakdown</span>
+            </div>
+            {warranty && (
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                <span>{warranty}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Itemized Works Table */}
+          {boqItems.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Itemized Works:</div>
+              <div className="bg-white rounded-lg border border-slate-200/90 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+                {boqItems.map((item, idx) => {
+                  const eqIdx = item.lastIndexOf('=');
+                  if (eqIdx !== -1) {
+                    const desc = item.slice(0, eqIdx).trim();
+                    const price = item.slice(eqIdx + 1).trim();
+                    return (
+                      <div key={idx} className="px-2.5 py-1.5 flex items-start justify-between gap-3 text-[11px]">
+                        <div className="flex items-start gap-1.5 min-w-0">
+                          <span className="text-slate-400 font-mono text-[10px] pt-0.5">{idx + 1}.</span>
+                          <span className="text-slate-700 font-medium leading-snug">{desc}</span>
+                        </div>
+                        <span className="font-mono font-bold text-slate-900 shrink-0">{price.startsWith('₹') ? price : `₹${price}`}</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={idx} className="px-2.5 py-1.5 flex items-start gap-1.5 text-[11px] text-slate-700 font-medium leading-snug">
+                      <span className="text-slate-400 font-mono text-[10px] pt-0.5">{idx + 1}.</span>
+                      <span>{item}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Commercials Summary */}
+          {(subtotal || gst || grandTotal) && (
+            <div className="bg-white rounded-lg border border-slate-200/80 p-2.5 space-y-1 text-[11px] shadow-2xs">
+              {subtotal && (
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Subtotal (Line Items):</span>
+                  <span className="font-mono font-medium">{subtotal.startsWith('₹') ? subtotal : `₹${subtotal}`}</span>
+                </div>
+              )}
+              {gst && (
+                <div className="flex items-center justify-between text-slate-500 text-[10px]">
+                  <span>{gst.includes(':') ? gst.split(':')[0].trim() : 'GST'}:</span>
+                  <span className="font-mono">{gst.includes(':') ? gst.split(':')[1].trim() : gst}</span>
+                </div>
+              )}
+              {grandTotal && (
+                <div className="flex items-center justify-between text-slate-900 font-bold pt-1.5 mt-1 border-t border-slate-100">
+                  <span className="font-bold">Total Quoted Price:</span>
+                  <span className="font-mono text-emerald-700 font-bold text-xs">{grandTotal.startsWith('₹') ? grandTotal : `₹${grandTotal}`}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Contractor Remarks */}
+          {remarks && (
+            <div className="bg-amber-50/70 rounded-lg border border-amber-200/80 p-2.5 text-[11px] text-amber-950 space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Contractor Remarks / Approach:</span>
+              <p className="leading-relaxed font-normal whitespace-pre-wrap">{remarks}</p>
+            </div>
+          )}
+
+          {/* Extra Lines */}
+          {generalLines.length > 0 && (
+            <div className="text-[11px] text-slate-600 leading-relaxed space-y-1 pt-1">
+              {generalLines.map((gl, i) => (
+                <p key={i} className="whitespace-pre-wrap">{gl}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed whitespace-pre-line font-normal">
+        {raw}
+      </div>
+    );
   };
 
   const selectedBuilderReq = requests.find(r => r.id === builderRequestId);
@@ -3382,10 +3712,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         {/* DYNAMIC TAB BODY */}
         <main className="flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
 
-          {/* OVERVIEW TAB - EXECUTIVE COMMAND CENTER */}
+          {/* OVERVIEW TAB - HIPRO COMMAND & OPERATIONS */}
           {activeTab === 'overview' && (() => {
-            // 1. Dynamic Multi-City Filtering
-            const availableCities = ['ALL', 'Bhilwara', 'Udaipur', 'Dehradun', 'Rishikesh', 'Jaipur', 'Jaisalmer'];
+            // 1. Dynamic Multi-City Filtering (100% Hipro Field Hubs from Database)
+            const dynamicCityNames = operationalCities.filter(c => c.isActive !== false).map(c => c.name);
+            const availableCities = ['ALL', ...dynamicCityNames];
 
             const isCityMatch = (cityVal) => {
               if (overviewCityFilter === 'ALL') return true;
@@ -3508,50 +3839,48 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
             return (
               <div className="space-y-6">
-                {/* 1. EXECUTIVE COMMAND BANNER & MULTI-CITY SELECTOR */}
-                <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-slate-200/90 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-primary-50/60 to-brand-50/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-
-                  <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                    <div className="space-y-2 max-w-2xl">
+                {/* 1. HIPRO FIELD OPERATIONS & DYNAMIC HUB SELECTOR */}
+                <div className="bg-white rounded-2xl p-6 shadow-2xs border border-slate-200">
+                  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+                    <div className="space-y-1.5 max-w-2xl">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                          National Operations Live
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                          Hipro Operations Live
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                          <Activity className="w-3.5 h-3.5 text-primary-600" />
-                          Multi-City Hub Dispatch
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                          Operational Hubs ({operationalCities.filter(c => c.isActive !== false).length})
                         </span>
                       </div>
-                      <h2 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-                        Executive Operations & Intelligence
+                      <h2 className="font-heading text-2xl font-bold tracking-tight text-slate-900">
+                        Hindustan Projects • Admin Operations
                       </h2>
-                      <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">
-                        Real-time command telemetry across customer demand, inspection requests, instant pre-paid bookings, quotations, and local vendor networks.
+                      <p className="text-slate-500 text-xs sm:text-sm font-medium">
+                        Civil construction, waterproofing, structural repairs, contractor quotations, and field service dispatch.
                       </p>
                     </div>
 
                     {/* Quick Command Launch Buttons */}
-                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <button
                         onClick={() => setActiveTab('builder')}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-xs transition-all"
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all"
                       >
                         <PlusCircle className="w-4 h-4" />
                         <span>Issue BOQ Quote</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('chat')}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-bold border border-primary-200 transition-all"
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 transition-all"
                       >
-                        <MessageCircle className="w-4 h-4 text-primary-600" />
+                        <MessageCircle className="w-4 h-4 text-slate-600" />
                         <span>Chat Desk ({chatThreads.length})</span>
                       </button>
                       <button
                         onClick={() => fetchAllData(true)}
-                        title="Sync Telemetry"
-                        className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all"
+                        title="Sync Database"
+                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all"
                       >
                         <RefreshCw className="w-4 h-4 text-slate-600" />
                       </button>
@@ -3559,13 +3888,13 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
 
                   {/* Multi-City Quick Switcher Filter Bar */}
-                  <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active City Hub:</span>
+                  <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <MapPin className="w-4 h-4 text-slate-700 shrink-0" />
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Service Hub:</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1">
                       {availableCities.map(c => {
                         const isSelected = overviewCityFilter === c;
                         const count = c === 'ALL'
@@ -3593,6 +3922,16 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         );
                       })}
                     </div>
+
+                    {/* + Add City Hub Button */}
+                    <button
+                      type="button"
+                      onClick={() => setCityModalOpen(true)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0 shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add City Hub</span>
+                    </button>
                   </div>
                 </div>
 
@@ -3977,18 +4316,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
 
                   {/* Dynamic Table Content Based On Active Section */}
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {/* SECTION 1: INSPECTION REQUESTS TABLE */}
                     {overviewActiveSection === 'requests' && (
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="bg-slate-100/80 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
-                            <th className="py-3 px-4">Customer & Request #</th>
-                            <th className="py-3 px-4">City / Location</th>
-                            <th className="py-3 px-4">Service & Damage Scope</th>
-                            <th className="py-3 px-4">Readiness & Quotation Status</th>
-                            <th className="py-3 px-4">Lead Engineer</th>
-                            <th className="py-3 px-4 text-right">Quick Dispatch Actions</th>
+                            <th className="py-2.5 px-3">Customer &amp; Req #</th>
+                            <th className="py-2.5 px-3">Location</th>
+                            <th className="py-2.5 px-3">Service Scope</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3">Assigned Vendor</th>
+                            <th className="py-2.5 px-3 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -4008,7 +4347,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               const isQuoted = (req.status || '').toUpperCase() === 'QUOTED' || (q && (q.status || '').toUpperCase() === 'QUOTED');
                               const isNeedsQuote = ['SUBMITTED', 'ESTIMATING'].includes((req.status || '').toUpperCase()) && !q;
                               const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
-                              const assignedEngName = req.technicianName || assignedEngineers[req.id] || q?.created_by || null;
+                              const assignedEngName = req.assignedVendorName || (req.vendorId && vendors.find(v => v.id === req.vendorId)?.name) || req.technicianName || null;
                               const isAssigningThis = assigningEngineerReqId === req.id;
 
                               return (
@@ -4017,28 +4356,33 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   className={`transition-all ${isAccepted ? 'bg-emerald-50/40 hover:bg-emerald-50/70 border-l-4 border-l-emerald-500' : isNeedsQuote ? 'hover:bg-warning-50/30' : 'hover:bg-slate-50/80'}`}
                                 >
                                   {/* Customer & ID */}
-                                  <td className="py-4 px-4 align-top min-w-[200px]">
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="font-mono font-bold text-xs text-primary-600">
+                                  <td className="py-3 px-3 align-top max-w-[170px]">
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenRequestDetail(req)}
+                                          className="font-mono font-bold text-xs text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                                          title="Open inspection detail page"
+                                        >
                                           {req.requestNumber}
-                                        </span>
+                                        </button>
                                         {isUrgent && (
                                           <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-red-100 text-red-700 border border-red-200">
                                             {req.urgency}
                                           </span>
                                         )}
                                       </div>
-                                      <div className="font-bold text-sm text-slate-900">
+                                      <div className="font-bold text-xs text-slate-900 truncate" title={req.user?.name || 'Customer'}>
                                         {req.user?.name || 'Customer'}
                                       </div>
-                                      <div className="flex items-center gap-2 pt-0.5">
+                                      <div className="flex items-center gap-1.5 pt-0.5">
                                         <a
                                           href={`tel:${req.user?.phoneNumber || ''}`}
-                                          className="text-slate-600 hover:text-primary-600 font-mono text-[11px] font-semibold flex items-center gap-1"
+                                          className="text-slate-600 hover:text-primary-600 font-mono text-[10.5px] font-semibold flex items-center gap-1"
                                           title="Call Customer"
                                         >
-                                          <Phone className="w-3 h-3 text-emerald-600" />
+                                          <Phone className="w-2.5 h-2.5 text-emerald-600" />
                                           <span>{req.user?.phoneNumber || 'No Phone'}</span>
                                         </a>
                                       </div>
@@ -4046,42 +4390,42 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </td>
 
                                   {/* City & Address */}
-                                  <td className="py-4 px-4 align-top min-w-[150px]">
-                                    <div className="space-y-1">
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                                        <MapPin className="w-3 h-3 text-primary-600" />
+                                  <td className="py-3 px-3 align-top max-w-[140px]">
+                                    <div className="space-y-0.5">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                        <MapPin className="w-2.5 h-2.5 text-primary-600" />
                                         <span>{req.city || req.location?.split(',')[0] || 'Bhilwara'}</span>
                                       </span>
-                                      <div className="text-[11px] text-slate-500 leading-tight truncate max-w-[170px]" title={req.addressline || req.location}>
+                                      <div className="text-[10.5px] text-slate-500 leading-tight line-clamp-2" title={req.addressline || req.location}>
                                         {req.addressline || req.location || 'Local Area'}
                                       </div>
-                                      <div className="text-[10px] text-slate-400 font-medium">
+                                      <div className="text-[9.5px] text-slate-400 font-medium truncate">
                                         {req.propertyType || 'Residential'}
                                       </div>
                                     </div>
                                   </td>
 
                                   {/* Service & Issue Scope */}
-                                  <td className="py-4 px-4 align-top min-w-[210px]">
-                                    <div className="space-y-1">
-                                      <div className="font-bold text-xs text-slate-800">
+                                  <td className="py-3 px-3 align-top max-w-[210px]">
+                                    <div className="space-y-0.5">
+                                      <div className="font-bold text-xs text-slate-800 leading-tight">
                                         {req.servicecode}
                                       </div>
                                       {req.subServiceCode && (
-                                        <div className="text-[11px] text-primary-700 font-medium">
+                                        <div className="text-[10.5px] text-primary-700 font-medium truncate">
                                           {req.subServiceCode}
                                         </div>
                                       )}
-                                      <div className="text-[11px] text-slate-600 line-clamp-2 italic max-w-[240px]">
+                                      <div className="text-[10.5px] text-slate-500 line-clamp-2 italic" title={req.issueDescription}>
                                         "{req.issueDescription || 'Repair inspection requested.'}"
                                       </div>
                                       {media.length > 0 && (
                                         <button
                                           type="button"
                                           onClick={() => setActivePhotoModal({ photos: media, index: 0, title: `Damage Photos - ${req.requestNumber}` })}
-                                          className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-[10px] font-bold transition-all"
+                                          className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-[9.5px] font-bold transition-all"
                                         >
-                                          <Camera className="w-3 h-3 text-primary-600" />
+                                          <Camera className="w-2.5 h-2.5 text-primary-600" />
                                           <span>Inspect {media.length} Photos</span>
                                         </button>
                                       )}
@@ -4089,83 +4433,102 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </td>
 
                                   {/* Readiness & Quote Status */}
-                                  <td className="py-4 px-4 align-top min-w-[180px]">
+                                  <td className="py-3 px-3 align-top max-w-[130px]">
                                     {isAccepted ? (
-                                      <div className="p-2 rounded-xl bg-emerald-100/70 border border-emerald-300 space-y-0.5">
-                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
-                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Ready For Execution
+                                      <div className="p-1.5 rounded-lg bg-emerald-100/70 border border-emerald-300 space-y-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-950 uppercase tracking-wide">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Ready
                                         </span>
-                                        <div className="font-mono text-xs font-bold text-emerald-800">
+                                        <div className="font-mono text-[10px] font-bold text-emerald-800">
                                           Quote: {q?.quoteNumber || 'Agreed'}
                                         </div>
-                                        <div className="font-mono font-bold text-sm text-emerald-950">
+                                        <div className="font-mono font-bold text-xs text-emerald-950">
                                           ₹{(q?.grandtotal || 0).toLocaleString('en-IN')}
                                         </div>
                                       </div>
                                     ) : isQuoted ? (
-                                      <div className="p-2 rounded-xl bg-primary-50 border border-primary-200 space-y-0.5">
-                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-900 uppercase tracking-wide">
-                                          <FileCheck2 className="w-3.5 h-3.5 text-primary-600" /> Quoted (₹{(q?.grandtotal || 0).toLocaleString('en-IN')})
+                                      <div className="p-1.5 rounded-lg bg-primary-50 border border-primary-200 space-y-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary-900 uppercase tracking-wide">
+                                          <FileCheck2 className="w-3 h-3 text-primary-600" /> Quoted
                                         </span>
-                                        <div className="text-[10px] text-primary-700 font-medium">Awaiting customer acceptance</div>
+                                        <div className="font-mono font-bold text-xs text-primary-800">
+                                          ₹{(q?.grandtotal || 0).toLocaleString('en-IN')}
+                                        </div>
                                       </div>
                                     ) : isNeedsQuote ? (
-                                      <div className="p-2 rounded-xl bg-warning-50 border border-warning-200 space-y-0.5">
-                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-warning-900 uppercase tracking-wide">
-                                          <Clock className="w-3.5 h-3.5 text-warning-600" /> Needs BOQ Quote
+                                      <div className="p-1.5 rounded-lg bg-warning-50 border border-warning-200 space-y-0.5">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning-900 uppercase tracking-wide">
+                                          <Clock className="w-3 h-3 text-warning-600" /> Needs Quote
                                         </span>
-                                        <div className="text-[10px] text-warning-800">Pending pricing estimate</div>
+                                        <div className="text-[9.5px] text-warning-800">Pending estimate</div>
                                       </div>
                                     ) : (
-                                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusBadge(req.status)}`}>
+                                      <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border inline-block ${getStatusBadge(req.status)}`}>
                                         {req.status}
                                       </span>
                                     )}
                                   </td>
 
-                                  {/* Lead Engineer */}
-                                  <td className="py-4 px-4 align-top min-w-[170px]">
-                                    <div className="space-y-1.5">
+                                  {/* Assigned Contractor / Vendor */}
+                                  <td className="py-3 px-3 align-top max-w-[140px]">
+                                    <div className="space-y-1">
                                       {assignedEngName ? (
-                                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 space-y-0.5">
+                                        <div className="p-1.5 rounded-lg bg-emerald-50/70 border border-emerald-200 space-y-0.5">
                                           <div className="flex items-center justify-between">
-                                            <span className="text-[9px] font-bold text-slate-400 uppercase">Assigned</span>
+                                            <span className="text-[8.5px] font-bold text-emerald-700 uppercase tracking-wider">Vendor</span>
                                             <button
                                               onClick={() => setAssigningEngineerReqId(isAssigningThis ? null : req.id)}
-                                              className="text-[10px] font-bold text-primary-600 hover:underline"
+                                              className="text-[9.5px] font-bold text-brand-600 hover:underline"
                                             >
                                               Change
                                             </button>
                                           </div>
-                                          <div className="font-bold text-xs text-slate-800 flex items-center gap-1">
-                                            <HardHat className="w-3 h-3 text-primary-600 shrink-0" />
-                                            <span>{assignedEngName}</span>
+                                          <div className="font-bold text-xs text-slate-800 flex items-center gap-1 truncate" title={assignedEngName}>
+                                            <HardHat className="w-3 h-3 text-emerald-600 shrink-0" />
+                                            <span className="truncate">{assignedEngName}</span>
                                           </div>
                                         </div>
                                       ) : (
                                         <button
                                           onClick={() => setAssigningEngineerReqId(isAssigningThis ? null : req.id)}
-                                          className="w-full py-1.5 px-2 rounded-xl bg-warning-50 hover:bg-warning-100 text-warning-900 border border-warning-200 text-xs font-bold transition-all flex items-center justify-center gap-1"
+                                          className="w-full py-1 px-1.5 rounded-lg bg-warning-50 hover:bg-warning-100 text-warning-900 border border-warning-200 text-[11px] font-bold transition-all flex items-center justify-center gap-1"
                                         >
                                           <UserPlus className="w-3 h-3 text-warning-600" />
-                                          <span>Assign Lead</span>
+                                          <span>Assign Vendor</span>
                                         </button>
                                       )}
 
                                       {isAssigningThis && (
-                                        <div className="p-2 rounded-xl bg-white border border-primary-300 shadow-lg space-y-1 z-20 relative">
-                                          <div className="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-100 pb-1">
-                                            Select Engineer:
+                                        <div className="p-2 rounded-xl bg-white border border-brand-300 shadow-xl space-y-1 z-30 absolute right-4 min-w-[210px]">
+                                          <div className="text-[10px] font-bold text-slate-600 uppercase border-b border-slate-100 pb-1 flex items-center justify-between">
+                                            <span>Select Registered Vendor:</span>
+                                            <button
+                                              onClick={() => setAssigningEngineerReqId(null)}
+                                              className="text-slate-400 hover:text-slate-600 text-xs"
+                                            >
+                                              ✕
+                                            </button>
                                           </div>
-                                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                                            {availableEngineers.map(eng => (
+                                          <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                                            {vendors.filter(v => v.status === 'active').map(v => (
                                               <button
-                                                key={eng.id}
-                                                onClick={() => handleAssignEngineer(req.id, eng.name)}
-                                                className="w-full text-left p-1.5 rounded-lg hover:bg-primary-50 text-xs font-bold text-slate-700 flex items-center justify-between"
+                                                key={v.id}
+                                                onClick={() => {
+                                                  setAssigningEngineerReqId(null);
+                                                  handleAssignVendorDirect(req.id, v.id);
+                                                }}
+                                                className="w-full text-left p-1.5 rounded-lg hover:bg-brand-50 text-xs font-semibold text-slate-700 flex flex-col transition-all"
                                               >
-                                                <span>{eng.name}</span>
-                                                <span className="text-[9px] text-slate-400">{eng.cityName}</span>
+                                                <div className="flex items-center justify-between">
+                                                  <span className="font-bold text-slate-800">{v.name}</span>
+                                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                                    ★ {v.rating || 4.9}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-[10px] text-slate-400 mt-0.5">
+                                                  <span className="truncate max-w-[120px] text-slate-500">{v.businessName || v.specialization}</span>
+                                                  <span className="text-brand-600 font-medium">{v.city}</span>
+                                                </div>
                                               </button>
                                             ))}
                                           </div>
@@ -4175,12 +4538,12 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </td>
 
                                   {/* Quick Dispatch Actions */}
-                                  <td className="py-4 px-4 align-top text-right min-w-[150px]">
-                                    <div className="flex flex-col items-end gap-1.5">
+                                  <td className="py-3 px-3 align-top text-right w-[115px]">
+                                    <div className="flex flex-col items-end gap-1">
                                       {(!q || isNeedsQuote) ? (
                                         <button
                                           onClick={() => handleStartQuote(req)}
-                                          className="w-full py-1.5 px-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1"
+                                          className="w-full py-1 px-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-[11px] font-bold shadow-2xs transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                                         >
                                           <Zap className="w-3 h-3" />
                                           <span>Create Quote</span>
@@ -4188,7 +4551,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                       ) : (
                                         <button
                                           onClick={() => setActiveQuoteModal(q)}
-                                          className="w-full py-1.5 px-2.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-xs font-bold transition-all flex items-center justify-center gap-1"
+                                          className="w-full py-1 px-2 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 text-[11px] font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                                         >
                                           <Eye className="w-3 h-3" />
                                           <span>View Quote</span>
@@ -4197,19 +4560,26 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
                                       <div className="flex items-center gap-1 w-full justify-end">
                                         <button
+                                          onClick={() => handleOpenRequestDetail(req)}
+                                          className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition-all cursor-pointer"
+                                          title="Open Full Inspection Details"
+                                        >
+                                          <Eye className="w-3 h-3 text-slate-700" />
+                                        </button>
+                                        <button
                                           onClick={() => openChatForRequest(req)}
-                                          className="p-1.5 rounded-lg bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all"
+                                          className="p-1 rounded-md bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all"
                                           title="Open Live Chat"
                                         >
-                                          <MessageCircle className="w-3.5 h-3.5" />
+                                          <MessageCircle className="w-3 h-3" />
                                         </button>
                                         {req.user?.phoneNumber && (
                                           <button
                                             onClick={() => callCustomer(req.user.phoneNumber)}
-                                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-all"
+                                            className="p-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-all"
                                             title="Call Customer"
                                           >
-                                            <Phone className="w-3.5 h-3.5" />
+                                            <Phone className="w-3 h-3" />
                                           </button>
                                         )}
                                       </div>
@@ -4280,12 +4650,39 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                       </span>
                                     </div>
                                   ) : (
-                                    <button
-                                      onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: '', phone: '', role: 'Senior Field Specialist' }); }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-warning-50 text-warning-800 font-bold border border-warning-200 hover:bg-warning-100 text-xs"
-                                    >
-                                      <UserPlus className="w-3 h-3 text-warning-600" /> Assign Specialist
-                                    </button>
+                                    <div className="flex items-center gap-1.5 min-w-[170px]">
+                                      <select
+                                        value=""
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          if (val === '__modal__') {
+                                            const matchedV = vendors.find(v => v.phone === b.technicianPhone || v.name === b.technicianName);
+                                            setAssignTechModalBooking(b);
+                                            setTechForm({
+                                              vendorId: matchedV ? matchedV.id : '',
+                                              name: b.technicianName || matchedV?.name || '',
+                                              phone: b.technicianPhone || matchedV?.phone || '',
+                                              role: b.technicianRole || (matchedV ? `${matchedV.businessName || matchedV.name} • ${matchedV.specialization || 'Field Specialist'}` : 'Authorized Service Provider'),
+                                              rating: matchedV?.rating || 4.9,
+                                              businessName: matchedV?.businessName || '',
+                                              city: matchedV?.city || b.city || '',
+                                              documentsVerified: matchedV?.documentsVerified || false
+                                            });
+                                          } else if (val) {
+                                            handleQuickAssignBookingVendor(b.id, val);
+                                          }
+                                        }}
+                                        className="w-full text-[11px] font-semibold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                                      >
+                                        <option value="">-- Assign Vendor --</option>
+                                        {vendors.filter(v => v.status === 'active').map(v => (
+                                          <option key={v.id} value={v.id}>
+                                            {v.name} ({v.businessName || v.city})
+                                          </option>
+                                        ))}
+                                        <option value="__modal__">📋 Open Assignment Modal...</option>
+                                      </select>
+                                    </div>
                                   )}
                                 </td>
                                 <td className="py-3.5 px-4 font-mono">
@@ -4477,7 +4874,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
           {/* REQUESTS TAB */}
           {activeTab === 'requests' && (() => {
-            const availableCities = ['ALL', 'Bhilwara', 'Udaipur', 'Jaipur', 'Dehradun', 'Rishikesh', 'Jaisalmer'];
+            const dynamicCityNames = operationalCities.filter(c => c.isActive !== false).map(c => c.name);
+            const availableCities = ['ALL', ...dynamicCityNames];
 
             const isCityMatch = (cityVal) => {
               if (requestsCityFilter === 'ALL') return true;
@@ -4524,6 +4922,890 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 (req.addressline || '').toLowerCase().includes(searchLower)
               );
             });
+
+            // ==================== DEDICATED INSPECTION REQUEST DETAIL VIEW ====================
+            if (viewRequestDetail && selectedRequestDetail) {
+              const req = selectedRequestDetail;
+              const media = Array.isArray(req.mediaUrl) 
+                ? req.mediaUrl 
+                : (req.mediaUrl ? [req.mediaUrl] : (Array.isArray(req.damageImages) ? req.damageImages : []));
+              const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
+              const isAuditScheduled = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
+              const hasQuote = (req.quotations || []).length > 0 || quotations.some(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+              const assignedVendor = vendors.find(v => v.id === req.vendorId || v.name === req.assignedVendorName || v.businessName === req.assignedVendorName);
+              const linkedBOQ = req.quotations?.[0] || quotations.find(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+              const vendorQuotesList = req.vendorQuotes || [];
+              const lowestVendorQuote = vendorQuotesList.length > 0 ? Math.min(...vendorQuotesList.map(q => q.quotePrice)) : null;
+              const highestVendorQuote = vendorQuotesList.length > 0 ? Math.max(...vendorQuotesList.map(q => q.quotePrice)) : null;
+              const avgVendorQuote = vendorQuotesList.length > 0 ? Math.round(vendorQuotesList.reduce((acc, q) => acc + (q.quotePrice || 0), 0) / vendorQuotesList.length) : null;
+              const boqPrice = linkedBOQ?.grandtotal || linkedBOQ?.amount || null;
+              const grossMargin = (boqPrice && lowestVendorQuote) ? (boqPrice - lowestVendorQuote) : null;
+              const grossMarginPct = (grossMargin && boqPrice > 0) ? Math.round((grossMargin / boqPrice) * 100) : null;
+
+              const videoFiles = media.filter(m => isVideoMedia(m));
+              const photoFiles = media.filter(m => !isVideoMedia(m));
+
+              const customerPhone = req.user?.phoneNumber || req.customerPhone || '';
+              const customerName = req.user?.name || req.customerName || 'Customer';
+              const cleanPhone = customerPhone.replace(/[^0-9]/g, '');
+              const waLink = cleanPhone ? `https://wa.me/91${cleanPhone.slice(-10)}?text=${encodeURIComponent(`Hello ${customerName}, I am contacting you from Hipro regarding your inspection request #${req.requestNumber} for ${req.servicecode}.`)}` : null;
+
+              return (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  {/* 1. BREADCRUMB & ACTION BAR */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <button
+                        type="button"
+                        onClick={handleCloseRequestDetail}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Back to All Requests</span>
+                      </button>
+                      <span className="text-slate-300">/</span>
+                      <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                        {req.requestNumber}
+                      </span>
+                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                        isUrgent
+                          ? 'bg-red-50 text-red-600 border border-red-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}>
+                        {req.urgency || 'NORMAL'}
+                      </span>
+                      {(req.city || req.location) && (
+                        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-primary-600" />
+                          <span>{req.city || req.location}</span>
+                        </span>
+                      )}
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>
+                        {req.status}
+                      </span>
+                    </div>
+
+                    {/* Quick Stage Selector & Action Buttons */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+                        <span className="text-[11px] font-semibold text-slate-500">Stage:</span>
+                        <select
+                          value={req.status}
+                          onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
+                          className="text-xs font-bold bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+                        >
+                          <option value="SUBMITTED">SUBMITTED</option>
+                          <option value="AUDIT_SCHEDULED">AUDIT_SCHEDULED</option>
+                          <option value="ESTIMATING">ESTIMATING</option>
+                          <option value="QUOTED">QUOTED</option>
+                          <option value="ACCEPTED">ACCEPTED</option>
+                          <option value="IN_PROGRESS">IN_PROGRESS</option>
+                          <option value="COMPLETED">COMPLETED</option>
+                          <option value="REJECTED">REJECTED</option>
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openChatForRequest(req)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl transition-all shadow-2xs"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-primary-600" />
+                        <span>Chat Customer</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStartQuote(req)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-2xs"
+                      >
+                        <Calculator className="w-3.5 h-3.5" />
+                        <span>{linkedBOQ ? 'Edit BOQ Quote' : 'Build BOQ Quote'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenShareVendorsModal(req)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-2xs"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Share with Vendors</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. EXECUTIVE 4-PILLAR METRICS BANNER */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {/* Pillar 1: Target Service */}
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <span>Target Service</span>
+                        <Wrench className="w-4 h-4 text-primary-600" />
+                      </div>
+                      <div className="font-heading font-bold text-base text-slate-900 truncate" title={req.servicecode}>
+                        {req.servicecode}
+                      </div>
+                      <div className="text-xs font-semibold text-primary-600 truncate">
+                        {req.subServiceCode || 'Damage Inspection & Repair'}
+                      </div>
+                    </div>
+
+                    {/* Pillar 2: Client Details */}
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <span>Customer Profile</span>
+                        <User className="w-4 h-4 text-primary-600" />
+                      </div>
+                      <div className="font-heading font-bold text-base text-slate-900 truncate">
+                        {customerName}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {customerPhone ? (
+                          <a href={`tel:${customerPhone}`} className="font-mono font-medium text-primary-600 hover:underline flex items-center gap-1">
+                            <Phone className="w-3 h-3" />
+                            <span>{customerPhone}</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">Phone not on file</span>
+                        )}
+                        {waLink && (
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1"
+                          >
+                            <span>WhatsApp</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Pillar 3: Vendor Bids & Price Elevation */}
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <span>Vendor Bids Received</span>
+                        <Tag className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-heading font-bold text-xl text-slate-900">
+                          {vendorQuotesList.length} {vendorQuotesList.length === 1 ? 'Bid' : 'Bids'}
+                        </span>
+                        {lowestVendorQuote && (
+                          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            Min: ₹{lowestVendorQuote.toLocaleString('en-IN')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {boqPrice
+                          ? `BOQ: ₹${boqPrice.toLocaleString('en-IN')} (${grossMarginPct ? `+${grossMarginPct}% Margin` : ''})`
+                          : 'Customer BOQ Quote pending'}
+                      </div>
+                    </div>
+
+                    {/* Pillar 4: Project Assignment */}
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <span>Project Assignment</span>
+                        <HardHat className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div className="font-heading font-bold text-base text-slate-900 truncate">
+                        {req.assignedVendorName || 'Unassigned'}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {req.assignedQuotePrice ? (
+                          <span className="font-mono font-semibold text-emerald-700">
+                            Awarded at ₹{req.assignedQuotePrice.toLocaleString('en-IN')}
+                          </span>
+                        ) : (
+                          <span className="text-amber-700 font-medium">Bidding & Review Open</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Verified Customer Feedback Banner if Rated */}
+                  {req.customerRating && (
+                    <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200/90 shadow-2xs flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
+                          ★
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-amber-950">Customer Rating: {req.customerRating.toFixed(1)} / 5.0</h4>
+                            <span className="text-amber-500 text-xs">
+                              {'★'.repeat(Math.round(req.customerRating))}
+                            </span>
+                          </div>
+                          {req.customerReview ? (
+                            <p className="text-xs text-amber-900 italic mt-0.5">"{req.customerReview}"</p>
+                          ) : (
+                            <p className="text-xs text-amber-800/80 mt-0.5">Service completed and verified by customer.</p>
+                          )}
+                        </div>
+                      </div>
+                      {req.ratedAt && (
+                        <span className="text-[11px] font-semibold text-amber-700/80">
+                          Rated on {new Date(req.ratedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3. DEDICATED TABS BAR */}
+                  <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs px-4 flex items-center gap-2 overflow-x-auto">
+                    {[
+                      { id: 'overview', label: 'Requirement & Customer Scope', icon: FileText },
+                      { id: 'media', label: `Damage Evidence (${media.length} items)`, icon: Camera },
+                      { id: 'quotes', label: `Vendor Quotes & Price Elevation (${vendorQuotesList.length})`, icon: Tag, highlight: vendorQuotesList.length > 0 },
+                      { id: 'timeline', label: 'Service Timeline & Audit', icon: Clock }
+                    ].map(tab => {
+                      const Icon = tab.icon;
+                      const isSel = requestDetailTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setRequestDetailTab(tab.id)}
+                          className={`py-3.5 px-3 border-b-2 text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+                            isSel
+                              ? 'border-slate-900 text-slate-900'
+                              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 ${isSel ? 'text-slate-900' : 'text-slate-400'}`} />
+                          <span>{tab.label}</span>
+                          {tab.highlight && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 4. TAB CONTENTS */}
+                  {/* TAB 1: OVERVIEW & CUSTOMER REQUIREMENT */}
+                  {requestDetailTab === 'overview' && (
+                    <div className="space-y-5">
+                      {/* Reported Damage Issue Box */}
+                      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-heading font-bold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-600" />
+                            <span>Customer Reported Problem & Damage Scope</span>
+                          </h3>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            isUrgent ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            Priority: {req.urgency || 'NORMAL'}
+                          </span>
+                        </div>
+                        <div className="p-4 bg-amber-50/50 border border-amber-200/80 rounded-xl text-slate-800 text-sm leading-relaxed font-normal">
+                          {req.issueDescription || 'No description provided by customer.'}
+                        </div>
+                      </div>
+
+                      {/* Client, Site Location & Audit Grid */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        {/* Customer & Site Location Card */}
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+                          <h3 className="font-heading font-bold text-sm text-slate-900 flex items-center gap-2">
+                            <Home className="w-4 h-4 text-primary-600" />
+                            <span>Property Scope & Site Address</span>
+                          </h3>
+
+                          <div className="space-y-3 text-xs">
+                            <div className="flex items-start justify-between py-2 border-b border-slate-100">
+                              <span className="text-slate-500">Customer Name:</span>
+                              <strong className="text-slate-900 font-semibold">{customerName}</strong>
+                            </div>
+                            <div className="flex items-start justify-between py-2 border-b border-slate-100">
+                              <span className="text-slate-500">Phone Contact:</span>
+                              <div className="flex items-center gap-2">
+                                <a href={`tel:${customerPhone}`} className="font-mono font-bold text-primary-600 hover:underline">
+                                  {customerPhone || 'N/A'}
+                                </a>
+                                {waLink && (
+                                  <a href={waLink} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 hover:bg-emerald-100 text-[10px]">
+                                    WhatsApp
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-start justify-between py-2 border-b border-slate-100">
+                              <span className="text-slate-500">Property Type:</span>
+                              <span className="font-semibold text-slate-800">{req.propertyType || 'Residential Villa / House'}</span>
+                            </div>
+                            <div className="flex items-start justify-between py-2 border-b border-slate-100">
+                              <span className="text-slate-500">Property Area / Scale:</span>
+                              <span className="font-semibold text-slate-800">{req.propertySize || 'Standard Area'}</span>
+                            </div>
+                            <div className="flex items-start justify-between py-2 border-b border-slate-100">
+                              <span className="text-slate-500">Requested Inspection Slot:</span>
+                              <span className="font-semibold text-slate-800">
+                                {req.preferredDate || 'Flexible'} {req.preferredTime ? `• ${req.preferredTime}` : ''}
+                              </span>
+                            </div>
+                            <div className="py-2 space-y-1">
+                              <span className="text-slate-500 block">Full Site Address:</span>
+                              <p className="font-medium text-slate-900 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                                {req.addressline || req.location || 'Site address not provided'}
+                              </p>
+                              {(req.addressline || req.location) && (
+                                <a
+                                  href={`https://maps.google.com/?q=${encodeURIComponent(req.addressline || req.location)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-600 hover:underline mt-1"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Open in Google Maps</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Column: Physical Site Audit & Assigned Contractor */}
+                        <div className="space-y-5">
+                          {/* Contractor Assignment Card */}
+                          <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-heading font-bold text-sm text-slate-900 flex items-center gap-2">
+                                <HardHat className="w-4 h-4 text-emerald-600" />
+                                <span>Assigned Project Contractor</span>
+                              </h3>
+                              {isProjectAwarded(req) ? (
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>Awarded</span>
+                                </span>
+                              ) : vendorQuotesList.length > 0 ? (
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1">
+                                  <Tag className="w-3 h-3 text-amber-600" />
+                                  <span>{vendorQuotesList.length} Quote{vendorQuotesList.length > 1 ? 's' : ''} Pending Award</span>
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                  Unassigned
+                                </span>
+                              )}
+                            </div>
+
+                            {isProjectAwarded(req) ? (
+                              <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-200/80 space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <h4 className="font-heading font-bold text-base text-slate-900">
+                                      {req.assignedVendorName || assignedVendor?.name || 'Assigned Contractor'}
+                                    </h4>
+                                    {assignedVendor && (
+                                      <p className="text-xs text-slate-600 font-medium">
+                                        {assignedVendor.specialization || 'Contractor'} • {assignedVendor.city || 'Hub'}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {req.assignedQuotePrice && (
+                                    <div className="text-right">
+                                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Awarded Bid</span>
+                                      <span className="font-mono font-bold text-base text-emerald-700">
+                                        ₹{Number(req.assignedQuotePrice).toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-emerald-200/60 text-xs">
+                                  {assignedVendor && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenVendorDetail(assignedVendor)}
+                                      className="px-3 py-1.5 rounded-lg font-bold bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                                    >
+                                      <span>View Contractor Profile</span>
+                                      <ExternalLink className="w-3 h-3 text-slate-500" />
+                                    </button>
+                                  )}
+                                  {assignedVendor?.phone && (
+                                    <a
+                                      href={`tel:${assignedVendor.phone}`}
+                                      className="px-3 py-1.5 rounded-lg font-bold bg-white hover:bg-slate-50 text-primary-700 border border-primary-200 flex items-center gap-1 transition-all"
+                                    >
+                                      <Phone className="w-3 h-3" />
+                                      <span>Call</span>
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ) : vendorQuotesList.length > 0 ? (
+                              <div className="p-4 bg-amber-50/40 rounded-xl border border-amber-200/80 space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <h4 className="font-heading font-bold text-sm text-amber-950 flex items-center gap-1.5">
+                                      <span>Contractor Quotations Under Admin Review</span>
+                                    </h4>
+                                    <p className="text-xs text-slate-600 mt-1">
+                                      {vendorQuotesList.length} contractor{vendorQuotesList.length > 1 ? 's have' : ' has'} quoted for this inspection. Contractor has not been awarded yet.
+                                    </p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-[10px] text-slate-500 block uppercase font-bold">Lowest Bid</span>
+                                    <span className="font-mono font-bold text-sm text-emerald-700">
+                                      ₹{Math.min(...vendorQuotesList.map(q => q.quotePrice)).toLocaleString('en-IN')}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between gap-2">
+                                  <span className="text-[11px] text-slate-500">
+                                    Review bids to select & award the winning contractor
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRequestDetailTab('quotes')}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>Review & Award</span>
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center space-y-2">
+                                <p className="text-xs text-slate-500 font-medium">
+                                  This project has not been awarded to a contractor yet.
+                                </p>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenShareVendorsModal(req)}
+                                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-2xs cursor-pointer"
+                                  >
+                                    + Share with Nearby Contractors
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Site Audit Status Card */}
+                          <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-heading font-bold text-sm text-slate-900 flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-amber-600" />
+                                <span>Physical On-Site Audit Inspection</span>
+                              </h3>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSiteAudit(req)}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                                  isAuditScheduled
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-400/20'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                }`}
+                              >
+                                {isAuditScheduled ? 'Audit: REQUIRED' : 'Mark Required'}
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              When marked required, senior civil engineers perform thermal crack detection and core moisture testing before finalizing the BOQ.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: EVIDENCE MEDIA & VIDEOS */}
+                  {requestDetailTab === 'media' && (
+                    <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-heading font-bold text-base text-slate-900">
+                            Customer Uploaded Site Evidence
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            High-definition damage photos and recorded videos submitted with request #{req.requestNumber}
+                          </p>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                          {media.length} Evidence {media.length === 1 ? 'Item' : 'Items'}
+                        </span>
+                      </div>
+
+                      {media.length === 0 ? (
+                        <div className="p-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 space-y-3">
+                          <Camera className="w-10 h-10 text-slate-300 mx-auto" />
+                          <h4 className="font-heading font-bold text-sm text-slate-700">No media evidence provided</h4>
+                          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                            Customer did not attach site photos or videos during submission. A physical site audit is recommended to assess repair requirements.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSiteAudit(req)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs cursor-pointer"
+                          >
+                            Schedule Physical Site Audit
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {/* Video Section (if any videos) */}
+                          {videoFiles.length > 0 && (
+                            <div className="space-y-3">
+                              <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                                <Video className="w-4 h-4 text-primary-600" />
+                                <span>Customer Recorded Videos ({videoFiles.length})</span>
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {videoFiles.map((vidUrl, idx) => (
+                                  <div key={idx} className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 shadow-sm space-y-2 p-2">
+                                    <video
+                                      src={vidUrl}
+                                      controls
+                                      className="w-full h-64 rounded-xl object-contain bg-black"
+                                      preload="metadata"
+                                    />
+                                    <div className="px-2 py-1 flex items-center justify-between text-xs text-slate-300">
+                                      <span className="font-semibold truncate">Video Evidence #{idx + 1}</span>
+                                      <a
+                                        href={vidUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[11px] font-bold text-primary-400 hover:underline flex items-center gap-1"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        <span>Full Screen</span>
+                                      </a>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Photos Section */}
+                          {photoFiles.length > 0 && (
+                            <div className="space-y-3">
+                              <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                                <Camera className="w-4 h-4 text-primary-600" />
+                                <span>High-Definition Damage Photos ({photoFiles.length})</span>
+                              </h4>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {photoFiles.map((photoUrl, idx) => (
+                                  <div
+                                    key={idx}
+                                    onClick={() => setActivePhotoModal({ photos: photoFiles, index: idx, title: `${req.requestNumber} Site Damage Photo #${idx + 1}` })}
+                                    className="group rounded-2xl overflow-hidden border-2 border-slate-200 hover:border-primary-500 bg-slate-100 cursor-pointer shadow-2xs hover:shadow-md transition-all relative aspect-square flex flex-col justify-end"
+                                  >
+                                    <img
+                                      src={photoUrl}
+                                      alt={`Damage evidence #${idx + 1}`}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80'; }}
+                                    />
+                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 via-slate-900/40 to-transparent p-2.5 flex items-center justify-between text-white">
+                                      <span className="text-xs font-bold">Photo #{idx + 1}</span>
+                                      <span className="p-1 rounded-md bg-white/20 hover:bg-white/40 transition-colors">
+                                        <Eye className="w-3.5 h-3.5" />
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 3: VENDOR QUOTATIONS & PRICE ELEVATION */}
+                  {requestDetailTab === 'quotes' && (
+                    <div className="space-y-5">
+                      {/* Price Elevation & Gross Margin Card */}
+                      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <h3 className="font-heading font-bold text-base text-slate-900 flex items-center gap-2">
+                              <Tag className="w-4 h-4 text-emerald-600" />
+                              <span>Vendor Quotations & Price Elevation Analysis</span>
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Compare competitive bids from verified local contractors against client BOQ estimates to protect profit margins.
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenShareVendorsModal(req)}
+                              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                              <span>Request More Bids</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStartQuote(req)}
+                              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Calculator className="w-3.5 h-3.5" />
+                              <span>{linkedBOQ ? 'Update Customer BOQ' : 'Create Customer BOQ'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Price Elevation Metrics Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Lowest Vendor Bid</span>
+                            <div className="font-mono font-bold text-lg text-emerald-700">
+                              {lowestVendorQuote ? `₹${lowestVendorQuote.toLocaleString('en-IN')}` : 'No Bids'}
+                            </div>
+                            <span className="text-[11px] text-slate-400">Best contractor price</span>
+                          </div>
+
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Highest Vendor Bid</span>
+                            <div className="font-mono font-bold text-lg text-slate-800">
+                              {highestVendorQuote ? `₹${highestVendorQuote.toLocaleString('en-IN')}` : '—'}
+                            </div>
+                            <span className="text-[11px] text-slate-400">Market ceiling</span>
+                          </div>
+
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Client BOQ Price</span>
+                            <div className="font-mono font-bold text-lg text-primary-700">
+                              {boqPrice ? `₹${boqPrice.toLocaleString('en-IN')}` : 'Pending'}
+                            </div>
+                            <span className="text-[11px] text-slate-400">Billable to customer</span>
+                          </div>
+
+                          <div className={`p-3.5 rounded-xl border space-y-1 ${
+                            grossMargin && grossMargin > 0
+                              ? 'bg-emerald-50/70 border-emerald-200'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Price Elevation / Margin</span>
+                            <div className="font-mono font-bold text-lg text-emerald-800">
+                              {grossMargin ? `₹${grossMargin.toLocaleString('en-IN')}` : '—'}
+                            </div>
+                            <span className="text-[11px] font-bold text-emerald-700">
+                              {grossMarginPct ? `+${grossMarginPct}% Gross Margin` : 'Awaiting BOQ Quote'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Vendor Quotations List Cards */}
+                      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-heading font-bold text-sm text-slate-900">
+                            Submitted Contractor Quotations ({vendorQuotesList.length})
+                          </h4>
+                          <span className="text-xs text-slate-500">
+                            Click 'Award Project' to lock in contractor and issue work order
+                          </span>
+                        </div>
+
+                        {vendorQuotesList.length === 0 ? (
+                          <div className="p-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 space-y-2">
+                            <Tag className="w-8 h-8 text-slate-300 mx-auto" />
+                            <h5 className="font-heading font-bold text-xs text-slate-700">No contractor quotes received yet</h5>
+                            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                              Click below to dispatch this inspection request to verified local contractors in {req.city || 'the area'}.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenShareVendorsModal(req)}
+                              className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs cursor-pointer"
+                            >
+                              + Share with Nearby Contractors
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {vendorQuotesList.map((vq, idx) => {
+                              const isAwarded = isProjectAwarded(req);
+                              const isWon = (vq.status === 'accepted' || vq.status === 'assigned') || (isAwarded && (req.assignedQuotePrice === vq.quotePrice || req.vendorId === vq.vendorId));
+                              const matchedVendor = vendors.find(v => v.id === vq.vendorId || v.name === vq.vendorName || v.businessName === vq.vendorBusiness);
+
+                              return (
+                                <div
+                                  key={vq.id || idx}
+                                  className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                                    isWon
+                                      ? 'border-emerald-500 bg-emerald-50/30 ring-2 ring-emerald-500/20 shadow-xs'
+                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs'
+                                  }`}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="flex items-center gap-1.5">
+                                          <h5 className="font-heading font-bold text-sm text-slate-900">
+                                            {vq.vendorBusiness || vq.vendorName || 'Connected Contractor'}
+                                          </h5>
+                                          {isWon && (
+                                            <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
+                                              AWARDED
+                                            </span>
+                                          )}
+                                        </div>
+                                        {matchedVendor && (
+                                          <p className="text-[11px] text-slate-500">
+                                            {matchedVendor.specialization || 'Contractor'} • ⭐ {matchedVendor.rating || 4.8}
+                                          </p>
+                                        )}
+                                      </div>
+
+                                      <div className="text-right">
+                                        <span className="font-mono font-bold text-xl text-emerald-700">
+                                          ₹{vq.quotePrice.toLocaleString('en-IN')}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 block">Bid Price</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Breakdown chips */}
+                                    <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-600">
+                                      <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">
+                                        ⏱️ {vq.proposedDays ? `${vq.proposedDays} Days Timeline` : '3-5 Days'}
+                                      </span>
+                                      {vq.materialsCost && (
+                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">
+                                          🧱 Materials: ₹{Number(vq.materialsCost).toLocaleString('en-IN')}
+                                        </span>
+                                      )}
+                                      {vq.laborCost && (
+                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">
+                                          👷 Labor: ₹{Number(vq.laborCost).toLocaleString('en-IN')}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {vq.notes && renderQuotationBreakdown(vq.notes)}
+                                  </div>
+
+                                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                      {matchedVendor && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenVendorDetail(matchedVendor)}
+                                          className="text-[11px] font-bold text-slate-700 hover:text-slate-900 underline cursor-pointer"
+                                        >
+                                          Vendor Profile
+                                        </button>
+                                      )}
+                                      {matchedVendor?.phone && (
+                                        <a
+                                          href={`tel:${matchedVendor.phone}`}
+                                          className="text-[11px] font-semibold text-primary-600 hover:underline ml-2"
+                                        >
+                                          Call: {matchedVendor.phone}
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    {isWon ? (
+                                      <span className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Winning Contractor</span>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAssignVendorFromQuote(vq, req)}
+                                        disabled={isAssigningFromQuotes}
+                                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <span>{isAssigningFromQuotes ? 'Awarding...' : 'Award Project'}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 4: SERVICE TIMELINE & AUDIT */}
+                  {requestDetailTab === 'timeline' && (
+                    <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-heading font-bold text-base text-slate-900">
+                            Service Lifecycle & Stage Tracker
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Real-time customer view milestone pipeline. Tap any stage to advance the inspection request.
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold text-primary-700 bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-200">
+                          Stage {getTimelineStepIndex(req.status) + 1} of 5
+                        </span>
+                      </div>
+
+                      {/* 5-Step Milestone Controller */}
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-primary-600 h-full transition-all duration-300"
+                            style={{ width: `${((getTimelineStepIndex(req.status) + 1) / 5) * 100}%` }}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                          {TIMELINE_STAGES.map((stg, idx) => {
+                            const currentIdx = getTimelineStepIndex(req.status);
+                            const isPast = idx < currentIdx;
+                            const isCurrent = idx === currentIdx;
+
+                            let btnStyle = 'bg-white text-slate-600 border-slate-200 hover:border-primary-400 hover:text-primary-600';
+                            if (isCurrent) {
+                              btnStyle = 'bg-primary-600 text-white border-primary-600 shadow-xs font-bold ring-2 ring-primary-500/20';
+                            } else if (isPast) {
+                              btnStyle = 'bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold';
+                            }
+
+                            return (
+                              <button
+                                key={stg.key}
+                                type="button"
+                                onClick={() => handleUpdateStatus(req.id, stg.key)}
+                                className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${btnStyle}`}
+                              >
+                                <div className="flex items-center justify-center">
+                                  {isPast ? (
+                                    <Check className="w-4 h-4 text-emerald-600" />
+                                  ) : (
+                                    <span className={`text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold ${
+                                      isCurrent ? 'bg-white text-primary-600' : 'bg-slate-100 text-slate-700'
+                                    }`}>
+                                      {stg.step}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs font-bold">{stg.label}</span>
+                                <span className="text-[10px] text-slate-400 line-clamp-1">{stg.desc}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
 
             return (
               <div className="space-y-5">
@@ -4578,7 +5860,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Operational Hub:</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1">
                     {availableCities.map(c => {
                       const isSel = requestsCityFilter === c;
                       const cCount = c === 'ALL'
@@ -4596,7 +5878,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                           }`}
                         >
-                          <span>{c === 'ALL' ? '🌐 All Cities' : `📍 ${c}`}</span>
+                          <span>{c === 'ALL' ? '🌐 All Hubs' : `📍 ${c}`}</span>
                           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
                             isSel ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                           }`}>
@@ -4606,6 +5888,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       );
                     })}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCityModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0 shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Hub</span>
+                  </button>
                 </div>
 
                 {/* Active Hub Alert Banner */}
@@ -4764,9 +6055,14 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             {/* Card Header: Request #, Urgency, Status */}
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono font-bold text-sm sm:text-base text-primary-600 tracking-wide">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenRequestDetail(req)}
+                                  className="font-mono font-bold text-sm sm:text-base text-primary-600 hover:text-primary-800 hover:underline tracking-wide cursor-pointer text-left"
+                                  title="Click to view full inspection requirement, photos & vendor details"
+                                >
                                   {req.requestNumber}
-                                </span>
+                                </button>
                                 <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                                   isUrgent
                                     ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
@@ -4780,15 +6076,31 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </span>
                                 )}
                               </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>
-                                {req.status}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenRequestDetail(req)}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                                  title="View full requirement, photos & vendor quotations"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Details</span>
+                                </button>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>
+                                  {req.status}
+                                </span>
+                                {req.customerRating && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200" title={req.customerReview || 'Customer rating'}>
+                                    <span className="text-amber-500">★</span> {req.customerRating.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {/* HIGH VISIBILITY: VENDOR QUOTATION ALERT CALLOUT */}
                             {(req.vendorQuotes || []).length > 0 && (
                               <div
-                                onClick={() => handleOpenVendorQuotesModal(req)}
+                                onClick={() => handleOpenRequestDetail(req, 'quotes')}
                                 className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-xl cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between gap-3 group"
                               >
                                 <div className="flex items-center gap-2.5">
@@ -4935,7 +6247,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   <HardHat className="w-3.5 h-3.5 text-primary-600" />
                                   <span>Vendor Quoting & Project Assignment:</span>
                                 </span>
-                                {req.assignedVendorName ? (
+                                {isProjectAwarded(req) ? (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -4946,8 +6258,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                     title="Click to view full contractor profile & KYC"
                                   >
                                     <CheckCircle2 className="w-3 h-3 text-success-600" />
-                                    <span>Assigned: {req.assignedVendorName}</span>
+                                    <span>Awarded: {req.assignedVendorName}</span>
                                     <ExternalLink className="w-2.5 h-2.5 text-success-600 ml-0.5" />
+                                  </button>
+                                ) : (req.vendorQuotes || []).length > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenRequestDetail(req, 'quotes')}
+                                    className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 transition-all cursor-pointer"
+                                    title="Click to review quotes and award contractor"
+                                  >
+                                    <Tag className="w-3 h-3 text-amber-600" />
+                                    <span>{(req.vendorQuotes || []).length} Quote{(req.vendorQuotes || []).length > 1 ? 's' : ''} Received (Pending Award)</span>
                                   </button>
                                 ) : (
                                   <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
@@ -4993,28 +6315,32 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                 </button>
                               </div>
 
-                              {req.assignedVendorName && req.assignedQuotePrice && (
+                              {isProjectAwarded(req) && req.assignedVendorName && req.assignedQuotePrice && (
                                 <div className="text-[11px] text-emerald-700 bg-emerald-50/70 px-2.5 py-1 rounded-lg border border-emerald-200/80 flex items-center justify-between">
                                   <span>Assigned Quote Price:</span>
-                                  <span className="font-mono font-bold">₹{req.assignedQuotePrice.toLocaleString('en-IN')}</span>
+                                  <span className="font-mono font-bold">₹{Number(req.assignedQuotePrice).toLocaleString('en-IN')}</span>
                                 </div>
                               )}
 
                               {/* Secondary Direct Select Dropdown */}
-                              <div className="pt-1 flex items-center gap-2">
-                                <select
-                                  value={req.vendorId || ''}
-                                  onChange={(e) => handleAssignVendorDirect(req.id, e.target.value)}
-                                  className="w-full text-[11px] font-semibold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                                >
-                                  <option value="">-- Or Direct Assign Connected Vendor --</option>
-                                  {vendors.map(v => (
-                                    <option key={v.id} value={v.id}>
-                                      {v.businessName || v.name} ({v.city || 'Regional'}) - {v.specialization || 'General'}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
+                              {!isProjectAwarded(req) && (
+                                <div className="pt-1 flex items-center gap-2">
+                                  <select
+                                    value={req.vendorId || ''}
+                                    onChange={(e) => {
+                                      if (e.target.value) handleAssignVendorDirect(req.id, e.target.value);
+                                    }}
+                                    className="w-full text-[11px] font-semibold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  >
+                                    <option value="">-- Or Direct Assign Connected Vendor --</option>
+                                    {vendors.map(v => (
+                                      <option key={v.id} value={v.id}>
+                                        {v.businessName || v.name} ({v.city || 'Regional'}) - {v.specialization || 'General'}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
                             </div>
 
                             {/* Interactive 5-Step Customer Timeline Stage Controller */}
@@ -5126,6 +6452,17 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </button>
                                 );
                               })()}
+
+                              {/* Open Dedicated Detail Page */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRequestDetail(req)}
+                                title="Open Full Inspection Details Page"
+                                className="px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-slate-600" />
+                                <span>Details</span>
+                              </button>
 
                               {/* Chat with Customer */}
                               <button
@@ -5642,9 +6979,14 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contractor Rating</span>
                       <div className="flex items-center gap-1 mt-1">
                         <span className="text-amber-500 text-base">★</span>
-                        <span className="text-lg font-mono font-extrabold text-slate-900">{selectedVendorDetail.rating || 4.8}</span>
+                        <span className="text-lg font-mono font-extrabold text-slate-900">
+                          {typeof selectedVendorDetail.rating === 'number' ? selectedVendorDetail.rating.toFixed(1) : (selectedVendorDetail.rating || '5.0')}
+                        </span>
                         <span className="text-xs text-slate-400">/ 5.0</span>
                       </div>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        {selectedVendorDetail.ratingsCount || (selectedVendorDetail.ratings || []).length || 0} reviews
+                      </span>
                     </div>
 
                     {/* Active Workload */}
@@ -5709,6 +7051,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       { id: 'jobs', label: 'Assigned Won Projects', icon: HardHat, count: (selectedVendorDetail.assignedJobs || []).length },
                       { id: 'quotes', label: 'Quotation History', icon: Tag, count: (selectedVendorDetail.vendorQuotes || []).length },
                       { id: 'shared', label: 'Shared Leads', icon: Share2, count: (selectedVendorDetail.sharedRequests || []).length },
+                      { id: 'ratings', label: 'Ratings & Reviews', icon: Star, count: (selectedVendorDetail.ratings || []).length },
                     ].map(tab => {
                       const isSel = vendorDetailTab === tab.id;
                       const Icon = tab.icon;
@@ -6066,6 +7409,75 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               >
                                 View in Requests
                               </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 6: CUSTOMER RATINGS & REVIEWS */}
+                  {vendorDetailTab === 'ratings' && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">Customer Ratings & Verified Feedback</h4>
+                          <p className="text-xs text-slate-500">Collected from customers upon completed jobs & direct bookings.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                            <span>★</span>
+                            <span>{typeof selectedVendorDetail.rating === 'number' ? selectedVendorDetail.rating.toFixed(1) : (selectedVendorDetail.rating || '5.0')} Average</span>
+                          </span>
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                            {(selectedVendorDetail.ratings || []).length} Reviews
+                          </span>
+                        </div>
+                      </div>
+
+                      {(selectedVendorDetail.ratings || []).length === 0 ? (
+                        <div className="bg-white p-8 rounded-xl border border-slate-200/90 text-center space-y-2">
+                          <Star className="w-8 h-8 text-amber-300 mx-auto" />
+                          <h5 className="font-bold text-slate-700 text-xs">No Customer Reviews Yet</h5>
+                          <p className="text-xs text-slate-400">Reviews and star ratings will automatically appear here once customers complete and rate their services.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(selectedVendorDetail.ratings || []).map((review) => (
+                            <div key={review.id} className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-sm ${star <= Math.round(review.rating) ? 'text-amber-400' : 'text-slate-200'}`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                  <span className="text-xs font-bold font-mono text-slate-800 ml-1">
+                                    {review.rating.toFixed(1)}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                  {review.serviceType === 'DIRECT_BOOKING' ? 'Direct Booking' : 'Inspection Job'}
+                                </span>
+                              </div>
+
+                              {review.review && (
+                                <p className="text-xs text-slate-700 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                  "{review.review}"
+                                </p>
+                              )}
+
+                              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-50">
+                                <span className="font-semibold text-slate-700">
+                                  {review.customerName} {review.customerPhone ? `(${review.customerPhone})` : ''}
+                                </span>
+                                <span>
+                                  {review.created_at ? new Date(review.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -7280,7 +8692,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
               {/* Commercials Form */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-3 border-t border-slate-100 text-xs">
                 <div className="lg:col-span-7 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <label className="block text-[11px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
                       <select value={builderTimeline} onChange={(e) => setBuilderTimeline(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
@@ -7300,6 +8712,30 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                         <option value="Structural Patchwork Scope">Structural Patchwork Scope</option>
                         <option value="Standard Maintenance Scope">Standard Maintenance Scope</option>
                       </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-medium text-slate-400 uppercase">
+                          Warranty (Optional)
+                        </label>
+                        {builderWarranty && (
+                          <button
+                            type="button"
+                            onClick={() => setBuilderWarranty('')}
+                            className="text-[10px] font-bold text-red-500 hover:underline"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={builderWarranty}
+                        onChange={(e) => setBuilderWarranty(e.target.value)}
+                        placeholder="Optional: e.g. 1 Year"
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      />
                     </div>
                   </div>
 
@@ -7415,7 +8851,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
 
                   <div className="pt-3 flex items-center gap-2">
-                    <button type="button" onClick={() => { setBuilderRequestId(''); setLineItems([{ item: '', qty: 1, unit: 'Sq Ft', rate: 0 }]); }} className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all">
+                    <button type="button" onClick={() => { setBuilderRequestId(''); setBuilderWarranty(''); setLineItems([{ item: '', qty: 1, unit: 'Sq Ft', rate: 0 }]); }} className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all">
                       Reset
                     </button>
                     <button type="button" onClick={handleIssueQuotation} className="flex-2 px-3.5 py-2 text-xs font-medium text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5">
@@ -8001,26 +9437,116 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               <td className="py-3.5 px-4">
                                 {b.technicianName ? (
                                   <div>
-                                    <div className="font-semibold text-slate-800 flex items-center gap-1">
-                                      <User className="w-3.5 h-3.5 text-success-600" />
+                                    <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                                      <HardHat className="w-3.5 h-3.5 text-emerald-600" />
                                       <span>{b.technicianName}</span>
+                                      <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.2 rounded border border-emerald-200">
+                                        Assigned
+                                      </span>
                                     </div>
-                                    <div className="text-[10px] text-success-700 font-semibold">{b.technicianRole || 'Field Specialist'}</div>
-                                    <div className="text-[11px] text-slate-400 font-mono">{b.technicianPhone}</div>
+                                    <div className="text-[10px] text-slate-500 font-medium truncate max-w-[210px]">{b.technicianRole || 'Authorized Contractor'}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                                      <Phone className="w-2.5 h-2.5 text-slate-400" />
+                                      <span>{b.technicianPhone}</span>
+                                    </div>
                                     <button
-                                      onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: b.technicianName || '', phone: b.technicianPhone || '', role: b.technicianRole || 'Senior Field Specialist' }); }}
-                                      className="text-[11px] text-brand-600 hover:text-brand-800 font-medium underline mt-0.5"
+                                      onClick={() => {
+                                        const matchedV = vendors.find(v => v.id === b.technicianId || v.phone === b.technicianPhone || v.name === b.technicianName);
+                                        setAssignTechModalBooking(b);
+                                        setTechForm({
+                                          vendorId: matchedV ? matchedV.id : '',
+                                          name: b.technicianName || matchedV?.name || '',
+                                          phone: b.technicianPhone || matchedV?.phone || '',
+                                          role: b.technicianRole || (matchedV ? `${matchedV.businessName || matchedV.name} • ${matchedV.specialization || 'Field Specialist'}` : 'Authorized Service Provider'),
+                                          rating: matchedV?.rating || 4.9,
+                                          businessName: matchedV?.businessName || '',
+                                          city: matchedV?.city || b.city || '',
+                                          documentsVerified: matchedV?.documentsVerified || false
+                                        });
+                                      }}
+                                      className="text-[11px] text-brand-600 hover:text-brand-800 font-medium underline mt-1 inline-flex items-center gap-1"
                                     >
-                                      Change Specialist
+                                      Change Vendor
                                     </button>
                                   </div>
                                 ) : (
-                                  <button
-                                    onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: '', phone: '', role: 'Senior Field Specialist' }); }}
-                                    className="px-2.5 py-1 text-xs font-semibold text-warning-800 bg-warning-50 hover:bg-warning-100 border border-warning-300 rounded-lg transition-all flex items-center gap-1.5"
-                                  >
-                                    <UserPlus className="w-3.5 h-3.5 text-warning-600" /> Assign Specialist
-                                  </button>
+                                  <div className="flex flex-col gap-1.5 min-w-[210px]">
+                                    <select
+                                      value=""
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '__modal__') {
+                                          const matchedV = vendors.find(v => v.phone === b.technicianPhone || v.name === b.technicianName);
+                                          setAssignTechModalBooking(b);
+                                          setTechForm({
+                                            vendorId: matchedV ? matchedV.id : '',
+                                            name: b.technicianName || matchedV?.name || '',
+                                            phone: b.technicianPhone || matchedV?.phone || '',
+                                            role: b.technicianRole || (matchedV ? `${matchedV.businessName || matchedV.name} • ${matchedV.specialization || 'Field Specialist'}` : 'Authorized Service Provider'),
+                                            rating: matchedV?.rating || 4.9,
+                                            businessName: matchedV?.businessName || '',
+                                            city: matchedV?.city || b.city || '',
+                                            documentsVerified: matchedV?.documentsVerified || false
+                                          });
+                                        } else if (val) {
+                                          handleQuickAssignBookingVendor(b.id, val);
+                                        }
+                                      }}
+                                      className="w-full text-xs font-semibold px-2.5 py-1.5 bg-amber-50/50 hover:bg-white border border-amber-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer transition-all shadow-2xs"
+                                    >
+                                      <option value="">-- Assign Authorized Vendor --</option>
+                                      {(() => {
+                                        const cityMatches = vendors.filter(v => v.status === 'active' && v.city?.toLowerCase() === b.city?.toLowerCase());
+                                        const others = vendors.filter(v => v.status === 'active' && v.city?.toLowerCase() !== b.city?.toLowerCase());
+                                        return (
+                                          <>
+                                            {cityMatches.length > 0 && (
+                                              <optgroup label={`Local Partners (${b.city || 'Local'})`}>
+                                                {cityMatches.map(v => (
+                                                  <option key={v.id} value={v.id}>
+                                                    ★ {v.name} - {v.businessName || v.specialization} ({v.phone})
+                                                  </option>
+                                                ))}
+                                              </optgroup>
+                                            )}
+                                            <optgroup label={cityMatches.length > 0 ? "All Registered Partners" : "Active Contractors"}>
+                                              {(cityMatches.length > 0 ? others : vendors.filter(v => v.status === 'active')).map(v => (
+                                                <option key={v.id} value={v.id}>
+                                                  {v.name} ({v.businessName || v.city}) - {v.phone}
+                                                </option>
+                                              ))}
+                                            </optgroup>
+                                          </>
+                                        );
+                                      })()}
+                                      <option value="__modal__">📋 Open Assignment Modal...</option>
+                                    </select>
+                                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                      <span className="text-amber-600 font-semibold flex items-center gap-1">
+                                        <AlertTriangle className="w-2.5 h-2.5" /> Pending Assignment
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const matchedV = vendors.find(v => v.phone === b.technicianPhone || v.name === b.technicianName);
+                                          setAssignTechModalBooking(b);
+                                          setTechForm({
+                                            vendorId: matchedV ? matchedV.id : '',
+                                            name: b.technicianName || matchedV?.name || '',
+                                            phone: b.technicianPhone || matchedV?.phone || '',
+                                            role: b.technicianRole || (matchedV ? `${matchedV.businessName || matchedV.name} • ${matchedV.specialization || 'Field Specialist'}` : 'Authorized Service Provider'),
+                                            rating: matchedV?.rating || 4.9,
+                                            businessName: matchedV?.businessName || '',
+                                            city: matchedV?.city || b.city || '',
+                                            documentsVerified: matchedV?.documentsVerified || false
+                                          });
+                                        }}
+                                        className="text-brand-600 hover:text-brand-800 underline font-medium"
+                                      >
+                                        Modal view
+                                      </button>
+                                    </div>
+                                  </div>
                                 )}
                               </td>
 
@@ -8030,15 +9556,22 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                     REFUNDED (₹{b.refundAmount})
                                   </span>
                                 ) : (
-                                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full border ${
-                                    b.status === 'CONFIRMED' ? 'bg-warning-50 text-warning-800 border-warning-200' :
-                                    b.status === 'ASSIGNED' ? 'bg-primary-50 text-primary-800 border-primary-200' :
-                                    b.status === 'IN_PROGRESS' ? 'bg-primary-50 text-primary-800 border-primary-200' :
-                                    b.status === 'COMPLETED' ? 'bg-success-50 text-success-800 border-success-200' :
-                                    'bg-slate-100 text-slate-600 border-slate-200'
-                                  }`}>
-                                    {b.status}
-                                  </span>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full border ${
+                                      b.status === 'CONFIRMED' ? 'bg-warning-50 text-warning-800 border-warning-200' :
+                                      b.status === 'ASSIGNED' ? 'bg-primary-50 text-primary-800 border-primary-200' :
+                                      b.status === 'IN_PROGRESS' ? 'bg-primary-50 text-primary-800 border-primary-200' :
+                                      b.status === 'COMPLETED' ? 'bg-success-50 text-success-800 border-success-200' :
+                                      'bg-slate-100 text-slate-600 border-slate-200'
+                                    }`}>
+                                      {b.status}
+                                    </span>
+                                    {b.customerRating && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title={b.customerReview || 'Customer rating'}>
+                                        <span className="text-amber-500">★</span> {b.customerRating.toFixed(1)}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </td>
 
@@ -8061,11 +9594,24 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                   </button>
 
                                   <button
-                                    onClick={() => { setAssignTechModalBooking(b); setTechForm({ name: b.technicianName || '', phone: b.technicianPhone || '' }); }}
-                                    title="Assign / Change Technician"
+                                    onClick={() => {
+                                      const matchedV = vendors.find(v => v.id === b.technicianId || v.phone === b.technicianPhone || v.name === b.technicianName);
+                                      setAssignTechModalBooking(b);
+                                      setTechForm({
+                                        vendorId: matchedV ? matchedV.id : '',
+                                        name: b.technicianName || matchedV?.name || '',
+                                        phone: b.technicianPhone || matchedV?.phone || '',
+                                        role: b.technicianRole || (matchedV ? `${matchedV.businessName || matchedV.name} • ${matchedV.specialization || 'Field Specialist'}` : 'Authorized Service Provider'),
+                                        rating: matchedV?.rating || 4.9,
+                                        businessName: matchedV?.businessName || '',
+                                        city: matchedV?.city || b.city || '',
+                                        documentsVerified: matchedV?.documentsVerified || false
+                                      });
+                                    }}
+                                    title="Assign / Change Vendor"
                                     className="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-slate-100 transition-all"
                                   >
-                                    <User className="w-4 h-4" />
+                                    <HardHat className="w-4 h-4" />
                                   </button>
 
                                   <button
@@ -8332,7 +9878,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">City:</span>
-                    {['ALL', 'Udaipur', 'Bhilwara'].map(city => (
+                    {['ALL', ...operationalCities.filter(c => c.isActive !== false).map(c => c.name)].map(city => (
                       <button
                         key={city}
                         onClick={() => setActivityCityFilter(city)}
@@ -11287,166 +12833,178 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         </div>
       )}
 
-      {/* 2. ASSIGN TECHNICIAN MODAL */}
+      {/* 2. ASSIGN TECHNICIAN / AUTHORIZED VENDOR MODAL */}
       {assignTechModalBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="font-heading font-bold text-base text-slate-800 flex items-center gap-2">
-                  <HardHat className="w-5 h-5 text-brand-600" />
-                  <span>Assign Service Provider / Vendor</span>
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <span>Assign Authorized Vendor / Partner</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Select a registered local vendor to execute booking <span className="font-mono text-brand-600 font-semibold">{assignTechModalBooking.bookingNumber}</span>
+                  Instant Service Booking: <span className="font-mono text-brand-600 font-bold">{assignTechModalBooking.bookingNumber}</span> • Only verified vendors
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setAssignTechModalBooking(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="my-3 p-3 bg-slate-50 rounded-xl text-xs space-y-1 text-slate-600 border border-slate-200/80">
-              <div><strong className="text-slate-800">Sub-Service:</strong> {assignTechModalBooking.subServiceName} ({assignTechModalBooking.serviceName})</div>
-              <div><strong className="text-slate-800">Customer:</strong> {assignTechModalBooking.customerName} ({assignTechModalBooking.customerPhone})</div>
-              <div><strong className="text-slate-800">Site Address:</strong> {assignTechModalBooking.customerAddress}, {assignTechModalBooking.city}</div>
-              <div><strong className="text-slate-800">Scheduled:</strong> {assignTechModalBooking.scheduledDate} ({assignTechModalBooking.scheduledSlot})</div>
+            {/* Booking Details Summary */}
+            <div className="my-3.5 p-3.5 bg-slate-50 rounded-xl text-xs space-y-1.5 text-slate-600 border border-slate-200/80">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  {assignTechModalBooking.subServiceName} ({assignTechModalBooking.serviceName})
+                </span>
+                <span className="font-mono font-bold text-slate-800">
+                  ₹{assignTechModalBooking.onlinePaidAmount || assignTechModalBooking.visitingCharge} (Pre-Paid)
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block">Customer:</span>
+                  <span className="font-semibold text-slate-800">{assignTechModalBooking.customerName}</span> ({assignTechModalBooking.customerPhone})
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Scheduled Time:</span>
+                  <span className="font-medium text-slate-800">{assignTechModalBooking.scheduledDate} ({assignTechModalBooking.scheduledSlot})</span>
+                </div>
+              </div>
+              <div className="text-[11px] pt-1 border-t border-slate-200/60">
+                <span className="text-slate-400">Site Location:</span>{' '}
+                <span className="font-medium text-slate-700">{assignTechModalBooking.customerAddress}, {assignTechModalBooking.city}</span>
+              </div>
             </div>
 
-            <form onSubmit={handleAssignTechnician} className="space-y-3.5">
+            <form onSubmit={handleAssignTechnician} className="space-y-4">
+              {/* Authorized Vendor Selection Dropdown */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[11px] font-semibold text-slate-600 uppercase">
-                    Connected Vendors &amp; Providers ({assignTechModalBooking.city})
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Authorized Vendor Dropdown *
                   </label>
-                  <span className="text-[10px] text-slate-400">1-Click Selection</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" /> KYC Verified Only
+                  </span>
                 </div>
 
-                {/* Dynamic Vendor Cards */}
-                {(() => {
-                  const cityMatchVendors = vendors.filter(v =>
-                    v.status === 'active' &&
-                    (v.city?.toLowerCase() === assignTechModalBooking.city?.toLowerCase() || !assignTechModalBooking.city)
-                  );
-                  const availableList = cityMatchVendors.length > 0 ? cityMatchVendors : vendors.filter(v => v.status === 'active');
-
-                  if (availableList.length === 0) {
-                    return (
-                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 mb-2">
-                        No active registered vendors found in {assignTechModalBooking.city}. Enter custom provider details below.
-                      </div>
+                <select
+                  value={techForm.vendorId || ''}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const v = vendors.find(vnd => vnd.id === selectedId);
+                    if (v) {
+                      setTechForm({
+                        vendorId: v.id,
+                        name: v.name,
+                        phone: v.phone,
+                        role: `${v.businessName || v.name} • ${v.specialization || 'Authorized Specialist'}`,
+                        rating: v.rating || 4.9,
+                        businessName: v.businessName || '',
+                        city: v.city || '',
+                        documentsVerified: v.documentsVerified || false
+                      });
+                    } else {
+                      setTechForm({ vendorId: '', name: '', phone: '', role: '', rating: 4.9, businessName: '', city: '', documentsVerified: false });
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 bg-white text-xs sm:text-sm font-semibold border-2 border-brand-500/80 rounded-xl outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20 shadow-xs cursor-pointer text-slate-800"
+                >
+                  <option value="">-- Choose Authorized Vendor / Contractor --</option>
+                  {(() => {
+                    const cityMatches = vendors.filter(v =>
+                      v.status === 'active' &&
+                      v.city?.toLowerCase() === assignTechModalBooking.city?.toLowerCase()
                     );
-                  }
+                    const others = vendors.filter(v =>
+                      v.status === 'active' &&
+                      v.city?.toLowerCase() !== assignTechModalBooking.city?.toLowerCase()
+                    );
+                    return (
+                      <>
+                        {cityMatches.length > 0 && (
+                          <optgroup label={`⭐ Recommended Local Partners in ${assignTechModalBooking.city} (${cityMatches.length})`}>
+                            {cityMatches.map(v => (
+                              <option key={v.id} value={v.id}>
+                                {v.businessName || v.name} • {v.name} ({v.phone}) — ★ {v.rating || 4.9}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label={`All Other Authorized Contractors (${(cityMatches.length > 0 ? others : vendors.filter(v => v.status === 'active')).length})`}>
+                          {(cityMatches.length > 0 ? others : vendors.filter(v => v.status === 'active')).map(v => (
+                            <option key={v.id} value={v.id}>
+                              {v.businessName || v.name} ({v.city || 'Regional'}) • {v.phone} — ★ {v.rating || 4.9}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </>
+                    );
+                  })()}
+                </select>
+              </div>
 
-                  return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 max-h-48 overflow-y-auto pr-1">
-                      {availableList.map(v => {
-                        const isSelected = techForm.phone === v.phone || techForm.name === v.name;
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            onClick={() => setTechForm({
-                              name: v.name,
-                              phone: v.phone,
-                              role: `${v.businessName || v.name} • ${v.specialization || 'Field Specialist'}`
-                            })}
-                            className={`text-left p-2.5 rounded-xl border text-xs transition-all flex flex-col justify-between ${
-                              isSelected
-                                ? 'border-brand-500 bg-brand-50/90 text-brand-900 font-semibold ring-2 ring-brand-400/40 shadow-xs'
-                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-1 mb-1">
-                              <div>
-                                <div className="font-bold text-[12px] text-slate-800 leading-tight">
-                                  {v.businessName || v.name}
-                                </div>
-                                <div className="text-[10.5px] text-slate-500 font-medium">
-                                  Contact: {v.name}
-                                </div>
-                              </div>
-                              <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                ★ {v.rating || 4.8}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100 mt-1">
-                              <span className="truncate max-w-[140px] text-brand-700 font-medium">
-                                {v.specialization || 'General Repair'}
-                              </span>
-                              <span className="font-mono text-slate-500 font-semibold">
-                                {v.city}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })}
+              {/* Selected Authorized Vendor Details Confirmation Card */}
+              {techForm.vendorId || techForm.name ? (
+                <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 text-xs space-y-1.5 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10.5px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      Selected Authorized Contractor
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200">
+                      ★ {techForm.rating || 4.9} Rating
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-slate-700 pt-0.5">
+                    <div>
+                      <span className="text-[10.5px] text-slate-400 block">Contractor Name:</span>
+                      <strong className="text-slate-800 text-[12px]">{techForm.name}</strong>
                     </div>
-                  );
-                })()}
-              </div>
+                    <div>
+                      <span className="text-[10.5px] text-slate-400 block">WhatsApp / Phone:</span>
+                      <strong className="text-slate-800 font-mono text-[12px]">{techForm.phone}</strong>
+                    </div>
+                  </div>
+                  <div className="text-[10.5px] text-slate-600 pt-0.5">
+                    <span className="text-slate-400">Designation / Role:</span> {techForm.role}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    कृपया ऊपर दिए गए ड्रॉपडाउन से अधिकृत वेंडर (Authorized Vendor) चुनें। केवल वेरीफाइड और रजिस्टर्ड वेंडर्स को ही असाइन किया जा सकता है।
+                  </span>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Service Provider / Contractor Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={techForm.name}
-                  onChange={(e) => setTechForm({ ...techForm, name: e.target.value })}
-                  placeholder="e.g. Rajesh Kumar"
-                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Business / Role Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={techForm.role || ''}
-                  onChange={(e) => setTechForm({ ...techForm, role: e.target.value })}
-                  placeholder="e.g. Rajesh Construction &amp; Repairs • Waterproofing Specialist"
-                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Provider Mobile Phone (for WhatsApp dispatch) *
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={techForm.phone}
-                  onChange={(e) => setTechForm({ ...techForm, phone: e.target.value })}
-                  placeholder="e.g. +91 98765 43210"
-                  className="w-full px-3 py-2 bg-slate-50 text-sm border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-brand-500 font-mono"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setAssignTechModalBooking(null)}
-                  className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
+                  className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-sm flex items-center gap-1.5"
+                  disabled={!techForm.name || !techForm.phone}
+                  className={`px-4 py-2 text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all ${
+                    techForm.name && techForm.phone
+                      ? 'bg-brand-600 hover:bg-brand-700 text-white cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Confirm &amp; Assign Provider</span>
+                  <span>Confirm &amp; Assign Authorized Vendor</span>
                 </button>
               </div>
             </form>
@@ -11911,16 +13469,22 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Assigned Service Provider / Vendor</div>
                   <button
                     onClick={() => {
+                      const matchedV = vendors.find(v => v.id === selectedBookingForDrawer.technicianId || v.phone === selectedBookingForDrawer.technicianPhone || v.name === selectedBookingForDrawer.technicianName);
                       setAssignTechModalBooking(selectedBookingForDrawer);
                       setTechForm({
-                        name: selectedBookingForDrawer.technicianName || '',
-                        phone: selectedBookingForDrawer.technicianPhone || '',
-                        role: selectedBookingForDrawer.technicianRole || 'Authorized Service Provider'
+                        vendorId: matchedV ? matchedV.id : '',
+                        name: selectedBookingForDrawer.technicianName || matchedV?.name || '',
+                        phone: selectedBookingForDrawer.technicianPhone || matchedV?.phone || '',
+                        role: selectedBookingForDrawer.technicianRole || (matchedV ? `${matchedV.businessName || matchedV.name} • ${matchedV.specialization || 'Field Specialist'}` : 'Authorized Service Provider'),
+                        rating: matchedV?.rating || 4.9,
+                        businessName: matchedV?.businessName || '',
+                        city: matchedV?.city || selectedBookingForDrawer.city || '',
+                        documentsVerified: matchedV?.documentsVerified || false
                       });
                     }}
-                    className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+                    className="text-xs font-semibold text-brand-600 hover:text-brand-700 underline"
                   >
-                    {selectedBookingForDrawer.technicianName ? 'Change Provider' : 'Assign Provider'}
+                    {selectedBookingForDrawer.technicianName ? 'Change Authorized Vendor' : 'Assign Authorized Vendor'}
                   </button>
                 </div>
                 {selectedBookingForDrawer.technicianName ? (
@@ -11954,6 +13518,34 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   <div className="text-xs text-slate-400 italic">No service provider assigned yet. Tap "Assign Provider" above to dispatch a local vendor.</div>
                 )}
               </div>
+
+              {/* Customer Rating & Review Card */}
+              {selectedBookingForDrawer.customerRating && (
+                <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>Customer Verified Rating</span>
+                    </span>
+                    <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <span key={star} className={`text-xs ${star <= Math.round(selectedBookingForDrawer.customerRating) ? 'text-amber-500' : 'text-amber-200'}`}>★</span>
+                      ))}
+                      <span className="font-mono ml-1">{selectedBookingForDrawer.customerRating.toFixed(1)}/5.0</span>
+                    </span>
+                  </div>
+                  {selectedBookingForDrawer.customerReview && (
+                    <p className="text-xs text-amber-950 italic bg-white/70 p-2.5 rounded-lg border border-amber-200/50">
+                      "{selectedBookingForDrawer.customerReview}"
+                    </p>
+                  )}
+                  {selectedBookingForDrawer.ratedAt && (
+                    <div className="text-[10px] text-amber-700/80">
+                      Submitted on {new Date(selectedBookingForDrawer.ratedAt).toLocaleString('en-IN')}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Status History & Audit Timeline */}
               {selectedBookingForDrawer.statusHistory && Array.isArray(selectedBookingForDrawer.statusHistory) && (
@@ -12743,8 +14335,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 >
                   <option value="ALL">All Operational Hubs</option>
-                  {['Udaipur', 'Bhilwara', 'Jaipur', 'Dehradun', 'Rishikesh', 'Jaisalmer'].map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {operationalCities.filter(c => c.isActive !== false).map(c => (
+                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -12957,7 +14549,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
               const quotes = quotesModalList || [];
               const minPrice = quotes.length > 0 ? Math.min(...quotes.map(q => q.quotePrice)) : 0;
               const maxPrice = quotes.length > 0 ? Math.max(...quotes.map(q => q.quotePrice)) : 0;
-              const isAssigned = !!quotesModalRequest.assignedVendorName;
+              const isAssigned = isProjectAwarded(quotesModalRequest);
 
               return (
                 <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
@@ -13018,7 +14610,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 quotesModalList.map((q, idx) => {
                   const minPrice = Math.min(...quotesModalList.map(item => item.quotePrice));
                   const isLowest = q.quotePrice === minPrice;
-                  const isCurrentlyAssigned = quotesModalRequest.vendorId === q.vendorId || q.status === 'accepted' || q.status === 'assigned';
+                  const isCurrentlyAssigned = q.status === 'accepted' || q.status === 'assigned' || (isProjectAwarded(quotesModalRequest) && quotesModalRequest.vendorId === q.vendorId);
 
                   return (
                     <div
@@ -13063,11 +14655,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           <span>Timeline: <strong className="text-slate-700">{q.estimatedTimeline || '1-2 Days'}</strong></span>
                         </div>
 
-                        {q.notes && (
-                          <div className="p-2.5 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed border border-slate-200/80">
-                            <strong className="text-slate-800">Scope Notes:</strong> {q.notes}
-                          </div>
-                        )}
+                        {q.notes && renderQuotationBreakdown(q.notes)}
                       </div>
 
                       <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
@@ -13122,6 +14710,97 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ADD CITY HUB MODAL ==================== */}
+      {cityModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-heading font-bold text-base text-slate-900">Add New Hipro Service Hub</h3>
+                <p className="text-xs text-slate-500">Enable civil construction and repair operations in a new city</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCityModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCity} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">City Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Jodhpur, Kota, Ajmer"
+                  value={cityForm.name}
+                  onChange={(e) => setCityForm({ ...cityForm, name: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">State / Region *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rajasthan, Uttarakhand"
+                  value={cityForm.state}
+                  onChange={(e) => setCityForm({ ...cityForm, state: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Operational Tagline</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Blue City • Sun City & Heritage Projects"
+                  value={cityForm.tagline}
+                  onChange={(e) => setCityForm({ ...cityForm, tagline: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Hub Status Badge</label>
+                <select
+                  value={cityForm.badge}
+                  onChange={(e) => setCityForm({ ...cityForm, badge: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
+                >
+                  <option value="ACTIVE HUB">ACTIVE HUB</option>
+                  <option value="HEADQUARTERS">HEADQUARTERS</option>
+                  <option value="METRO HUB">METRO HUB</option>
+                  <option value="EXPANDING">EXPANDING</option>
+                  <option value="POPULAR">POPULAR</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCityModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCity}
+                  className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                >
+                  {isSavingCity ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>Save City Hub</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

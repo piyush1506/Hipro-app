@@ -4,7 +4,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const prisma = require('../prisma');
 const { addNotification } = require('./notifications');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin, optionalAuth } = require('../middleware/auth');
 
 // ==========================================
 // VALID STATUS TRANSITIONS (Bug #9 fix)
@@ -912,6 +912,162 @@ router.patch('/:id/additional-work', authenticate, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ==========================================
+// 8. POST /api/v1/direct-bookings/:id/rate
+// Customer rates completed service & vendor
+// ==========================================
+router.post('/:id/rate', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, review } = req.body;
+
+    const numRating = parseFloat(rating);
+    if (isNaN(numRating) || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid rating between 1 and 5 stars' });
+    }
+
+    const booking = await prisma.directBooking.findFirst({
+      where: {
+        OR: [{ id }, { bookingNumber: id }]
+      },
+      include: { service: true, subService: true }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    // Must be COMPLETED
+    if (booking.status !== 'COMPLETED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating can only be submitted after the service has been completed'
+      });
+    }
+
+    // Ownership check (admin can bypass)
+    const isAdmin = req.user && (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN');
+    if (!isAdmin && req.user && booking.userId && booking.userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You are not authorized to rate this booking' });
+    }
+
+    const customerName = req.user?.name || booking.customerName || 'Valued Customer';
+    const customerPhone = req.user?.phone || booking.customerPhone || null;
+
+    // Resolve assigned Vendor (technician)
+    let vendor = null;
+    if (booking.technicianId) {
+      vendor = await prisma.vendor.findUnique({ where: { id: booking.technicianId } }).catch(() => null);
+    }
+    if (!vendor && booking.technicianPhone) {
+      vendor = await prisma.vendor.findFirst({
+        where: { phone: booking.technicianPhone }
+      }).catch(() => null);
+    }
+    if (!vendor && booking.technicianName) {
+      vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { name: { equals: booking.technicianName, mode: 'insensitive' } },
+            { businessName: { equals: booking.technicianName, mode: 'insensitive' } }
+          ]
+        }
+      }).catch(() => null);
+    }
+
+    let vendorRatingRecord = null;
+    if (vendor) {
+      // Check if a rating already exists for this booking
+      const existingVendorRating = await prisma.vendorRating.findFirst({
+        where: {
+          vendorId: vendor.id,
+          bookingId: booking.id
+        }
+      });
+
+      if (existingVendorRating) {
+        vendorRatingRecord = await prisma.vendorRating.update({
+          where: { id: existingVendorRating.id },
+          data: {
+            rating: numRating,
+            review: review ? String(review).trim() : null,
+            customerName,
+            customerPhone
+          }
+        });
+      } else {
+        vendorRatingRecord = await prisma.vendorRating.create({
+          data: {
+            vendorId: vendor.id,
+            userId: req.user?.id || booking.userId || null,
+            customerName,
+            customerPhone,
+            rating: numRating,
+            review: review ? String(review).trim() : null,
+            serviceType: 'DIRECT_BOOKING',
+            bookingId: booking.id,
+            bookingNumber: booking.bookingNumber
+          }
+        });
+      }
+
+      // Recalculate dynamic average rating and ratingsCount
+      const allRatings = await prisma.vendorRating.findMany({
+        where: { vendorId: vendor.id },
+        select: { rating: true }
+      });
+
+      const avg = allRatings.length > 0
+        ? Number((allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length).toFixed(1))
+        : numRating;
+
+      await prisma.vendor.update({
+        where: { id: vendor.id },
+        data: {
+          rating: avg,
+          ratingsCount: allRatings.length
+        }
+      });
+    }
+
+    // Update DirectBooking record
+    const updatedBooking = await prisma.directBooking.update({
+      where: { id: booking.id },
+      data: {
+        customerRating: numRating,
+        customerReview: review ? String(review).trim() : null,
+        ratedAt: new Date()
+      },
+      include: { service: true, subService: true }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin_room').emit('direct_booking_updated', {
+        action: 'BOOKING_RATED',
+        booking: updatedBooking
+      });
+      if (vendor) {
+        io.emit('vendor_rating_updated', {
+          vendorId: vendor.id,
+          rating: numRating,
+          review: review || null
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Thank you for your rating and review!',
+      booking: updatedBooking,
+      vendorRating: vendorRatingRecord
+    });
+  } catch (error) {
+    console.error('Error rating direct booking:', error);
+    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
   }
 });
 

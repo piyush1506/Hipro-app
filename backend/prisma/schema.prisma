@@ -118,6 +118,11 @@ model ServiceRequest {
     vendorQuotes     VendorQuote[]
     sharedVendors    VendorSharedRequest[]
 
+    // Customer Service Rating & Review
+    customerRating   Float?      // Customer star rating (1 to 5) after service completion
+    customerReview   String?     // Customer review feedback
+    ratedAt          DateTime?   // Timestamp when customer rated
+
     created_at       DateTime     @default(now())  
     updated_at       DateTime     @default(now()) @updatedAt
 }
@@ -202,6 +207,11 @@ model DirectBooking {
     refundReason         String?
     refundArn            String?
     refundedAt           DateTime?
+
+    // Customer Service Rating & Review
+    customerRating       Float?      // Customer star rating (1 to 5) after service completion
+    customerReview       String?     // Customer review feedback
+    ratedAt              DateTime?   // Timestamp when customer rated
 
     created_at           DateTime    @default(now())
     updated_at           DateTime    @default(now()) @updatedAt
@@ -405,6 +415,7 @@ model Vendor {
     maxConcurrentJobs Int      @default(5)        // Max active jobs vendor can handle at once
     currentJobCount   Int        @default(0)      // Current active assigned jobs
     rating          Float    @default(0.0)
+    ratingsCount    Int      @default(0)
     minCharge       Float    @default(0.0)
     imageUrl        String?
 
@@ -422,6 +433,7 @@ model Vendor {
     vendorQuotes    VendorQuote[]
     assignedJobs    ServiceRequest[] @relation("VendorAssignedJobs")
     sharedRequests  VendorSharedRequest[]
+    ratings         VendorRating[]
 
     @@index([category])
     @@index([city])
@@ -469,4 +481,23 @@ model VendorSharedRequest {
     @@index([requestId])
     @@index([vendorId])
     @@index([status])
+}
+
+// Vendor Ratings & Customer Reviews
+model VendorRating {
+    id            String         @id @default(uuid())
+    vendorId      String
+    vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+    userId        String?
+    customerName  String
+    customerPhone String?
+    rating        Float          // 1.0 to 5.0
+    review        String?
+    serviceType   String         // "DIRECT_BOOKING" | "SERVICE_REQUEST"
+    bookingId     String?        // ID of DirectBooking or ServiceRequest
+    bookingNumber String?        // e.g. HIP-1001 or REQ-1793881172546
+    created_at    DateTime       @default(now())
+
+    @@index([vendorId])
+    @@index([bookingId])
 }

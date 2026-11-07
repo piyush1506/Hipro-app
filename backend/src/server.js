@@ -139,6 +139,7 @@ app.use('/uploads', (req, res, next) => {
 app.use('/uploads', express.static(uploadDir));
 
 // API Routes
+app.use('/api/v1/cities', require('./routes/cities'));
 app.use('/api/v1/services', require('./routes/services'));
 app.use('/api/v1/requests', require('./routes/requests'));
 app.use('/api/v1/inspections', require('./routes/requests'));

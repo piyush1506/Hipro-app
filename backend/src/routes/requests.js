@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin, optionalAuth } = require('../middleware/auth');
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   console.error('⛔ FATAL: JWT_SECRET environment variable is not set. Request auth will fail.');
@@ -988,25 +988,46 @@ router.patch('/:id/share-vendor', authenticate, requireAdmin, async (req, res) =
       });
     }
 
-    // Share the request with the vendor and mark it open for vendor quotation.
-    // Customer contact/address and technician details are intentionally NOT shared.
+    // Share the request with the vendor for bidding (Upsert VendorSharedRequest)
+    // IMPORTANT: Customer contact/address and technician details are intentionally NOT shared.
+    // Do NOT set vendorId or assignedVendorName on the serviceRequest, because sharing
+    // an inquiry is strictly an invitation to quote, NOT awarding the job!
+    await prisma.vendorSharedRequest.upsert({
+      where: {
+        requestId_vendorId: {
+          requestId: id,
+          vendorId
+        }
+      },
+      update: {
+        notes: notes || undefined,
+        sharedBy: assignedBy || 'Super Admin'
+      },
+      create: {
+        requestId: id,
+        vendorId,
+        notes: notes || null,
+        sharedBy: assignedBy || 'Super Admin',
+        status: 'PENDING'
+      }
+    });
+
+    // Advance status to QUOTE_REQUESTED if currently SUBMITTED or ESTIMATING
+    let nextStatus = request.status;
+    if (['SUBMITTED', 'ESTIMATING'].includes((request.status || '').toUpperCase())) {
+      nextStatus = 'QUOTE_REQUESTED';
+    }
+
     const updatedRequest = await prisma.serviceRequest.update({
       where: { id },
       data: {
-        vendorId,
-        cityId: vendor.cityId || request.cityId,
-        assignedVendorName: vendorName,
-        assignedQuotePrice: quotePrice ? parseFloat(quotePrice) : null,
-        assignedBy: assignedBy || 'Super Admin',
-        status: 'QUOTE_REQUESTED',
+        status: nextStatus
       },
-      include: { vendor: true }
-    });
-
-    // Increment vendor's active job count
-    await prisma.vendor.update({
-      where: { id: vendorId },
-      data: { currentJobCount: { increment: 1 } }
+      include: {
+        vendor: true,
+        vendorQuotes: true,
+        sharedVendors: true
+      }
     });
 
     // Notify admin room and broadcast status update
@@ -1208,5 +1229,165 @@ const updateRequestHandler = async (req, res) => {
 
 router.put('/:id', authenticate, upload.array('damageImages', 10), updateRequestHandler);
 router.patch('/:id', authenticate, upload.array('damageImages', 10), updateRequestHandler);
+
+// ==========================================
+// POST /api/v1/requests/:id/rate
+// Customer rates completed service request & vendor
+// ==========================================
+router.post('/:id/rate', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, review } = req.body;
+
+    const numRating = parseFloat(rating);
+    if (isNaN(numRating) || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid rating between 1 and 5 stars' });
+    }
+
+    const request = await prisma.serviceRequest.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        vendor: true,
+        vendorQuotes: true
+      }
+    });
+
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+
+    // Must be COMPLETED or WORK_DONE
+    if (request.status !== 'COMPLETED' && request.status !== 'WORK_DONE') {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating can only be submitted after the service has been completed'
+      });
+    }
+
+    // Ownership check (admin can bypass)
+    const isAdmin = req.user && (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN');
+    if (!isAdmin && req.user && request.userId && request.userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You are not authorized to rate this request' });
+    }
+
+    const customerName = req.user?.name || request.user?.name || request.userName || 'Valued Customer';
+    const customerPhone = req.user?.phone || req.user?.phoneNumber || request.user?.phone || request.user?.phoneNumber || request.userPhone || null;
+
+    // Resolve assigned Vendor
+    let vendor = null;
+    if (request.vendorId) {
+      vendor = await prisma.vendor.findUnique({ where: { id: request.vendorId } }).catch(() => null);
+    }
+    if (!vendor && request.assignedVendorName) {
+      vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { name: { equals: request.assignedVendorName, mode: 'insensitive' } },
+            { businessName: { equals: request.assignedVendorName, mode: 'insensitive' } }
+          ]
+        }
+      }).catch(() => null);
+    }
+    if (!vendor && request.vendorQuotes && request.vendorQuotes.length > 0) {
+      const awardedQuote = request.vendorQuotes.find(q => q.status === 'ACCEPTED' || q.status === 'AWARDED');
+      if (awardedQuote?.vendorId) {
+        vendor = await prisma.vendor.findUnique({ where: { id: awardedQuote.vendorId } }).catch(() => null);
+      }
+    }
+
+    let vendorRatingRecord = null;
+    if (vendor) {
+      // Check if rating already exists
+      const existingVendorRating = await prisma.vendorRating.findFirst({
+        where: {
+          vendorId: vendor.id,
+          bookingId: request.id
+        }
+      });
+
+      if (existingVendorRating) {
+        vendorRatingRecord = await prisma.vendorRating.update({
+          where: { id: existingVendorRating.id },
+          data: {
+            rating: numRating,
+            review: review ? String(review).trim() : null,
+            customerName,
+            customerPhone
+          }
+        });
+      } else {
+        vendorRatingRecord = await prisma.vendorRating.create({
+          data: {
+            vendorId: vendor.id,
+            userId: req.user?.id || request.userId || null,
+            customerName,
+            customerPhone,
+            rating: numRating,
+            review: review ? String(review).trim() : null,
+            serviceType: 'SERVICE_REQUEST',
+            bookingId: request.id,
+            bookingNumber: request.id
+          }
+        });
+      }
+
+      // Recalculate dynamic average rating and ratingsCount
+      const allRatings = await prisma.vendorRating.findMany({
+        where: { vendorId: vendor.id },
+        select: { rating: true }
+      });
+
+      const avg = allRatings.length > 0
+        ? Number((allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length).toFixed(1))
+        : numRating;
+
+      await prisma.vendor.update({
+        where: { id: vendor.id },
+        data: {
+          rating: avg,
+          ratingsCount: allRatings.length
+        }
+      });
+    }
+
+    // Update ServiceRequest record
+    const updatedRequest = await prisma.serviceRequest.update({
+      where: { id: request.id },
+      data: {
+        customerRating: numRating,
+        customerReview: review ? String(review).trim() : null,
+        ratedAt: new Date()
+      },
+      include: {
+        user: true,
+        vendor: true,
+        quotations: true
+      }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('request_updated', updatedRequest);
+      if (vendor) {
+        io.emit('vendor_rating_updated', {
+          vendorId: vendor.id,
+          rating: numRating,
+          review: review || null
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Thank you for your rating and review!',
+      request: updatedRequest,
+      vendorRating: vendorRatingRecord
+    });
+  } catch (error) {
+    console.error('Error rating service request:', error);
+    res.status(500).json({ success: false, message: error.message || 'Internal server error' });
+  }
+});
 
 module.exports = router;

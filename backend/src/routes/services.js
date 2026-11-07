@@ -3,24 +3,8 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 
-// 1. GET /api/v1/services/cities - Get supported operational cities dynamically from database
-router.get('/cities', async (req, res) => {
-    try {
-        const dbCities = await prisma.city.findMany({
-            where: { isActive: true },
-            orderBy: { name: 'asc' }
-        });
-
-        res.json({
-            success: true,
-            message: "Supported cities fetched successfully from database",
-            total: dbCities.length,
-            cities: dbCities
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
+// 1. Dynamic Operational Cities Router (GET, POST, PUT, DELETE, TOGGLE)
+router.use('/cities', require('./cities'));
 
 // 2. GET /api/v1/services/partners - Get verified partners/technicians dynamically from database
 router.get('/partners', async (req, res) => {

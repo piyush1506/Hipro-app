@@ -87,7 +87,7 @@ const getVendors = async (req, res) => {
         where,
         include: {
           _count: {
-            select: { vendorQuotes: true, assignedJobs: true }
+            select: { vendorQuotes: true, assignedJobs: true, ratings: true }
           }
         },
         orderBy: { created_at: 'desc' }
@@ -111,12 +111,13 @@ const getVendors = async (req, res) => {
           maxConcurrentJobs: true,
           currentJobCount: true,
           rating: true,
+          ratingsCount: true,
           minCharge: true,
           imageUrl: true,
           documentsVerified: true,
           created_at: true,
           _count: {
-            select: { vendorQuotes: true, assignedJobs: true }
+            select: { vendorQuotes: true, assignedJobs: true, ratings: true }
           }
         },
         orderBy: { created_at: 'desc' }
@@ -157,6 +158,10 @@ const getVendorById = async (req, res) => {
             include: { request: true },
             orderBy: { sharedAt: 'desc' },
             take: 20
+          },
+          ratings: {
+            orderBy: { created_at: 'desc' },
+            take: 50
           }
         }
       });
@@ -183,12 +188,25 @@ const getVendorById = async (req, res) => {
         status: true,
         capacity: true,
         rating: true,
+        ratingsCount: true,
         minCharge: true,
         imageUrl: true,
         documentsVerified: true,
         created_at: true,
+        ratings: {
+          select: {
+            id: true,
+            customerName: true,
+            rating: true,
+            review: true,
+            serviceType: true,
+            created_at: true
+          },
+          orderBy: { created_at: 'desc' },
+          take: 30
+        },
         _count: {
-          select: { vendorQuotes: true, assignedJobs: true }
+          select: { vendorQuotes: true, assignedJobs: true, ratings: true }
         }
       }
     });
@@ -949,12 +967,42 @@ const toggleVendorKYC = async (req, res) => {
   }
 };
 
+// GET /api/v1/vendors/:id/ratings - List all ratings and reviews for a specific vendor
+const getVendorRatings = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vendor = await prisma.vendor.findUnique({
+      where: { id },
+      select: { id: true, name: true, businessName: true, rating: true, ratingsCount: true }
+    });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    const ratings = await prisma.vendorRating.findMany({
+      where: { vendorId: id },
+      orderBy: { created_at: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      vendor,
+      averageRating: vendor.rating,
+      totalRatings: ratings.length,
+      ratings
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   toggleVendorKYC,
   getVendors,
   getVendorCategories,
   VENDOR_CATEGORIES,
   getVendorById,
+  getVendorRatings,
   createVendor,
   updateVendor,
   deleteVendor,

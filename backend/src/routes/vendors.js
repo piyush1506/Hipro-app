@@ -4,6 +4,7 @@ const {
   getVendors,
   getVendorCategories,
   getVendorById,
+  getVendorRatings,
   createVendor,
   updateVendor,
   deleteVendor,
@@ -60,6 +61,9 @@ router.get('/', optionalAuth, getVendors);
 
 // Create new vendor (Admin only)
 router.post('/', authenticate, requireAdmin, createVendor);
+
+// Get single vendor ratings & reviews (Public/Customer/Admin)
+router.get('/:id/ratings', optionalAuth, getVendorRatings);
 
 // Get single vendor by ID (Must be after /quotes, /categories, etc.)
 router.get('/:id', optionalAuth, getVendorById);
