@@ -8219,9 +8219,24 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {requests.find(r => r.id === quoteRequestId)?.mediaUrl && Array.isArray(requests.find(r => r.id === quoteRequestId)?.mediaUrl) && requests.find(r => r.id === quoteRequestId)?.mediaUrl.map((img, idx) => (
-                                <img key={idx} src={img} alt="Damage" className="w-14 h-14 rounded-lg object-cover border-2 border-brand-200" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }} />
-                              ))}
+                              {requests.find(r => r.id === quoteRequestId)?.mediaUrl && Array.isArray(requests.find(r => r.id === quoteRequestId)?.mediaUrl) && requests.find(r => r.id === quoteRequestId)?.mediaUrl.map((img, idx) => {
+                                const reqItem = requests.find(r => r.id === quoteRequestId);
+                                const mediaList = Array.isArray(reqItem?.mediaUrl) ? reqItem.mediaUrl : [img];
+                                return (
+                                  <img
+                                    key={idx}
+                                    src={img}
+                                    alt="Damage"
+                                    onClick={() => setActivePhotoModal({
+                                      photos: mediaList,
+                                      index: idx,
+                                      title: `${reqItem?.requestNumber || quoteRequestId} Site Evidence`
+                                    })}
+                                    className="w-14 h-14 rounded-lg object-cover border-2 border-brand-200 cursor-pointer hover:border-brand-500 hover:shadow-xs transition-all"
+                                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                                  />
+                                );
+                              })}
                             </div>
                           </div>
                         </div>

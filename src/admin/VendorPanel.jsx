@@ -1248,18 +1248,42 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
 
                         {media.length > 0 ? (
                           <div className="space-y-1.5">
-                            <div className="text-xs font-semibold text-slate-500">Affected Area Photos ({media.length}):</div>
-                            <div className="flex gap-2.5 overflow-x-auto pb-1.5">
-                              {media.map((imgUrl, i) => (
-                                <div key={i} onClick={() => handleOpenPhotos(media, i, `${req.requestNumber ? `#${req.requestNumber} ` : ''}Site Evidence`)} className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer relative group shrink-0 hover:border-brand-500 hover:shadow-md transition-all">
-                                  <img src={imgUrl} alt="Damage" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }} />
-                                  <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 backdrop-blur-xs text-white text-[10px] font-semibold text-center py-1">Photo #{i + 1}</span>
-                                </div>
-                              ))}
+                            <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
+                              <span>Site Evidence ({media.length} items):</span>
+                              <span className="text-[11px] text-brand-600 font-medium">Click to inspect</span>
+                            </div>
+                            <div className="flex gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
+                              {media.map((itemUrl, i) => {
+                                const isVid = isVideoMedia(itemUrl);
+                                return (
+                                  <div
+                                    key={i}
+                                    onClick={() => handleOpenPhotos(media, i, `${req.requestNumber ? `${req.requestNumber} ` : ''}Site Evidence`)}
+                                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer relative group shrink-0 hover:border-brand-500 hover:shadow-md transition-all"
+                                  >
+                                    {isVid ? (
+                                      <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
+                                        <Video className="w-6 h-6 text-primary-400 group-hover:scale-110 transition-transform" />
+                                        <span className="text-[9px] font-bold mt-1">Video</span>
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={itemUrl}
+                                        alt="Damage evidence"
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                                      />
+                                    )}
+                                    <span className="absolute bottom-0 inset-x-0 bg-slate-900/75 backdrop-blur-xs text-white text-[9.5px] font-semibold text-center py-0.5">
+                                      {isVid ? 'Play Video' : `Photo #${i + 1}`}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         ) : (
-                          <div className="p-3 bg-slate-50/50 rounded-lg border border-dashed border-slate-200 text-xs sm:text-sm text-slate-400 italic">No photos uploaded</div>
+                          <div className="p-3 bg-slate-50/50 rounded-lg border border-dashed border-slate-200 text-xs sm:text-sm text-slate-400 italic">No site photos or videos uploaded</div>
                         )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm pt-3 border-t border-slate-100 text-slate-600">
@@ -1431,7 +1455,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                                   onClick={() => handleOpenPhotos(
                                     Array.isArray(selectedBuilderRequest.mediaUrl) ? selectedBuilderRequest.mediaUrl : [selectedBuilderRequest.mediaUrl],
                                     i,
-                                    `${selectedBuilderRequest.requestNumber ? `#${selectedBuilderRequest.requestNumber} ` : ''}Site Evidence`
+                                    `${selectedBuilderRequest.requestNumber ? `${selectedBuilderRequest.requestNumber} ` : ''}Site Evidence`
                                   )}
                                   className="w-16 h-16 rounded-lg object-cover border border-slate-200 cursor-pointer hover:border-brand-500"
                                 />
@@ -2339,65 +2363,21 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
         </main>
       </div>
 
-      {/* PHOTO LIGHTBOX MODAL (Image 2 Admin Style) */}
+      {/* PHOTO LIGHTBOX MODAL */}
       {activePhotoModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[92vh]">
-            {/* Modal Header */}
-            <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between bg-white">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2 font-heading font-medium text-slate-800 text-sm">
                 <Camera className="w-4 h-4 text-brand-600" />
-                <span className="font-semibold">{activePhotoModal.title || 'Site Evidence'}</span>
-                {activePhotoModal.photos.length > 1 && (
-                  <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full ml-1">
-                    {activePhotoModal.index + 1} / {activePhotoModal.photos.length}
-                  </span>
-                )}
+                <span>{activePhotoModal.title}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setActivePhotoModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                aria-label="Close"
-              >
+              <button onClick={() => setActivePhotoModal(null)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            {/* Main Stage & Thumbnail Carousel */}
-            <div className="p-3.5 sm:p-4 overflow-y-auto space-y-3">
-              {/* Main Stage */}
-              <div className="w-full h-80 sm:h-96 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center relative shadow-inner">
-                {/* Previous Button */}
-                {activePhotoModal.photos.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setActivePhotoModal(prev => ({
-                      ...prev,
-                      index: (prev.index + prev.photos.length - 1) % prev.photos.length
-                    }))}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-900/60 hover:bg-slate-900/90 text-white backdrop-blur-xs transition-all z-10 shadow-sm"
-                    aria-label="Previous image"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                )}
-
-                {/* Next Button */}
-                {activePhotoModal.photos.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setActivePhotoModal(prev => ({
-                      ...prev,
-                      index: (prev.index + 1) % prev.photos.length
-                    }))}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-900/60 hover:bg-slate-900/90 text-white backdrop-blur-xs transition-all z-10 shadow-sm"
-                    aria-label="Next image"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                )}
-
+            <div className="p-4 overflow-y-auto space-y-3">
+              <div className="w-full h-80 sm:h-96 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center relative">
                 {isVideoMedia(activePhotoModal.photos[activePhotoModal.index]) ? (
                   <video
                     key={activePhotoModal.photos[activePhotoModal.index]}
@@ -2408,49 +2388,33 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   />
                 ) : (
                   <img
-                    key={activePhotoModal.photos[activePhotoModal.index]}
                     src={activePhotoModal.photos[activePhotoModal.index]}
                     alt="Damage"
                     className="max-w-full max-h-full object-contain"
-                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80'; }}
                   />
                 )}
               </div>
-
-              {/* Bottom Thumbnail Strip */}
-              {activePhotoModal.photos.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5">
-                  {activePhotoModal.photos.map((p, i) => {
-                    const isVid = isVideoMedia(p);
-                    const isSelected = activePhotoModal.index === i;
-                    return (
-                      <div
-                        key={i}
-                        onClick={() => setActivePhotoModal(prev => ({ ...prev, index: i }))}
-                        className={`w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer shrink-0 relative transition-all ${
-                          isSelected
-                            ? 'border-brand-600 ring-2 ring-brand-500/30 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        {isVid ? (
-                          <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
-                            <Video className="w-4 h-4 text-primary-400" />
-                            <span className="text-[8px] font-bold mt-0.5">Video</span>
-                          </div>
-                        ) : (
-                          <img
-                            src={p}
-                            alt={`Thumb ${i + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=200&q=80'; }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {activePhotoModal.photos.map((p, i) => {
+                  const isVid = isVideoMedia(p);
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => setActivePhotoModal({ ...activePhotoModal, index: i })}
+                      className={`w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer flex-shrink-0 relative ${activePhotoModal.index === i ? 'border-brand-600 ring-2 ring-brand-500/30' : 'border-slate-200'}`}
+                    >
+                      {isVid ? (
+                        <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
+                          <Video className="w-4 h-4 text-primary-400" />
+                          <span className="text-[8px] font-bold mt-0.5">Video</span>
+                        </div>
+                      ) : (
+                        <img src={p} alt="Thumb" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
