@@ -2,7 +2,7 @@ services:
   - type: web
     name: hipro-backend
     runtime: node
-    rootDir: backend
+    rootDir: adminpanel/backend
     plan: free
     region: singapore
     autoDeploy: true

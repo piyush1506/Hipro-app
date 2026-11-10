@@ -1,32 +1,22 @@
-# Hipro-app-frontend
+# Hipro Admin Panel (Frontend & Backend)
 
-Hipro (Hindustan Projects) Admin Portal & Executive Commercial Desk frontend application.
+This directory contains both the Admin/Vendor Web Portal and the Backend API Server:
 
-## Features
-- Real-time Inspection Requests review & triage
-- Dynamic Quotation Builder with BOQ Engineering Presets
-- Official printable PDF quotation & receipt generator
-- Payments & Collections Desk (Razorpay, UPI, Cash, Bank Transfer)
-- Services Catalog and Sub-Services checklist manager
-- App Carousel Slides & In-App Dynamic Route Dispatcher
-- Promotional Coupons & Deals Manager
-- Customer Directory & System Diagnostics
+- **`frontend/`**: Vite + React Admin Terminal & Vendor Portal application.
+- **`backend/`**: Node.js + Express.js + Prisma REST & Socket.io API server.
 
-## Tech Stack
-- React 18
-- Tailwind CSS
-- Lucide React Icons
-- Vite
+## Quick Start
 
-## Development Setup
-
+### 1. Run Backend Server
 ```bash
-# Install dependencies
+cd backend
 npm install
-
-# Start local dev server
 npm run dev
+```
 
-# Build for production
-npm run build
+### 2. Run Frontend Portal
+```bash
+cd frontend
+npm install
+npm run dev
 ```

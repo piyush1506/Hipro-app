@@ -32,14 +32,19 @@ ecommerce_demo/
 .env.*
 *.env
 backend/.env
+adminpanel/backend/.env
+adminpanel/frontend/.env
 
 # Uploads
 uploads/
 backend/uploads/
+adminpanel/backend/uploads/
 
 Hipro_app/
 !.env.example
 !backend/.env.example
+!adminpanel/backend/.env.example
+!adminpanel/frontend/.env.example
 
 app_backend/**/.env
 app_backend/**/uploads/
