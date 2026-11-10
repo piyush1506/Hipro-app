@@ -40,6 +40,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
   const [builderRequestId, setBuilderRequestId] = useState('');
   const [builderEstimator, setBuilderEstimator] = useState('Hipro Technical Admin Desk');
   const [builderTimeline, setBuilderTimeline] = useState('1-2 Working Days');
+  const [customTimeline, setCustomTimeline] = useState('');
   const [builderScope, setBuilderScope] = useState('Standard Engineering Specifications');
   const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service terms apply upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
   const [lineItems, setLineItems] = useState([
@@ -269,7 +270,7 @@ export default function AdminApp({ onSwitchToCustomerApp }) {
       taxRate,
       totalCost: effectiveMatCost + effectiveLabCost,
       grandtotal: grandTotal,
-      estimatedTimeline: builderTimeline,
+      estimatedTimeline: builderTimeline === 'CUSTOM' ? (customTimeline.trim() || 'Custom Duration') : builderTimeline,
       termsAndConditions: builderTerms,
       created_by: builderEstimator,
       service_scope: builderScope

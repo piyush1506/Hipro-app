@@ -967,6 +967,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [builderRequestId, setBuilderRequestId] = useState('');
   const [builderEstimator, setBuilderEstimator] = useState('Hipro Technical Admin Desk');
   const [builderTimeline, setBuilderTimeline] = useState('1-2 Working Days');
+  const [customTimeline, setCustomTimeline] = useState('');
   const [builderScope, setBuilderScope] = useState('Standard Engineering Specifications');
   const [builderWarranty, setBuilderWarranty] = useState('');
   const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service terms apply upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
@@ -3072,7 +3073,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       grandtotal: grandTotal,
       advancePercentage: effectiveAdvancePct,
       advanceAmount: effectiveAdvanceAmount,
-      estimatedTimeline: builderTimeline,
+      estimatedTimeline: builderTimeline === 'CUSTOM' ? (customTimeline.trim() || 'Custom Duration') : builderTimeline,
       termsAndConditions: builderTerms || `Standard service terms apply. ${effectiveAdvancePct}% advance (₹${effectiveAdvanceAmount.toLocaleString('en-IN')}) required to mobilize materials & start work, remaining on completion.`,
       created_by: builderEstimator,
       service_scope: builderWarranty && builderWarranty.trim() ? `${builderScope} (Warranty: ${builderWarranty.trim()})` : builderScope
@@ -3089,6 +3090,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         showToastMsg('Quotation created and dispatched!', 'success');
         setBuilderRequestId('');
         setBuilderWarranty('');
+        setBuilderTimeline('1-2 Working Days');
+        setCustomTimeline('');
         fetchAllData();
         setActiveTab('quotations');
       } else {
@@ -8707,14 +8710,45 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 <div className="lg:col-span-7 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
-                      <select value={builderTimeline} onChange={(e) => setBuilderTimeline(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
+                        {builderTimeline === 'CUSTOM' && (
+                          <button
+                            type="button"
+                            onClick={() => { setBuilderTimeline('1-2 Working Days'); setCustomTimeline(''); }}
+                            className="text-[10px] text-primary-600 hover:underline font-semibold"
+                          >
+                            Presets
+                          </button>
+                        )}
+                      </div>
+                      <select
+                        value={builderTimeline}
+                        onChange={(e) => {
+                          setBuilderTimeline(e.target.value);
+                          if (e.target.value !== 'CUSTOM') setCustomTimeline('');
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      >
                         <option value="1-2 Working Days">1-2 Working Days</option>
                         <option value="2-3 Working Days">2-3 Working Days</option>
                         <option value="3-5 Working Days">3-5 Working Days</option>
                         <option value="1 Week (Phased)">1 Week (Phased)</option>
+                        <option value="2 Weeks">2 Weeks</option>
+                        <option value="1 Month">1 Month</option>
                         <option value="Same Day Immediate">Same Day Immediate</option>
+                        <option value="CUSTOM">Custom Time Period...</option>
                       </select>
+                      {builderTimeline === 'CUSTOM' && (
+                        <input
+                          type="text"
+                          value={customTimeline}
+                          onChange={(e) => setCustomTimeline(e.target.value)}
+                          placeholder="e.g. 10 Working Days, 3 Weeks, 45 Days..."
+                          className="w-full mt-1 px-2.5 py-1.5 bg-white border border-primary-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 shadow-2xs"
+                          autoFocus
+                        />
+                      )}
                     </div>
 
                     <div className="space-y-1">
