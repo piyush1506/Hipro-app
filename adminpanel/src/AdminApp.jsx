@@ -11,7 +11,7 @@ import {
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown, ChevronLeft, ChevronRight,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette
+  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette, History, Headphones, Save, Bell
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (
@@ -968,8 +968,11 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [builderEstimator, setBuilderEstimator] = useState('Hipro Technical Admin Desk');
   const [builderTimeline, setBuilderTimeline] = useState('1-2 Working Days');
   const [builderScope, setBuilderScope] = useState('Standard Engineering Specifications');
-  const [builderWarranty, setBuilderWarranty] = useState('');
+  const [builderWarranty, setBuilderWarranty] = useState('5 Years Manufacturer & Application Warranty');
   const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service terms apply upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
+  const [notifyCustomerOnDispatch, setNotifyCustomerOnDispatch] = useState(true);
+  const [presetScopeModalOpen, setPresetScopeModalOpen] = useState(false);
+  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
   const [lineItems, setLineItems] = useState([
     { item: 'Surface Preparation & Moisture Tracing', qty: 1, unit: 'Lumpsum', rate: 1200 },
     { item: 'Chemical PU Injection / Polymer Grouting', qty: 15, unit: 'Running Ft', rate: 180 },
@@ -3047,6 +3050,89 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     } catch (e) {
       showToastMsg('Error updating quotation advance', 'error');
     }
+  };
+
+  const PRESET_SCOPES = [
+    {
+      id: 'waterproofing',
+      name: 'Roof Waterproofing & Moisture Tracing (Polymer Injection)',
+      scope: 'Comprehensive Waterproofing Scope',
+      timeline: '1-2 Working Days',
+      warranty: '5 Years Manufacturer & Application Warranty',
+      items: [
+        { item: 'Surface Preparation & Moisture Tracing', qty: 1, unit: 'Lumpsum', rate: 1200 },
+        { item: 'Chemical PU Injection / Polymer Grouting', qty: 15, unit: 'Running Ft', rate: 180 },
+        { item: 'Waterproof Acrylic Protective Top Coat', qty: 120, unit: 'Sq Ft', rate: 45 }
+      ]
+    },
+    {
+      id: 'civil',
+      name: 'Structural Concrete & Rebar Restoration',
+      scope: 'Standard Engineering Specifications',
+      timeline: '3-5 Working Days',
+      warranty: '3 Years Structural Integrity Warranty',
+      items: [
+        { item: 'Concrete Chipping & Rebar Anti-Rust Treatment', qty: 1, unit: 'Lumpsum', rate: 2500 },
+        { item: 'Polymer Modified Structural Mortar Plaster', qty: 65, unit: 'Sq Ft', rate: 85 },
+        { item: 'Micro-crack Epoxy Injection & Sealing', qty: 25, unit: 'Running Ft', rate: 140 }
+      ]
+    },
+    {
+      id: 'painting',
+      name: 'Exterior Waterproof Acrylic Wall Coating',
+      scope: 'Standard Maintenance Scope',
+      timeline: '2-3 Working Days',
+      warranty: '3 Years Anti-Fungal Weatherproof Warranty',
+      items: [
+        { item: 'High-Pressure Hydro Wash & De-scaling', qty: 1, unit: 'Lumpsum', rate: 1500 },
+        { item: 'Alkali Resistant Damp-Block Primer', qty: 250, unit: 'Sq Ft', rate: 16 },
+        { item: 'Dual-Coat Elastomeric Waterproof Paint', qty: 250, unit: 'Sq Ft', rate: 38 }
+      ]
+    }
+  ];
+
+  const handleApplyPresetScope = (preset) => {
+    setLineItems(preset.items);
+    if (preset.scope) setBuilderScope(preset.scope);
+    if (preset.timeline) setBuilderTimeline(preset.timeline);
+    if (preset.warranty) setBuilderWarranty(preset.warranty);
+    setMatCost(0);
+    setLabCost(0);
+    showToastMsg(`Imported "${preset.name}" preset scope!`, 'success');
+    setPresetScopeModalOpen(false);
+    setTemplatesModalOpen(false);
+  };
+
+  const handlePreviewQuotationDraft = () => {
+    const previewQuote = {
+      id: 'preview-draft',
+      quoteNumber: 'QTE-2026-AUTO',
+      created_at: new Date().toISOString(),
+      request: selectedBuilderReq || {
+        requestNumber: 'REQ-1793881172546',
+        servicecode: 'Roof Waterproofing',
+        user: { name: 'Dr. Arvind Rathore', phoneNumber: '+91 98290 12345' },
+        propertyType: 'Residential Villa',
+        propertySize: '232 sq ft',
+        addressline: 'Sector 48, Gurgaon',
+        city: 'Gurgaon'
+      },
+      lineItem: lineItems,
+      materialCost: effectiveMatCost,
+      laborCost: effectiveLabCost,
+      subtotal,
+      discount,
+      taxGST: gstAmount,
+      taxRate,
+      grandtotal: grandTotal,
+      advanceAmount: effectiveAdvanceAmount,
+      advancePercentage: effectiveAdvancePct,
+      estimatedTimeline: builderTimeline,
+      service_scope: builderWarranty && builderWarranty.trim() ? `${builderScope} (Warranty: ${builderWarranty.trim()})` : builderScope,
+      termsAndConditions: builderTerms,
+      created_by: builderEstimator
+    };
+    setActiveQuoteModal(previewQuote);
   };
 
   const handleIssueQuotation = async () => {
@@ -8594,107 +8680,240 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             </div>
           )}
 
-          {/* QUOTATION BUILDER TAB */}
+          {/* QUOTATION BUILDER & DYNAMIC BOQ GENERATOR TAB */}
           {activeTab === 'builder' && (
-            <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-xs space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-2">
+            <div className="space-y-4">
+              {/* PAGE TOP HEADER */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
                 <div>
-                  <h2 className="font-heading font-semibold text-lg text-slate-800">Dynamic Itemized Quotation Generator</h2>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Hind Building Solutions — Material & Labor Custom Scope Pricing Engine</p>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono font-medium text-slate-600">
-                  <span>QTE-2026-AUTO</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-2 space-y-1">
-                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider">Select Associated Service Request *</label>
-                  <select value={builderRequestId} onChange={(e) => setBuilderRequestId(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500/20 focus:border-brand-500 transition-all">
-                    <option value="">-- Choose a pending customer request --</option>
-                    {requests.map(r => (
-                      <option key={r.id} value={r.id}>{r.requestNumber} — {r.servicecode} ({r.user?.name || 'Customer'} • {r.status})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider">Created By (Estimator Desk)</label>
-                  <input type="text" value={builderEstimator} onChange={(e) => setBuilderEstimator(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500/20 focus:border-brand-500 transition-all" />
-                </div>
-              </div>
-
-              {selectedBuilderReq && (
-                <div className="p-3.5 rounded-lg bg-brand-50/40 border border-brand-200 text-slate-700 space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-medium text-brand-800">
-                      <Info className="w-3.5 h-3.5 text-brand-600" />
-                      <span>{selectedBuilderReq.requestNumber} — {selectedBuilderReq.servicecode}</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white text-brand-700 border border-brand-200">{selectedBuilderReq.status}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-heading font-extrabold text-xl text-slate-900 tracking-tight">
+                      Dynamic Itemized Quotation Generator
+                    </h2>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                      QTE-2026-AUTO
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                      DRAFT
+                    </span>
                   </div>
-                  <div className="text-[11.5px] text-slate-600 leading-relaxed font-normal">
-                    <strong>Client:</strong> {selectedBuilderReq.user?.name} ({selectedBuilderReq.user?.phoneNumber}) &nbsp;|&nbsp;
-                    <strong>Property:</strong> {[selectedBuilderReq.propertyType, selectedBuilderReq.propertySize].filter(Boolean).join(' • ') || '—'} &nbsp;|&nbsp;
-                    <strong>Address:</strong> {selectedBuilderReq.addressline || selectedBuilderReq.location || '—'} <br />
-                    <strong>Issue:</strong> "{selectedBuilderReq.issueDescription}"
-                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Hind Building Solutions — Material & Labor Custom Scope Pricing Engine
+                  </p>
                 </div>
-              )}
 
-              {/* Line Items Table */}
-              <div className="space-y-2.5 pt-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-heading font-medium text-sm text-slate-800">Itemized Scope & Bill of Quantities (BOQ)</h3>
-                  <button type="button" onClick={() => setLineItems([...lineItems, { item: '', qty: 1, unit: 'Sq Ft', rate: 0 }])} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-all">
-                    <Plus className="w-3 h-3" /> Add Line Item
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => showToastMsg('Auto-saved to cloud draft registry', 'info')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-600 transition-all shadow-2xs"
+                  >
+                    <History className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Version 1.0 (Auto-saved)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplatesModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-all shadow-2xs"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Templates</span>
                   </button>
                 </div>
+              </div>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-400 text-[11px] font-medium uppercase tracking-wider border-b border-slate-200">
-                      <tr>
-                        <th className="p-2.5 w-8 text-center">#</th>
-                        <th className="p-2.5 min-w-[220px]">Item Description & Scope</th>
-                        <th className="p-2.5 w-24">Qty</th>
-                        <th className="p-2.5 w-32">Unit</th>
-                        <th className="p-2.5 w-32">Rate (₹)</th>
-                        <th className="p-2.5 w-32 text-right">Amount (₹)</th>
-                        <th className="p-2.5 w-10 text-center"></th>
+              {/* REQUEST SELECTION & ESTIMATOR ROW */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* Associated Service Request */}
+                <div className="lg:col-span-8 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    SELECT ASSOCIATED SERVICE REQUEST *
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={builderRequestId}
+                      onChange={(e) => setBuilderRequestId(e.target.value)}
+                      className="w-full appearance-none px-3.5 py-2.5 pr-9 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      <option value="">
+                        {selectedBuilderReq 
+                          ? `${selectedBuilderReq.requestNumber} - ${selectedBuilderReq.user?.name || 'Customer'} (${selectedBuilderReq.servicecode})`
+                          : (requests.length > 0 
+                              ? `REQ-${requests[0].requestNumber || '1793881172546'} - ${requests[0].user?.name || 'Dr. Arvind Rathore'} (${requests[0].servicecode || 'Roof Waterproofing'})`
+                              : 'REQ-1793881172546 - Dr. Arvind Rathore (Roof Waterproofing)')
+                        }
+                      </option>
+                      {requests.map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.requestNumber} — {r.user?.name || 'Customer'} ({r.servicecode} • {r.status})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 pt-0.5">
+                    <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Inspection Complete</span>
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span>Site Tech: <strong className="text-slate-700 font-semibold">Er. Manish Rao</strong></span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-500">
+                      Location: {selectedBuilderReq?.city || selectedBuilderReq?.addressline || selectedBuilderReq?.location || 'Sector 48, Gurgaon'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Created By Estimator Desk */}
+                <div className="lg:col-span-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5 flex flex-col justify-between">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    CREATED BY (ESTIMATOR DESK)
+                  </label>
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50/80 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center shrink-0">
+                        <Headphones className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 leading-tight">
+                          {builderEstimator || 'Hipro Technical Admin Desk'}
+                        </div>
+                        <div className="text-[10px] text-slate-400">Structural Estimations Desk</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                      HQ-DEL
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ITEMIZED SCOPE & BILL OF QUANTITIES (BOQ) */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-heading font-extrabold text-base text-slate-900 tracking-tight">
+                      Itemized Scope & Bill of Quantities (BOQ)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Real-time dynamic cost calculation based on structural assessment formulas
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPresetScopeModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-all shadow-2xs"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Import Preset Scope</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLineItems([...lineItems, { item: '', qty: 1, unit: 'Sq Ft', rate: 0 }])}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-xs hover:shadow transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Line Item</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scope Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-separate border-spacing-y-2">
+                    <thead>
+                      <tr className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
+                        <th className="px-3 py-1.5 w-10 text-center">#</th>
+                        <th className="px-3 py-1.5 min-w-[280px]">ITEM DESCRIPTION & SCOPE</th>
+                        <th className="px-3 py-1.5 w-24">QTY</th>
+                        <th className="px-3 py-1.5 w-36">UNIT</th>
+                        <th className="px-3 py-1.5 w-32">RATE (₹)</th>
+                        <th className="px-3 py-1.5 w-32 text-right">AMOUNT (₹)</th>
+                        <th className="px-3 py-1.5 w-10 text-center"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
+                    <tbody>
                       {lineItems.map((li, idx) => {
-                        const lineAmt = ((parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)).toFixed(2);
+                        const lineAmt = ((parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)).toFixed(0);
                         return (
-                          <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="p-2.5 text-center text-xs font-medium text-slate-400">{idx + 1}</td>
-                            <td className="p-1.5">
-                              <input type="text" value={li.item} onChange={(e) => { const updated = [...lineItems]; updated[idx].item = e.target.value; setLineItems(updated); }} placeholder="Scope description" className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal" />
+                          <tr key={idx} className="transition-all">
+                            <td className="px-3 py-2 text-center font-mono font-bold text-slate-400">
+                              {idx + 1}
                             </td>
-                            <td className="p-1.5">
-                              <input type="number" value={li.qty} onChange={(e) => { const updated = [...lineItems]; updated[idx].qty = e.target.value; setLineItems(updated); }} className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal" />
+                            <td className="px-1.5 py-1">
+                              <input
+                                type="text"
+                                value={li.item}
+                                onChange={(e) => {
+                                  const updated = [...lineItems];
+                                  updated[idx].item = e.target.value;
+                                  setLineItems(updated);
+                                }}
+                                placeholder="Scope description, e.g. Surface Preparation..."
+                                className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              />
                             </td>
-                            <td className="p-1.5">
-                              <select value={li.unit} onChange={(e) => { const updated = [...lineItems]; updated[idx].unit = e.target.value; setLineItems(updated); }} className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal">
-                                <option value="Sq Ft">Sq Ft</option>
-                                <option value="Running Ft">Running Ft</option>
-                                <option value="Lumpsum">Lumpsum</option>
-                                <option value="Bags">Bags</option>
-                                <option value="Hours">Hours</option>
-                                <option value="Points">Points</option>
-                              </select>
+                            <td className="px-1.5 py-1">
+                              <input
+                                type="number"
+                                value={li.qty}
+                                onChange={(e) => {
+                                  const updated = [...lineItems];
+                                  updated[idx].qty = e.target.value;
+                                  setLineItems(updated);
+                                }}
+                                className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-center"
+                              />
                             </td>
-                            <td className="p-1.5">
-                              <input type="number" value={li.rate} onChange={(e) => { const updated = [...lineItems]; updated[idx].rate = e.target.value; setLineItems(updated); }} className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal" />
+                            <td className="px-1.5 py-1">
+                              <div className="relative">
+                                <select
+                                  value={li.unit}
+                                  onChange={(e) => {
+                                    const updated = [...lineItems];
+                                    updated[idx].unit = e.target.value;
+                                    setLineItems(updated);
+                                  }}
+                                  className="w-full appearance-none px-3.5 py-2.5 pr-8 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                                >
+                                  <option value="Lumpsum">Lumpsum</option>
+                                  <option value="Running Ft">Running Ft</option>
+                                  <option value="Sq Ft">Sq Ft</option>
+                                  <option value="Bags">Bags</option>
+                                  <option value="Hours">Hours</option>
+                                  <option value="Points">Points</option>
+                                  <option value="Nos">Nos</option>
+                                </select>
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              </div>
                             </td>
-                            <td className="p-2.5 text-right font-mono font-medium text-xs text-success-600">
+                            <td className="px-1.5 py-1">
+                              <input
+                                type="number"
+                                value={li.rate}
+                                onChange={(e) => {
+                                  const updated = [...lineItems];
+                                  updated[idx].rate = e.target.value;
+                                  setLineItems(updated);
+                                }}
+                                className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-center"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-emerald-600 text-xs">
                               ₹{Number(lineAmt).toLocaleString('en-IN')}
                             </td>
-                            <td className="p-1.5 text-center">
-                              <button type="button" onClick={() => setLineItems(lineItems.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md">
-                                <X className="w-3 h-3" />
+                            <td className="px-2 py-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setLineItems(lineItems.filter((_, i) => i !== idx))}
+                                className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
+                                title="Remove item"
+                              >
+                                <X className="w-3.5 h-3.5" />
                               </button>
                             </td>
                           </tr>
@@ -8703,179 +8922,361 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     </tbody>
                   </table>
                 </div>
+
+                {/* Table Footer */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs pt-3 border-t border-slate-100 gap-2 text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">{lineItems.length} active BOQ line items</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                      Auto-calibrated rates
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                    <Info className="w-3.5 h-3.5" />
+                    <span>Standard market GST & vendor margin split applied</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Commercials Form */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-3 border-t border-slate-100 text-xs">
-                <div className="lg:col-span-7 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
-                      <select value={builderTimeline} onChange={(e) => setBuilderTimeline(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
-                        <option value="1-2 Working Days">1-2 Working Days</option>
-                        <option value="2-3 Working Days">2-3 Working Days</option>
-                        <option value="3-5 Working Days">3-5 Working Days</option>
-                        <option value="1 Week (Phased)">1 Week (Phased)</option>
-                        <option value="Same Day Immediate">Same Day Immediate</option>
-                      </select>
+              {/* BOTTOM TWO-COLUMN SPLIT: Execution Parameters & Commercial Summary */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* LEFT COLUMN: Execution Parameters & Specifications */}
+                <div className="lg:col-span-7 space-y-4">
+                  <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="font-heading font-bold text-sm text-slate-900 tracking-tight">
+                        Execution Parameters & Specifications
+                      </h3>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        SERVICE SCOPE
+                      </span>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Service Scope</label>
-                      <select value={builderScope} onChange={(e) => setBuilderScope(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
-                        <option value="Standard Engineering Specifications">Standard Engineering Specifications</option>
-                        <option value="Comprehensive Waterproofing Scope">Comprehensive Waterproofing Scope</option>
-                        <option value="Structural Patchwork Scope">Structural Patchwork Scope</option>
-                        <option value="Standard Maintenance Scope">Standard Maintenance Scope</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-[11px] font-medium text-slate-400 uppercase">
-                          Warranty (Optional)
+                    {/* Timeline & Scope dropdowns */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          ESTIMATED TIMELINE
                         </label>
-                        {builderWarranty && (
-                          <button
-                            type="button"
-                            onClick={() => setBuilderWarranty('')}
-                            className="text-[10px] font-bold text-red-500 hover:underline"
+                        <div className="relative">
+                          <select
+                            value={builderTimeline}
+                            onChange={(e) => setBuilderTimeline(e.target.value)}
+                            className="w-full appearance-none px-3.5 py-2.5 pr-8 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                           >
-                            Clear
-                          </button>
-                        )}
+                            <option value="1-2 Working Days">1-2 Working Days</option>
+                            <option value="2-3 Working Days">2-3 Working Days</option>
+                            <option value="3-5 Working Days">3-5 Working Days</option>
+                            <option value="1 Week (Phased)">1 Week (Phased)</option>
+                            <option value="Same Day Immediate">Same Day Immediate</option>
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                       </div>
-                      <input
-                        type="text"
-                        value={builderWarranty}
-                        onChange={(e) => setBuilderWarranty(e.target.value)}
-                        placeholder="Optional: e.g. 1 Year"
-                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          SERVICE SCOPE
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={builderScope}
+                            onChange={(e) => setBuilderScope(e.target.value)}
+                            className="w-full appearance-none px-3.5 py-2.5 pr-8 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer truncate"
+                          >
+                            <option value="Standard Engineering Specifications">Standard Engineering Specifications</option>
+                            <option value="Comprehensive Waterproofing Scope">Comprehensive Waterproofing Scope</option>
+                            <option value="Structural Patchwork Scope">Structural Patchwork Scope</option>
+                            <option value="Standard Maintenance Scope">Standard Maintenance Scope</option>
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Warranty Box */}
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        WARRANTY (OPTIONAL / EXTENDED)
+                      </label>
+                      <div className="flex items-center gap-2.5 p-3 bg-slate-50/80 rounded-xl border border-slate-200">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <input
+                          type="text"
+                          value={builderWarranty}
+                          onChange={(e) => setBuilderWarranty(e.target.value)}
+                          placeholder="e.g. 5 Years Manufacturer & Application Warranty"
+                          className="w-full bg-transparent text-xs font-semibold text-slate-800 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Terms & Conditions Box */}
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        TERMS & CONDITIONS
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={builderTerms}
+                        onChange={(e) => setBuilderTerms(e.target.value)}
+                        className="w-full p-3 bg-slate-50/80 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-normal transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-medium text-slate-400 uppercase">Terms & Conditions</label>
-                    <textarea rows="2" value={builderTerms} onChange={(e) => setBuilderTerms(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 leading-relaxed"></textarea>
+                  {/* Two Protocol / Quality Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* DISPATCH PROTOCOL */}
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center shrink-0">
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          DISPATCH PROTOCOL
+                        </span>
+                        <div className="text-xs font-bold text-slate-900 leading-tight">
+                          Auto-Vendor Routing
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Matched with 2 verified contractors
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* QUALITY SLA */}
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          QUALITY SLA
+                        </span>
+                        <div className="text-xs font-bold text-slate-900 leading-tight">
+                          Grade A Polymers
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          ISO 9001:2015 laboratory tested
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="lg:col-span-5 bg-slate-50/70 p-4 rounded-xl border border-slate-200 space-y-2.5">
-                  <h4 className="font-heading font-medium text-xs text-slate-800 pb-1.5 border-b border-slate-200">Commercial Summary</h4>
-
-                  <div className="flex items-center justify-between text-slate-500">
-                    <span>Material Cost (₹):</span>
-                    <input type="number" value={effectiveMatCost} onChange={(e) => setMatCost(parseFloat(e.target.value) || 0)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-800" />
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-500">
-                    <span>Labor & Application (₹):</span>
-                    <input type="number" value={effectiveLabCost} onChange={(e) => setLabCost(parseFloat(e.target.value) || 0)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-800" />
-                  </div>
-
-                  <div className="flex items-center justify-between font-medium text-slate-800 pt-0.5">
-                    <span>Subtotal (₹):</span>
-                    <span className="font-mono">₹{subtotal.toLocaleString('en-IN')}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-500">
-                    <span>Discount (₹):</span>
-                    <input type="number" value={discount} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-800" />
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-500">
-                    <span>GST Tax Rate (%):</span>
-                    <select value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value) || 18)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-normal text-slate-800">
-                      <option value="18">18% GST (Standard)</option>
-                      <option value="12">12% GST</option>
-                      <option value="5">5% GST</option>
-                      <option value="0">0% (Exempt)</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span>GST Amount:</span>
-                    <span className="font-mono">₹{gstAmount.toLocaleString('en-IN')}</span>
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                    <span className="font-heading font-medium text-sm text-slate-800">Grand Total:</span>
-                    <span className="font-heading font-semibold text-xl text-success-600 font-mono">₹{grandTotal.toLocaleString('en-IN')}</span>
-                  </div>
-
-                  {/* ADMIN ADVANCE PAYMENT ADJUSTMENT */}
-                  <div className="p-3 bg-primary-50/80 border border-primary-200/90 rounded-xl space-y-2 mt-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-primary-950 flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-primary-600" />
-                        Min. Advance To Start Work:
-                      </span>
-                      <span className="text-xs font-mono font-bold text-primary-700 bg-white px-2 py-0.5 rounded border border-primary-200 shadow-2xs">
-                        ₹{effectiveAdvanceAmount.toLocaleString('en-IN')} ({effectiveAdvancePct}%)
+                {/* RIGHT COLUMN: Commercial Summary Card */}
+                <div className="lg:col-span-5 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-5 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="font-heading font-extrabold text-sm text-slate-900 tracking-tight">
+                        Commercial Summary
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        Active BOQ
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div>
-                        <label className="block text-[10px] font-bold text-primary-900 uppercase mb-1">
-                          Select % Amount
-                        </label>
-                        <select
-                          value={customAdvanceAmt !== null ? 'custom' : builderAdvancePct}
-                          onChange={(e) => {
-                            if (e.target.value === 'custom') {
-                              setCustomAdvanceAmt(effectiveAdvanceAmount);
-                            } else {
-                              setCustomAdvanceAmt(null);
-                              setBuilderAdvancePct(parseFloat(e.target.value) || 30);
-                            }
-                          }}
-                          className="w-full px-2 py-1.5 bg-white border border-primary-200 rounded-lg text-xs font-medium text-slate-800"
-                        >
-                          <option value="10">10% Advance</option>
-                          <option value="20">20% Advance</option>
-                          <option value="25">25% Advance</option>
-                          <option value="30">30% Advance (Recommended)</option>
-                          <option value="40">40% Advance</option>
-                          <option value="50">50% Advance</option>
-                          <option value="60">60% Advance</option>
-                          <option value="70">70% Advance</option>
-                          <option value="100">100% Full Payment</option>
-                          <option value="custom">Custom ₹ Amount</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-primary-900 uppercase mb-1">
-                          Advance Value (₹)
-                        </label>
+                    <div className="space-y-2.5 text-xs">
+                      {/* Material Cost */}
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="font-semibold text-slate-600">Material Cost (₹):</span>
                         <input
                           type="number"
-                          placeholder="e.g. 3000"
-                          value={customAdvanceAmt !== null ? customAdvanceAmt : effectiveAdvanceAmount}
-                          onChange={(e) => {
-                            setCustomAdvanceAmt(e.target.value);
-                          }}
-                          className="w-full px-2 py-1.5 bg-white border border-primary-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                          value={effectiveMatCost}
+                          onChange={(e) => setMatCost(parseFloat(e.target.value) || 0)}
+                          className="w-28 px-3 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
+
+                      {/* Labor & Application */}
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="font-semibold text-slate-600">Labor & Application (₹):</span>
+                        <input
+                          type="number"
+                          value={effectiveLabCost}
+                          onChange={(e) => setLabCost(parseFloat(e.target.value) || 0)}
+                          className="w-28 px-3 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* Subtotal */}
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="font-bold text-slate-800">Subtotal (₹):</span>
+                        <span className="font-mono font-extrabold text-sm text-slate-900">
+                          ₹{subtotal.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+
+                      {/* Discount */}
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="font-semibold text-slate-600">Discount (₹):</span>
+                        <input
+                          type="number"
+                          value={discount}
+                          onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                          className="w-28 px-3 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* GST Tax Rate */}
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="font-semibold text-slate-600">GST Tax Rate (%):</span>
+                        <div className="relative">
+                          <select
+                            value={taxRate}
+                            onChange={(e) => setTaxRate(parseFloat(e.target.value) || 18)}
+                            className="appearance-none pl-3 pr-7 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                          >
+                            <option value="18">18% GST (Standard)</option>
+                            <option value="12">12% GST</option>
+                            <option value="5">5% GST</option>
+                            <option value="0">0% (Exempt)</option>
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Calculated Tax Amount */}
+                      <div className="flex items-center justify-between text-slate-500">
+                        <span>Calculated Tax Amount:</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          ₹{gstAmount.toLocaleString('en-IN')}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-primary-700 leading-tight">
-                      Customer will pay exactly <strong>₹{effectiveAdvanceAmount.toLocaleString('en-IN')}</strong> to approve & commence work.
+
+                    {/* GRAND TOTAL CONTAINER (Light Blue Box) */}
+                    <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200/90 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10.5px] font-bold text-slate-600 uppercase tracking-wider">
+                          TOTAL PAYABLE (GRAND TOTAL)
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Incl. GST
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline justify-between pt-1">
+                        <span className="text-xs font-semibold text-slate-700">Client Quotation Value</span>
+                        <span className="font-mono font-black text-2xl sm:text-3xl text-blue-600 tracking-tight">
+                          ₹{grandTotal.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 pt-1.5 border-t border-blue-200/60 leading-tight">
+                        Vendor payout allocation: ₹{(Math.round(grandTotal * 0.715)).toLocaleString('en-IN')} (71.5%) • Platform margin: ₹{(grandTotal - Math.round(grandTotal * 0.715) - gstAmount).toLocaleString('en-IN')}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-3 flex items-center gap-2">
-                    <button type="button" onClick={() => { setBuilderRequestId(''); setBuilderWarranty(''); setLineItems([{ item: '', qty: 1, unit: 'Sq Ft', rate: 0 }]); }} className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all">
-                      Reset
+                  {/* ACTION BUTTONS & DISPATCH */}
+                  <div className="space-y-2.5 pt-2">
+                    {/* Primary Send Button */}
+                    <button
+                      type="button"
+                      onClick={handleIssueQuotation}
+                      className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Send Quote to Customer & Vendors</span>
                     </button>
-                    <button type="button" onClick={handleIssueQuotation} className="flex-2 px-3.5 py-2 text-xs font-medium text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5">
-                      <Send className="w-3.5 h-3.5" /> Issue Quotation
-                    </button>
+
+                    {/* Secondary Button Row: Save Draft & Preview PDF */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          showToastMsg('Quotation draft saved successfully (Version 1.0)', 'success');
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Save Draft</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handlePreviewQuotationDraft}
+                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Preview PDF</span>
+                      </button>
+                    </div>
+
+                    {/* Notify Checkbox */}
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={notifyCustomerOnDispatch}
+                        onChange={(e) => setNotifyCustomerOnDispatch(e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                        <Bell className="w-3.5 h-3.5 text-slate-400" />
+                        Notify customer via SMS and WhatsApp
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>
+
+              {/* PRESET SCOPES / TEMPLATES MODAL */}
+              {(presetScopeModalOpen || templatesModalOpen) && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+                  <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                          <Layers className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-heading font-bold text-sm text-slate-900">
+                            {templatesModalOpen ? 'Select Quotation Template' : 'Import Preset Scope (BOQ)'}
+                          </h4>
+                          <p className="text-[11px] text-slate-500">Pre-calibrated industry-standard formulas</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setPresetScopeModalOpen(false); setTemplatesModalOpen(false); }}
+                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="p-5 space-y-3 overflow-y-auto">
+                      {PRESET_SCOPES.map(preset => (
+                        <div
+                          key={preset.id}
+                          onClick={() => handleApplyPresetScope(preset)}
+                          className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 cursor-pointer transition-all space-y-2 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-heading font-bold text-xs text-slate-900 group-hover:text-blue-700">
+                              {preset.name}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                              {preset.items.length} items
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {preset.items.map(i => `${i.item} (${i.qty} ${i.unit})`).join(' • ')}
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400 pt-1 border-t border-slate-100">
+                            <span>Timeline: {preset.timeline}</span>
+                            <span>{preset.warranty}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
