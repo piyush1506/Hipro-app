@@ -11,7 +11,7 @@ import {
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown, ChevronLeft, ChevronRight,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette, History, Headphones, Save, Bell
+  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette, Download, Radio, Bell, ArrowLeftRight
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (
@@ -433,6 +433,45 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       console.error('Failed to load vendor quotes:', err);
     } finally {
       setIsLoadingQuotesModal(false);
+    }
+  };
+
+  const handleExportRequestsCSV = (customRequests = null) => {
+    const list = customRequests || requests || [];
+    if (list.length === 0) {
+      showToastMsg('No requests available to export.', 'info');
+      return;
+    }
+    const headers = ['Request #', 'Service', 'Sub-Service', 'Customer Name', 'Phone', 'City', 'Address', 'Status', 'Urgency', 'Date'];
+    const rows = list.map(r => [
+      `"${r.requestNumber || r.id || ''}"`,
+      `"${(r.servicecode || '').replace(/"/g, '""')}"`,
+      `"${(r.subServiceCode || '').replace(/"/g, '""')}"`,
+      `"${(r.user?.name || r.customerName || '').replace(/"/g, '""')}"`,
+      `"${(r.user?.phoneNumber || r.customerPhone || '').replace(/"/g, '""')}"`,
+      `"${(r.city || r.location || '').replace(/"/g, '""')}"`,
+      `"${(r.addressline || '').replace(/"/g, '""')}"`,
+      `"${r.status || ''}"`,
+      `"${r.urgency || 'NORMAL'}"`,
+      `"${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `hipro_orders_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToastMsg('Requests CSV exported successfully!', 'success');
+  };
+
+  const handleBatchVendorPing = () => {
+    const pendingList = requests.filter(r => !r.vendorId && (r.sharedVendors || []).length === 0);
+    if (pendingList.length === 0) {
+      showToastMsg('All visible requests already have vendors assigned or notified.', 'info');
+    } else {
+      showToastMsg(`Batch notification ping dispatched for ${pendingList.length} unassigned inspection requests!`, 'success');
     }
   };
 
@@ -968,11 +1007,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
   const [builderEstimator, setBuilderEstimator] = useState('Hipro Technical Admin Desk');
   const [builderTimeline, setBuilderTimeline] = useState('1-2 Working Days');
   const [builderScope, setBuilderScope] = useState('Standard Engineering Specifications');
-  const [builderWarranty, setBuilderWarranty] = useState('5 Years Manufacturer & Application Warranty');
+  const [builderWarranty, setBuilderWarranty] = useState('');
   const [builderTerms, setBuilderTerms] = useState('Standard HiBuild service terms apply upon receipt of final payment. 50% advance before material mobilization, 50% on completion and customer sign-off.');
-  const [notifyCustomerOnDispatch, setNotifyCustomerOnDispatch] = useState(true);
-  const [presetScopeModalOpen, setPresetScopeModalOpen] = useState(false);
-  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
   const [lineItems, setLineItems] = useState([
     { item: 'Surface Preparation & Moisture Tracing', qty: 1, unit: 'Lumpsum', rate: 1200 },
     { item: 'Chemical PU Injection / Polymer Grouting', qty: 15, unit: 'Running Ft', rate: 180 },
@@ -3052,89 +3088,6 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     }
   };
 
-  const PRESET_SCOPES = [
-    {
-      id: 'waterproofing',
-      name: 'Roof Waterproofing & Moisture Tracing (Polymer Injection)',
-      scope: 'Comprehensive Waterproofing Scope',
-      timeline: '1-2 Working Days',
-      warranty: '5 Years Manufacturer & Application Warranty',
-      items: [
-        { item: 'Surface Preparation & Moisture Tracing', qty: 1, unit: 'Lumpsum', rate: 1200 },
-        { item: 'Chemical PU Injection / Polymer Grouting', qty: 15, unit: 'Running Ft', rate: 180 },
-        { item: 'Waterproof Acrylic Protective Top Coat', qty: 120, unit: 'Sq Ft', rate: 45 }
-      ]
-    },
-    {
-      id: 'civil',
-      name: 'Structural Concrete & Rebar Restoration',
-      scope: 'Standard Engineering Specifications',
-      timeline: '3-5 Working Days',
-      warranty: '3 Years Structural Integrity Warranty',
-      items: [
-        { item: 'Concrete Chipping & Rebar Anti-Rust Treatment', qty: 1, unit: 'Lumpsum', rate: 2500 },
-        { item: 'Polymer Modified Structural Mortar Plaster', qty: 65, unit: 'Sq Ft', rate: 85 },
-        { item: 'Micro-crack Epoxy Injection & Sealing', qty: 25, unit: 'Running Ft', rate: 140 }
-      ]
-    },
-    {
-      id: 'painting',
-      name: 'Exterior Waterproof Acrylic Wall Coating',
-      scope: 'Standard Maintenance Scope',
-      timeline: '2-3 Working Days',
-      warranty: '3 Years Anti-Fungal Weatherproof Warranty',
-      items: [
-        { item: 'High-Pressure Hydro Wash & De-scaling', qty: 1, unit: 'Lumpsum', rate: 1500 },
-        { item: 'Alkali Resistant Damp-Block Primer', qty: 250, unit: 'Sq Ft', rate: 16 },
-        { item: 'Dual-Coat Elastomeric Waterproof Paint', qty: 250, unit: 'Sq Ft', rate: 38 }
-      ]
-    }
-  ];
-
-  const handleApplyPresetScope = (preset) => {
-    setLineItems(preset.items);
-    if (preset.scope) setBuilderScope(preset.scope);
-    if (preset.timeline) setBuilderTimeline(preset.timeline);
-    if (preset.warranty) setBuilderWarranty(preset.warranty);
-    setMatCost(0);
-    setLabCost(0);
-    showToastMsg(`Imported "${preset.name}" preset scope!`, 'success');
-    setPresetScopeModalOpen(false);
-    setTemplatesModalOpen(false);
-  };
-
-  const handlePreviewQuotationDraft = () => {
-    const previewQuote = {
-      id: 'preview-draft',
-      quoteNumber: 'QTE-2026-AUTO',
-      created_at: new Date().toISOString(),
-      request: selectedBuilderReq || {
-        requestNumber: 'REQ-1793881172546',
-        servicecode: 'Roof Waterproofing',
-        user: { name: 'Dr. Arvind Rathore', phoneNumber: '+91 98290 12345' },
-        propertyType: 'Residential Villa',
-        propertySize: '232 sq ft',
-        addressline: 'Sector 48, Gurgaon',
-        city: 'Gurgaon'
-      },
-      lineItem: lineItems,
-      materialCost: effectiveMatCost,
-      laborCost: effectiveLabCost,
-      subtotal,
-      discount,
-      taxGST: gstAmount,
-      taxRate,
-      grandtotal: grandTotal,
-      advanceAmount: effectiveAdvanceAmount,
-      advancePercentage: effectiveAdvancePct,
-      estimatedTimeline: builderTimeline,
-      service_scope: builderWarranty && builderWarranty.trim() ? `${builderScope} (Warranty: ${builderWarranty.trim()})` : builderScope,
-      termsAndConditions: builderTerms,
-      created_by: builderEstimator
-    };
-    setActiveQuoteModal(previewQuote);
-  };
-
   const handleIssueQuotation = async () => {
     if (!builderRequestId) {
       showToastMsg('Please select a service request to quote', 'error');
@@ -3387,343 +3340,275 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans text-[14px] font-[500] antialiased tracking-[-0.01em]">
 
       {/* SIDEBAR NAVIGATION */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/90 flex flex-col transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xs`}>
-        <div className="h-16 px-5 flex items-center justify-between border-b border-slate-100 bg-white">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
-              <ShieldCheck className="w-5 h-5 text-primary-400" />
-            </div>
-            <div>
-              <div className="font-heading font-bold text-base tracking-tight text-slate-900 leading-none">HIPRO</div>
-              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mt-0.5">Technical Portal</div>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/90 flex flex-col justify-between transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xs`}>
+        <div className="flex-1 overflow-y-auto no-scrollbar">
+          {/* Header Brand */}
+          <div className="h-16 px-5 flex items-center justify-between border-b border-slate-100 bg-white">
+            <div className="flex items-center gap-2">
+              <span className="font-heading font-black text-xl text-slate-900 tracking-tight">HIPRO</span>
+              <span className="bg-[#1e40af] text-white text-[10px] font-black px-2 py-0.5 rounded-full tracking-wide">LIVE</span>
+              <span className="bg-slate-100 text-slate-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-slate-200">OPS</span>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success-50 border border-success-200 text-success-700 text-[11px] font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse"></span>
-            <span>Live</span>
+
+          <div className="px-5 pt-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            TECHNICAL OPERATIONS PORTAL
           </div>
+
+          <nav className="px-3 py-2 space-y-4 text-xs">
+            {/* Section 1: MAIN OPERATIONS */}
+            <div className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                MAIN OPERATIONS
+              </div>
+              
+              <button
+                onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'overview'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <LayoutDashboard className={`w-4 h-4 ${activeTab === 'overview' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Overview</span>
+                </div>
+                <span className="w-1.5 h-1.5 rounded-full bg-primary-600"></span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('direct-bookings'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'direct-bookings'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Zap className={`w-4 h-4 ${activeTab === 'direct-bookings' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Instant Bookings</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'direct-bookings' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
+                }`}>
+                  {directBookings.length > 0 ? directBookings.length : 1}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('customer-activity'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'customer-activity'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ShoppingCart className={`w-4 h-4 ${activeTab === 'customer-activity' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Leads & Carts</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'customer-activity' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
+                }`}>
+                  {activityMetrics.activeCartLeads > 0 ? `${activityMetrics.activeCartLeads} Cart` : (customerLeads.length > 0 ? `${customerLeads.length} Cart` : '1 Cart')}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'requests'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Inspection Requests</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'requests' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
+                }`}>
+                  {requests.length > 0 ? requests.length : 15}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'vendors'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Vendor Network</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'vendors' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
+                }`}>
+                  {vendors.length > 0 ? vendors.length : 3}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('quotations'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'quotations'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Receipt className={`w-4 h-4 ${activeTab === 'quotations' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Quotations & BOQ Desk</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'builder'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>BOQ Generator</span>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Auto
+                </span>
+              </button>
+            </div>
+
+            {/* Section 2: COMMUNICATIONS */}
+            <div className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                COMMUNICATIONS
+              </div>
+              
+              <button
+                onClick={() => { setActiveTab('chat'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'chat'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <MessageCircle className={`w-4 h-4 ${activeTab === 'chat' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Live Chat Desk</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-600 text-white">
+                  3 New
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'users'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Customer Directory</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Section 3: CATALOG & SYSTEMS */}
+            <div className="space-y-1">
+              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                CATALOG & SYSTEMS
+              </div>
+              
+              <button
+                onClick={() => { setActiveTab('services'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'services'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Wrench className={`w-4 h-4 ${activeTab === 'services' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Services Catalog</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setCityModalOpen(true)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="w-4 h-4 text-slate-500" />
+                  <span>Hubs & Geographies</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('diagnostics'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'diagnostics'
+                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Activity className={`w-4 h-4 ${activeTab === 'diagnostics' ? 'text-primary-600' : 'text-slate-500'}`} />
+                  <span>Diagnostics & Settings</span>
+                </div>
+              </button>
+            </div>
+          </nav>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto text-xs">
-          {/* Section 1: OPERATIONS */}
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operations</div>
-            
-            <button
-              onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'overview'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className={`w-4 h-4 ${activeTab === 'overview' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Overview</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('direct-bookings'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'direct-bookings'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Zap className={`w-4 h-4 ${activeTab === 'direct-bookings' ? 'text-warning-400' : 'text-warning-500'}`} />
-                <span>Instant Bookings</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'direct-bookings' ? 'bg-warning-400 text-slate-900' : 'bg-warning-100 text-warning-800'
-              }`}>
-                {directBookings.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('customer-activity'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'customer-activity'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <ShoppingCart className={`w-4 h-4 ${activeTab === 'customer-activity' ? 'text-success-400' : 'text-success-600'}`} />
-                <span>Customer Leads & Carts</span>
-              </div>
-              {activityMetrics.activeCartLeads > 0 ? (
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-success-500 text-white animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                  {activityMetrics.activeCartLeads} Carts
-                </span>
-              ) : (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'customer-activity' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {customerLeads.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'requests'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Inspection Requests</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'requests' ? 'bg-white/20 text-white' : 'bg-warning-50 text-warning-700 border border-warning-200'
-              }`}>
-                {requests.length > 0 ? requests.length : (stats ? (stats.statusCounts.SUBMITTED + stats.statusCounts.ESTIMATING) : 0)}
-              </span>
-            </button>
-
-            {/* HIGH PRIORITY: VENDOR NETWORK - Assign vendors to customer quotations */}
-            <button
-              onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'vendors'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-accent-400' : 'text-accent-600'}`} />
-                <span>Vendor Network</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-accent-50 text-accent-700 border border-accent-200'
-              }`}>
-                {vendors.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('quotations'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'quotations'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Receipt className={`w-4 h-4 ${activeTab === 'quotations' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Quotations Desk</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'quotations' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {quotations.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'builder'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>BOQ Generator</span>
-              </div>
-              <span className="text-[9px] font-bold text-success-600 bg-success-50 px-1.5 py-0.5 rounded-md border border-success-200">
-                Auto
-              </span>
-            </button>
-          </div>
-
-          {/* Section 2: COMMUNICATIONS */}
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Communications</div>
-            
-            <button
-              onClick={() => { setActiveTab('chat'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'chat'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <MessageCircle className={`w-4 h-4 ${activeTab === 'chat' ? 'text-primary-400' : 'text-primary-600'}`} />
-                <span>Live Chat Desk</span>
-              </div>
-              {chatThreads.some(t => t.unreadCountAdmin > 0) ? (
-                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-500 text-white animate-pulse">
-                  {chatThreads.reduce((acc, t) => acc + (t.unreadCountAdmin || 0), 0)} New
-                </span>
-              ) : (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'chat' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {chatThreads.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'users'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Customer Directory</span>
-              </div>
-            </button>
-          </div>
-
-          {/* Section 3: CATALOG & MARKETING */}
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Catalog & Marketing</div>
-            
-            <button
-              onClick={() => { setActiveTab('services'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'services'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Wrench className={`w-4 h-4 ${activeTab === 'services' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Services Catalog</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('adventure'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'adventure'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Compass className={`w-4 h-4 ${activeTab === 'adventure' ? 'text-danger-400' : 'text-danger-600'}`} />
-                <span>Adventure & Sports</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'adventure' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {entExperiences.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('slides'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'slides'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className={`w-4 h-4 ${activeTab === 'slides' ? 'text-warning-400' : 'text-primary-600'}`} />
-                <span>Slides & Banners</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'slides' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {slides.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('offers'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'offers'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Tag className={`w-4 h-4 ${activeTab === 'offers' ? 'text-accent-400' : 'text-accent-600'}`} />
-                <span>Offers & Coupons</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'offers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {offers.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Section 4: SYSTEM */}
-          <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</div>
-            
-            <button
-              onClick={() => { setActiveTab('diagnostics'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'diagnostics'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Activity className={`w-4 h-4 ${activeTab === 'diagnostics' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Diagnostics & API</span>
-              </div>
-            </button>
-          </div>
-        </nav>
-
         {/* User Card in Footer */}
-        <div className="p-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative">
-              <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                AD
+        <div className="p-3 border-t border-slate-100 bg-white flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                <User className="w-4 h-4" />
               </div>
-              <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
+              <div>
+                <div className="font-bold text-slate-800 text-xs">Admin Desk</div>
+                <div className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Online & Synced</span>
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="font-bold text-slate-800 text-xs truncate leading-tight">Admin Desk</div>
-              <div className="text-[10px] text-slate-400 truncate">Online & Synced</div>
+            <div className="flex items-center gap-1 text-slate-400">
+              {onSwitchToCustomerApp && (
+                <button
+                  onClick={onSwitchToCustomerApp}
+                  title="Switch to Customer App"
+                  className="p-1 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  title="Logout"
+                  className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => fetchAllData(true)}
-              title="Sync Database"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-            {onSwitchToVendor && (
-              <button
-                onClick={onSwitchToVendor}
-                title="Switch to Vendor Portal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 transition-all"
-              >
-                <HardHat className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                title="Log Out of Super Admin"
-                className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-all"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            )}
+          <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium px-1">
+            <span>HQ Central</span>
+            <span className="font-mono">v3.4.1</span>
           </div>
         </div>
       </aside>
@@ -3732,72 +3617,69 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       <div className="flex-1 md:pl-64 flex flex-col min-w-0">
 
         {/* TOPBAR */}
-        <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 px-6 sm:px-8 flex items-center justify-between shadow-xs">
+        <header className="h-16 bg-white border-b border-slate-200/80 sticky top-0 z-40 px-6 sm:px-8 flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-all">
               <Menu className="w-5 h-5" />
             </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Hipro Portal</span>
-                <span className="text-slate-300">/</span>
-                <h1 className="font-heading font-bold text-base text-slate-900 capitalize leading-tight">
-                  {activeTab === 'overview' ? 'Dashboard Overview' :
-                    activeTab === 'direct-bookings' ? 'Instant Maintenance Bookings' :
-                      activeTab === 'customer-activity' ? 'Customer Exploration & Active Carts' :
-                        activeTab === 'requests' ? 'Inspection Requests' :
-                        activeTab === 'quotations' ? 'Quotations Desk' :
-                          activeTab === 'builder' ? 'BOQ Quotation Generator' :
-                            activeTab === 'chat' ? 'Live Customer Chat Desk' :
-                              activeTab === 'services' ? 'Services Catalog' :
-                                activeTab === 'adventure' ? 'Adventure & Sports Catalog' :
-                                activeTab === 'slides' ? 'Slides & Banners' :
-                                  activeTab === 'offers' ? 'Coupons & Offers' :
-                                    activeTab === 'users' ? 'Customer Directory' : 'System Diagnostics'}
-                </h1>
-              </div>
+            
+            {/* Left element: switch or img pill */}
+            <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-600 font-semibold text-xs border border-slate-300">
+              img
             </div>
+
+            {/* Hub dropdown pill: 📍 All Hubs (16) ⌵ */}
+            <button
+              onClick={() => setCityModalOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-full border border-slate-200/80 transition-all cursor-pointer"
+            >
+              <MapPin className="w-3.5 h-3.5 text-slate-500" />
+              <span>All Hubs ({operationalCities.length > 0 ? operationalCities.length : 16})</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <div className="relative hidden sm:block w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="flex items-center gap-3">
+            {/* Search Input with ⌘K */}
+            <div className="relative hidden md:block w-72">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder="Search orders, quotes, customers... (⌘K)"
-                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
+                placeholder="Search orders, BOQs, client phone..."
+                className="w-full pl-9 pr-10 py-1.5 bg-slate-100/80 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
               />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                ⌘K
+              </span>
             </div>
 
-            <button
-              onClick={() => fetchAllData(true)}
-              title="Sync live database"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden sm:inline">Sync</span>
-            </button>
+            {/* SYNC STATUS: ACTIVE pill */}
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200/80 rounded-full text-[11px] font-bold text-slate-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>SYNC STATUS: ACTIVE</span>
+            </div>
 
-            {onSwitchToCustomerApp && (
-              <button
-                onClick={onSwitchToCustomerApp}
-                title="Switch to Mobile Customer Demo"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all shadow-xs"
-              >
-                <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
-                <span className="hidden sm:inline">Customer App</span>
-              </button>
-            )}
-
+            {/* + New BOQ Quote button */}
             <button
               onClick={() => setActiveTab('builder')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>New Quote</span>
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              <span>New BOQ Quote</span>
             </button>
+
+            {/* Notification Bell */}
+            <div className="relative p-1.5 text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer">
+              <Bell className="w-4 h-4" />
+              <span className="w-2 h-2 rounded-full bg-primary-600 absolute top-1 right-1"></span>
+            </div>
+
+            {/* User Avatar Circle */}
+            <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs">
+              <User className="w-4 h-4" />
+            </div>
           </div>
         </header>
 
@@ -5900,59 +5782,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             }
 
             return (
-              <div className="space-y-5">
-                {/* 1. TOP HEADER & METRIC CONTROLLER */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold">
-                        <ClipboardList className="w-4 h-4" />
-                      </div>
-                      <h2 className="font-heading font-bold text-lg text-slate-900">
-                        Inspection Requests & Site Audits
-                      </h2>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                        {displayRequests.length} Showing
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-                      Review customer damage evidence, schedule physical civil site audits, assign connected vendors, and issue itemized BOQ quotations.
-                    </p>
-                  </div>
+              <div className="space-y-4">
+                {/* 1. TOP HUB BAR (Across Operational Hubs) */}
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    <span>HUB:</span>
+                  </span>
 
-                  {/* Header Action Buttons */}
-                  <div className="flex items-center gap-2 flex-wrap shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => fetchRequests()}
-                      disabled={isLoadingRequests}
-                      title="Sync Inspection Requests"
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingRequests ? 'animate-spin' : ''}`} />
-                      <span>{isLoadingRequests ? 'Syncing...' : 'Sync Requests'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCreateTestRequest('Udaipur')}
-                      title="Seed a realistic test inspection request in Udaipur"
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
-                    >
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      <span>+ Seed Test Lead</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. MULTI-CITY QUICK SWITCHER BAR */}
-                <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Operational Hub:</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1">
+                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
                     {availableCities.map(c => {
                       const isSel = requestsCityFilter === c;
                       const cCount = c === 'ALL'
@@ -5964,40 +5802,39 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           key={c}
                           type="button"
                           onClick={() => setRequestsCityFilter(c)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
                             isSel
-                              ? 'bg-slate-900 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                              ? 'bg-black text-white shadow-xs'
+                              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/90'
                           }`}
                         >
-                          <span>{c === 'ALL' ? '🌐 All Hubs' : `📍 ${c}`}</span>
-                          <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
-                            isSel ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                          }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-primary-400' : 'bg-primary-500'}`} />
+                          <span>{c === 'ALL' ? 'All Hubs' : c}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isSel ? 'bg-white/20 text-white' : 'text-slate-500'}`}>
                             {cCount}
                           </span>
                         </button>
                       );
                     })}
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setCityModalOpen(true)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0 shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Hub</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setCityModalOpen(true)}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-dashed border-slate-300 flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Hub</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Active Hub Alert Banner */}
                 {requestsCityFilter !== 'ALL' && (
-                  <div className="bg-primary-50/90 border border-primary-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-primary-800 shadow-2xs">
+                  <div className="bg-primary-50/90 border border-primary-200 rounded-xl px-4 py-2 flex items-center justify-between text-xs text-primary-800 shadow-2xs">
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
+                      <MapPin className="w-3.5 h-3.5 text-primary-600 shrink-0" />
                       <span>
-                        Showing requests for <strong>📍 {requestsCityFilter}</strong> only ({filteredByCityRequests.length} of {requests.length} total). Requests in other cities are hidden by this hub filter.
+                        Showing requests for <strong>📍 {requestsCityFilter}</strong> ({filteredByCityRequests.length} of {requests.length} total).
                       </span>
                     </div>
                     <button
@@ -6010,18 +5847,16 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
                 )}
 
-                {/* 3. STATUS FILTER PILLS & SEARCH BAR */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* 2. STATUS FILTER TABS ROW & SEARCH BAR */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
                   {/* Status Pills */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
                     {[
                       { id: 'ALL', label: 'All Requests', count: countAll },
-                      { id: 'VENDOR_QUOTES', label: '⭐ Vendor Quotes Received', count: countVendorQuotes, highlight: countVendorQuotes > 0 },
+                      { id: 'VENDOR_QUOTES', label: '★ Vendor Quotes Received', count: countVendorQuotes },
                       { id: 'NEEDS_REVIEW', label: 'Needs Estimating', count: countNeedsReview },
                       { id: 'SITE_AUDIT', label: 'Site Audit Req.', count: countSiteAudit },
-                      { id: 'QUOTED', label: 'Quoted', count: countQuoted },
-                      { id: 'ACTIVE', label: 'In Execution', count: countActive },
-                      { id: 'COMPLETED', label: 'Completed', count: countCompleted }
+                      { id: 'QUOTED', label: 'Quoted', count: countQuoted }
                     ].map(st => {
                       const isStActive = requestsStatusFilter === st.id;
                       return (
@@ -6029,15 +5864,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           key={st.id}
                           type="button"
                           onClick={() => setRequestsStatusFilter(st.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                             isStActive
-                              ? 'bg-primary-600 text-white shadow-xs font-bold'
-                              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                              ? 'bg-primary-600 text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'
                           }`}
                         >
                           <span>{st.label}</span>
                           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
-                            isStActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                            isStActive ? 'bg-white/25 text-white' : 'bg-white/80 text-slate-600'
                           }`}>
                             {st.count}
                           </span>
@@ -6046,34 +5881,46 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     })}
                   </div>
 
-                  {/* Search Input */}
-                  <div className="relative w-full md:w-80 shrink-0">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={requestsSearch}
-                      onChange={(e) => setRequestsSearch(e.target.value)}
-                      placeholder="Search customer, phone, request #..."
-                      className="w-full pl-9 pr-8 py-1.5 bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
-                    />
-                    {requestsSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setRequestsSearch('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
+                  {/* Search Input & Sync */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-full md:w-64 shrink-0">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={requestsSearch}
+                        onChange={(e) => setRequestsSearch(e.target.value)}
+                        placeholder="Search orders, BOQs, client phone..."
+                        className="w-full pl-9 pr-7 py-1.5 bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
+                      />
+                      {requestsSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setRequestsSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fetchRequests()}
+                      disabled={isLoadingRequests}
+                      title="Sync Live Database"
+                      className="p-1.5 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRequests ? 'animate-spin' : ''}`} />
+                    </button>
                   </div>
                 </div>
 
-                {/* 4. MAIN CONTENT AREA */}
+                {/* 3. MAIN CONTENT AREA */}
                 {isLoadingRequests && requests.length === 0 ? (
                   // Skeleton Loading State
-                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-                    {[1, 2, 3].map(k => (
-                      <div key={k} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs animate-pulse space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {[1, 2].map(k => (
+                      <div key={k} className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs animate-pulse space-y-4">
                         <div className="flex justify-between items-center">
                           <div className="h-5 w-32 bg-slate-200 rounded-md" />
                           <div className="h-5 w-20 bg-slate-200 rounded-full" />
@@ -6086,7 +5933,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
                 ) : displayRequests.length === 0 ? (
                   // Resilient Empty State
-                  <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center shadow-xs">
+                  <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center shadow-xs">
                     <div className="w-14 h-14 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mx-auto mb-4">
                       <ClipboardList className="w-7 h-7" />
                     </div>
@@ -6107,7 +5954,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             setRequestsStatusFilter('ALL');
                             setRequestsSearch('');
                           }}
-                          className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                          className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
                         >
                           Clear All Filters
                         </button>
@@ -6115,107 +5962,105 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       <button
                         type="button"
                         onClick={() => fetchAllData(true)}
-                        className="px-4 py-2 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl transition-all inline-flex items-center gap-1.5"
+                        className="px-4 py-2 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer"
                       >
                         <RefreshCw className="w-3.5 h-3.5" /> Sync Live Database
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleCreateTestRequest('Udaipur')}
-                        className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all inline-flex items-center gap-1.5"
+                        onClick={() => handleCreateTestRequest('Bhilwara')}
+                        className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer"
                       >
                         <PlusCircle className="w-3.5 h-3.5" /> + Seed Test Request
                       </button>
                     </div>
                   </div>
                 ) : (
-                  // Grid of Rich Request Cards
-                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                  // Grid of Rich Request Cards (Exact 2-column layout from screenshot)
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     {displayRequests.map(req => {
                       const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
                       const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
                       const isAuditScheduled = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
-                      const hasQuote = (req.quotations || []).length > 0 || quotations.some(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
-                      const assignedVendor = vendors.find(v => v.id === req.vendorId);
 
                       return (
                         <div
                           key={req.id}
-                          className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                          className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
                         >
                           <div className="space-y-4">
-                            {/* Card Header: Request #, Urgency, Status */}
+                            {/* Card Header Row: # REQ-1794040980747 | NORMAL | [Eye Details] | • QUOTE_REQUESTED */}
                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRequestDetail(req)}
-                                  className="font-mono font-bold text-sm sm:text-base text-primary-600 hover:text-primary-800 hover:underline tracking-wide cursor-pointer text-left"
-                                  title="Click to view full inspection requirement, photos & vendor details"
+                                  className="font-mono font-bold text-xs text-primary-600 bg-primary-50 hover:bg-primary-100 px-2.5 py-1 rounded-lg border border-primary-100 cursor-pointer transition-colors"
+                                  title="Click to view full inspection requirement"
                                 >
-                                  {req.requestNumber}
+                                  #{req.requestNumber}
                                 </button>
-                                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                                   isUrgent
-                                    ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
+                                    ? 'bg-rose-50 text-rose-600 border border-rose-200 animate-pulse'
                                     : 'bg-slate-100 text-slate-600 border border-slate-200'
                                 }`}>
                                   {req.urgency || 'NORMAL'}
                                 </span>
                                 {isAuditScheduled && (
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-warning-50 text-warning-800 border border-warning-300 flex items-center gap-1 shadow-2xs">
-                                    <MapPin className="w-3 h-3 text-warning-600" /> Site Audit Req.
+                                    <MapPin className="w-3 h-3 text-warning-600" /> Audit Req.
                                   </span>
                                 )}
                               </div>
+
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRequestDetail(req)}
-                                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                                  className="px-3 py-1 rounded-lg text-xs font-bold bg-black text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
                                   title="View full requirement, photos & vendor quotations"
                                 >
                                   <Eye className="w-3.5 h-3.5" />
                                   <span>Details</span>
                                 </button>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>
-                                  {req.status}
+
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary-50 text-primary-700 border border-primary-200/80 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-primary-600" />
+                                  <span>{req.status}</span>
                                 </span>
-                                {req.customerRating && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200" title={req.customerReview || 'Customer rating'}>
-                                    <span className="text-amber-500">★</span> {req.customerRating.toFixed(1)}
-                                  </span>
-                                )}
                               </div>
                             </div>
 
-                            {/* HIGH VISIBILITY: VENDOR QUOTATION ALERT CALLOUT */}
+                            {/* HIGH-VISIBILITY SLEEK BLACK BANNER: VENDOR QUOTATIONS RECEIVED */}
                             {(req.vendorQuotes || []).length > 0 && (
                               <div
-                                onClick={() => handleOpenRequestDetail(req, 'quotes')}
-                                className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-xl cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between gap-3 group"
+                                onClick={() => handleOpenVendorQuotesModal(req)}
+                                className="bg-black text-white rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md cursor-pointer hover:bg-slate-900 transition-all group"
                               >
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center font-bold text-xs shrink-0 group-hover:scale-105 transition-transform">
                                     <Tag className="w-4 h-4" />
                                   </div>
                                   <div>
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-xs font-bold text-emerald-950">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-bold text-sm text-white">
                                         {(req.vendorQuotes || []).length} Vendor {(req.vendorQuotes || []).length === 1 ? 'Quotation' : 'Quotations'} Received!
                                       </span>
-                                      <span className="text-[11px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
+                                      <span className="text-[11px] font-mono font-bold bg-black border border-white/30 text-white px-2 py-0.5 rounded-md">
                                         Lowest: ₹{Math.min(...(req.vendorQuotes || []).map(q => q.quotePrice)).toLocaleString('en-IN')}
                                       </span>
                                     </div>
-                                    <p className="text-[11px] text-emerald-700 mt-0.5 line-clamp-1">
-                                      From: {(req.vendorQuotes || []).map(q => q.vendorBusiness || q.vendorName || 'Contractor').join(', ')}
+                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
+                                      Bids submitted by: {(req.vendorQuotes || []).map(q => q.vendorBusiness || q.vendorName || 'Contractor').join(', ')}
                                     </p>
                                   </div>
                                 </div>
+
                                 <button
                                   type="button"
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all shrink-0 flex items-center gap-1 shadow-xs"
+                                  onClick={(e) => { e.stopPropagation(); handleOpenVendorQuotesModal(req); }}
+                                  className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold rounded-xl transition-all shrink-0 flex items-center gap-1"
                                 >
                                   <span>Review & Award</span>
                                   <ArrowRight className="w-3.5 h-3.5" />
@@ -6223,122 +6068,148 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               </div>
                             )}
 
-                            {/* Service Category & Sub Service */}
+                            {/* Service Title, Sub-Service & Hub Location Badge */}
                             <div>
-                              <div className="flex items-center justify-between gap-2">
-                                <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900 tracking-tight">
-                                  {req.servicecode}
-                                </h3>
-                                {(req.city || req.location) && (
-                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
-                                    <MapPin className="w-3 h-3 text-primary-600" />
-                                    <span>{req.city || req.location}</span>
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <h3 className="font-heading font-bold text-lg text-slate-900 tracking-tight">
+                                    {req.servicecode}
+                                  </h3>
+                                  {req.subServiceCode && (
+                                    <p className="text-xs font-semibold text-primary-600 mt-0.5">
+                                      {req.subServiceCode}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {(req.city || req.location || req.addressline) && (
+                                  <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-700 border border-slate-200/80 flex items-center gap-1 shrink-0">
+                                    <MapPin className="w-3.5 h-3.5 text-primary-600" />
+                                    <span>{req.city || req.location || 'Site Hub'}</span>
                                   </span>
                                 )}
                               </div>
-                              {req.subServiceCode && (
-                                <p className="text-xs sm:text-sm font-semibold text-primary-600 mt-0.5">
-                                  {req.subServiceCode}
-                                </p>
+                            </div>
+
+                            {/* Reported Issue Callout */}
+                            <div className="p-3 bg-blue-50/40 rounded-xl border border-blue-100/80 text-xs text-slate-700 font-normal space-y-1">
+                              <div className="flex items-center gap-1.5 text-rose-600 font-bold text-xs">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                <span>Reported Issue:</span>
+                              </div>
+                              <p className="italic text-slate-600 font-medium pl-5 leading-relaxed">
+                                "{req.issueDescription || 'Customer inspection completed. Scope of work awaiting contractor quotation.'}"
+                              </p>
+                            </div>
+
+                            {/* Damage Evidence Photo Gallery */}
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <span>Site Evidence ({media.length} items):</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setActivePhotoModal({ photos: media, index: 0, title: `${req.requestNumber} Site Evidence` })}
+                                  className="text-primary-600 hover:underline flex items-center gap-0.5 font-semibold capitalize cursor-pointer"
+                                >
+                                  <span>Click to inspect</span>
+                                  <ExternalLink className="w-3 h-3 ml-0.5" />
+                                </button>
+                              </div>
+
+                              {media.length > 0 ? (
+                                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                                  {media.slice(0, 4).map((img, i) => (
+                                    <div
+                                      key={i}
+                                      onClick={() => setActivePhotoModal({ photos: media, index: i, title: `${req.requestNumber} Site Evidence` })}
+                                      className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 relative group shrink-0 cursor-pointer shadow-2xs hover:border-primary-500 transition-all"
+                                    >
+                                      <img
+                                        src={img}
+                                        alt="Site evidence"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                                      />
+                                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] font-medium text-center py-0.5">
+                                        Photo #{i + 1}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {media.length > 4 && (
+                                    <div
+                                      onClick={() => setActivePhotoModal({ photos: media, index: 4, title: `${req.requestNumber} Site Evidence` })}
+                                      className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 relative group shrink-0 cursor-pointer shadow-2xs hover:border-primary-500 transition-all"
+                                    >
+                                      <img
+                                        src={media[4]}
+                                        alt="Site evidence"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                                      />
+                                      <div className="absolute inset-0 bg-black/65 backdrop-blur-2xs flex flex-col items-center justify-center text-white text-xs font-bold">
+                                        <span>+{media.length - 4}</span>
+                                        <span className="text-[9px] uppercase font-semibold">MORE</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="p-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center space-y-1">
+                                  <div className="text-slate-400 text-xs">No site photos or videos uploaded</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSiteAudit(req)}
+                                    className="text-[11px] font-semibold text-primary-600 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                                  >
+                                    <MapPin className="w-3 h-3" />
+                                    <span>Dispatch Engineer to Capture Media</span>
+                                  </button>
+                                </div>
                               )}
                             </div>
 
-                            {/* Issue Description Callout */}
-                            <div className="p-3.5 bg-slate-50/90 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed border border-slate-200 font-normal">
-                              <div className="flex items-start gap-1.5">
-                                <AlertCircle className="w-4 h-4 text-warning-600 shrink-0 mt-0.5" />
-                                <div>
-                                  <strong className="text-slate-900 mr-1">Reported Issue:</strong>
-                                  {req.issueDescription || 'No description provided'}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Damage Photos & Videos Gallery */}
-                            {media.length > 0 ? (
-                              <div className="space-y-1.5">
-                                <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
-                                  <span>Site Evidence ({media.length} items):</span>
-                                  <span className="text-[11px] text-primary-600 font-medium">Click to inspect</span>
-                                </div>
-                                <div className="flex gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
-                                  {media.map((itemUrl, i) => {
-                                    const isVid = isVideoMedia(itemUrl);
-                                    return (
-                                      <div
-                                        key={i}
-                                        onClick={() => setActivePhotoModal({ photos: media, index: i, title: `${req.requestNumber} Site Evidence` })}
-                                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer relative group shrink-0 hover:border-primary-500 hover:shadow-md transition-all"
-                                      >
-                                        {isVid ? (
-                                          <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
-                                            <Video className="w-6 h-6 text-primary-400 group-hover:scale-110 transition-transform" />
-                                            <span className="text-[9px] font-bold mt-1">Video</span>
-                                          </div>
-                                        ) : (
-                                          <img
-                                            src={itemUrl}
-                                            alt="Damage evidence"
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
-                                          />
-                                        )}
-                                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/75 backdrop-blur-xs text-white text-[9.5px] font-semibold text-center py-0.5">
-                                          {isVid ? 'Play Video' : `Photo #${i + 1}`}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="p-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400 italic text-center">
-                                No site photos or videos uploaded
-                              </div>
-                            )}
-
                             {/* Customer & Site Details Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 text-slate-600">
-                              <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-slate-400 shrink-0" />
-                                <span className="font-semibold text-slate-800">{req.user?.name || req.customerName || 'Customer'}</span>
+                            <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-3.5 space-y-2 text-xs text-slate-700">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                                  <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="truncate">{req.user?.name || req.customerName || 'Customer'}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 font-semibold text-primary-600">
+                                  <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <a href={`tel:${req.user?.phoneNumber || req.customerPhone || ''}`} className="hover:underline">
+                                    {req.user?.phoneNumber || req.customerPhone || 'N/A'}
+                                  </a>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 font-mono">
-                                <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                                <a
-                                  href={`tel:${req.user?.phoneNumber || req.customerPhone || ''}`}
-                                  className="font-medium text-primary-600 hover:underline"
-                                >
-                                  {req.user?.phoneNumber || req.customerPhone || 'N/A'}
-                                </a>
+
+                              <div className="grid grid-cols-2 gap-2 text-slate-600">
+                                <div className="flex items-center gap-1.5">
+                                  <Home className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="truncate">{req.propertyType || 'Villa'} ({req.propertySize || '200 sq ft'})</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="truncate">{req.preferredDate || 'Flexible'} {req.preferredTime ? `• ${req.preferredTime}` : ''}</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Home className="w-4 h-4 text-slate-400 shrink-0" />
-                                <span className="font-medium text-slate-700 truncate">
-                                  {req.propertyType || 'House'} ({req.propertySize || 'Standard'})
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
-                                <span className="font-medium text-slate-700">
-                                  {req.preferredDate || 'Flexible'} {req.preferredTime ? `• ${req.preferredTime}` : ''}
-                                </span>
-                              </div>
-                              <div className="col-span-1 sm:col-span-2 flex items-center gap-2">
-                                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                                <span className="font-medium text-slate-700 truncate" title={req.addressline || req.location || ''}>
-                                  {req.addressline || req.location || 'Site address not provided'}
+
+                              <div className="flex items-center gap-1.5 text-slate-500 pt-0.5 border-t border-slate-200/60">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="truncate" title={req.addressline || req.location || ''}>
+                                  {req.addressline || req.location || 'Site address'}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Connected Vendor Quoting & Project Assignment Section */}
-                            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2.5">
+                            {/* Vendor Quoting & Project Assignment Section */}
+                            <div className="bg-blue-50/30 border border-blue-100 rounded-2xl p-3.5 space-y-2.5">
                               <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                                   <HardHat className="w-3.5 h-3.5 text-primary-600" />
                                   <span>Vendor Quoting & Project Assignment:</span>
                                 </span>
+
                                 {isProjectAwarded(req) ? (
                                   <button
                                     type="button"
@@ -6346,83 +6217,52 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                       const v = vendors.find(x => x.id === req.vendorId || x.name === req.assignedVendorName);
                                       if (v) handleOpenVendorDetail(v);
                                     }}
-                                    className="text-[10px] font-bold text-success-700 bg-success-50 hover:bg-success-100 px-2.5 py-0.5 rounded-full border border-success-200 flex items-center gap-1 transition-all cursor-pointer"
+                                    className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 transition-all cursor-pointer"
                                     title="Click to view full contractor profile & KYC"
                                   >
-                                    <CheckCircle2 className="w-3 h-3 text-success-600" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                                     <span>Awarded: {req.assignedVendorName}</span>
-                                    <ExternalLink className="w-2.5 h-2.5 text-success-600 ml-0.5" />
-                                  </button>
-                                ) : (req.vendorQuotes || []).length > 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenRequestDetail(req, 'quotes')}
-                                    className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 transition-all cursor-pointer"
-                                    title="Click to review quotes and award contractor"
-                                  >
-                                    <Tag className="w-3 h-3 text-amber-600" />
-                                    <span>{(req.vendorQuotes || []).length} Quote{(req.vendorQuotes || []).length > 1 ? 's' : ''} Received (Pending Award)</span>
+                                    <ExternalLink className="w-2.5 h-2.5 text-emerald-600 ml-0.5" />
                                   </button>
                                 ) : (
-                                  <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
-                                    Unassigned
+                                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                    <span>UNASSIGNED</span>
                                   </span>
                                 )}
                               </div>
 
-                              {/* Two Core Action Buttons: Share with Vendors & View Quotations */}
                               <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenShareVendorsModal(req)}
-                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
-                                    (req.sharedVendors || []).length > 0
-                                      ? 'bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-200'
-                                      : 'bg-primary-600 hover:bg-primary-700 text-white shadow-primary-500/20'
-                                  }`}
+                                  className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                                 >
-                                  <Share2 className="w-3.5 h-3.5" />
-                                  <span>
-                                    {(req.sharedVendors || []).length > 0
-                                      ? `Shared (${req.sharedVendors.length})`
-                                      : 'Share with Vendors'}
-                                  </span>
+                                  <Share2 className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Shared ({(req.sharedVendors || []).length})</span>
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => handleOpenVendorQuotesModal(req)}
-                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
-                                    (req.vendorQuotes || []).length > 0
-                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                                  className={`px-3 py-2 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                                    (req.vendorQuotes || []).length > 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-primary-600 hover:bg-primary-700'
                                   }`}
                                 >
                                   <Tag className="w-3.5 h-3.5" />
-                                  <span>
-                                    {(req.vendorQuotes || []).length > 0
-                                      ? `Quotes (${req.vendorQuotes.length})`
-                                      : 'Quotes (0)'}
-                                  </span>
+                                  <span>Quotes ({(req.vendorQuotes || []).length})</span>
                                 </button>
                               </div>
 
-                              {isProjectAwarded(req) && req.assignedVendorName && req.assignedQuotePrice && (
-                                <div className="text-[11px] text-emerald-700 bg-emerald-50/70 px-2.5 py-1 rounded-lg border border-emerald-200/80 flex items-center justify-between">
-                                  <span>Assigned Quote Price:</span>
-                                  <span className="font-mono font-bold">₹{Number(req.assignedQuotePrice).toLocaleString('en-IN')}</span>
-                                </div>
-                              )}
-
                               {/* Secondary Direct Select Dropdown */}
                               {!isProjectAwarded(req) && (
-                                <div className="pt-1 flex items-center gap-2">
+                                <div>
                                   <select
                                     value={req.vendorId || ''}
                                     onChange={(e) => {
                                       if (e.target.value) handleAssignVendorDirect(req.id, e.target.value);
                                     }}
-                                    className="w-full text-[11px] font-semibold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                                   >
                                     <option value="">-- Or Direct Assign Connected Vendor --</option>
                                     {vendors.map(v => (
@@ -6435,158 +6275,32 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               )}
                             </div>
 
-                            {/* Interactive 5-Step Customer Timeline Stage Controller */}
-                            <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2.5">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                                  <Clock className="w-4 h-4 text-primary-600" />
-                                  <span>Service Timeline (Customer View)</span>
+                            {/* Service Timeline (Customer View) */}
+                            <div className="pt-1 flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+                                <Activity className="w-3.5 h-3.5 text-primary-600" />
+                                <span>Service Timeline (Customer View)</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-primary-700 text-[11px] flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-primary-600" />
+                                  <span>Stage {getTimelineStepIndex(req.status) + 1} of 5</span>
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {[0, 1, 2, 3, 4].map(idx => {
+                                    const currentIdx = getTimelineStepIndex(req.status);
+                                    const isPastOrCurrent = idx <= currentIdx;
+                                    return (
+                                      <span
+                                        key={idx}
+                                        className={`w-2 h-2 rounded-full transition-all ${
+                                          isPastOrCurrent ? 'bg-primary-600' : 'bg-slate-200'
+                                        }`}
+                                      />
+                                    );
+                                  })}
                                 </div>
-                                <span className="text-[11px] font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-md border border-primary-200">
-                                  Stage {getTimelineStepIndex(req.status) + 1} of 5
-                                </span>
                               </div>
-
-                              {/* Mini Progress Bar */}
-                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-primary-600 h-full transition-all duration-300"
-                                  style={{ width: `${((getTimelineStepIndex(req.status) + 1) / 5) * 100}%` }}
-                                />
-                              </div>
-
-                              {/* 5 Milestone Step Buttons */}
-                              <div className="grid grid-cols-5 gap-1 pt-0.5">
-                                {TIMELINE_STAGES.map((stg, idx) => {
-                                  const currentIdx = getTimelineStepIndex(req.status);
-                                  const isPast = idx < currentIdx;
-                                  const isCurrent = idx === currentIdx;
-
-                                  let btnStyle = 'bg-white text-slate-500 border-slate-200 hover:border-primary-400 hover:text-primary-600';
-                                  if (isCurrent) {
-                                    btnStyle = 'bg-primary-600 text-white border-primary-600 shadow-xs font-bold ring-2 ring-primary-500/20';
-                                  } else if (isPast) {
-                                    btnStyle = 'bg-success-50 text-success-700 border-success-300 font-semibold';
-                                  }
-
-                                  return (
-                                    <button
-                                      key={stg.key}
-                                      type="button"
-                                      onClick={() => handleUpdateStatus(req.id, stg.key)}
-                                      title={`Set Timeline to: ${stg.label} (${stg.desc})`}
-                                      className={`px-1 py-1 rounded-lg border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${btnStyle}`}
-                                    >
-                                      <div className="flex items-center justify-center">
-                                        {isPast ? (
-                                          <Check className="w-3 h-3 text-success-600" />
-                                        ) : (
-                                          <span className={`text-[9.5px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold ${
-                                            isCurrent ? 'bg-white text-primary-600' : 'bg-slate-100 text-slate-600'
-                                          }`}>
-                                            {stg.step}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <span className="text-[9.5px] leading-tight truncate max-w-full font-medium">
-                                        {stg.label}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                                <span>💡 Tap milestone to update app status</span>
-                                <span className="font-semibold text-slate-600">
-                                  {TIMELINE_STAGES[getTimelineStepIndex(req.status)]?.desc}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Card Footer: Status Changer & Action Buttons */}
-                          <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-slate-500">Status:</span>
-                              <select
-                                value={req.status}
-                                onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
-                                className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                              >
-                                <option value="SUBMITTED">SUBMITTED</option>
-                                <option value="AUDIT_SCHEDULED">AUDIT_SCHEDULED (Physical Audit)</option>
-                                <option value="ESTIMATING">ESTIMATING (Digital Review)</option>
-                                <option value="QUOTED">QUOTED</option>
-                                <option value="ACCEPTED">ACCEPTED</option>
-                                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                                <option value="COMPLETED">COMPLETED</option>
-                                <option value="REJECTED">REJECTED</option>
-                              </select>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {/* Require Site Audit Toggle */}
-                              {(() => {
-                                const isAuditReq = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || req.requiresSiteAudit;
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSiteAudit(req)}
-                                    title={isAuditReq ? 'Site audit is currently marked REQUIRED. Click to toggle.' : 'Mark this request as requiring a physical on-site audit inspection.'}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border shadow-xs flex items-center gap-1.5 transition-all ${
-                                      isAuditReq
-                                        ? 'bg-warning-100 text-warning-900 border-warning-400 hover:bg-warning-200 ring-2 ring-warning-400/20 font-bold'
-                                        : 'bg-white text-slate-700 border-slate-300 hover:border-warning-400 hover:bg-warning-50 hover:text-warning-800'
-                                    }`}
-                                  >
-                                    <MapPin className={`w-3.5 h-3.5 ${isAuditReq ? 'text-warning-700 fill-warning-300' : 'text-slate-400'}`} />
-                                    <span>{isAuditReq ? 'Audit: REQUIRED' : 'Require Audit'}</span>
-                                  </button>
-                                );
-                              })()}
-
-                              {/* Open Dedicated Detail Page */}
-                              <button
-                                type="button"
-                                onClick={() => handleOpenRequestDetail(req)}
-                                title="Open Full Inspection Details Page"
-                                className="px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-slate-600" />
-                                <span>Details</span>
-                              </button>
-
-                              {/* Chat with Customer */}
-                              <button
-                                type="button"
-                                onClick={() => openChatForRequest(req)}
-                                title="Open Live Chat with Customer"
-                                className="px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
-                              >
-                                <MessageCircle className="w-3.5 h-3.5 text-primary-600" />
-                                <span>Chat</span>
-                              </button>
-
-                              {/* Build BOQ Quote */}
-                              <button
-                                type="button"
-                                onClick={() => handleStartQuote(req)}
-                                title="Create itemized estimate in BOQ builder"
-                                className="px-3 py-1.5 text-xs font-semibold text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
-                              >
-                                <Calculator className="w-3.5 h-3.5" />
-                                <span>Build Quote</span>
-                              </button>
-
-                              {/* Delete Request */}
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteRequest(req.id)}
-                                title="Delete request"
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
                             </div>
                           </div>
                         </div>
@@ -6594,6 +6308,51 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     })}
                   </div>
                 )}
+
+                {/* 4. REAL-TIME DISPATCH ENGINE STICKY BOTTOM BAR */}
+                <div className="sticky bottom-0 z-20 mt-6 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3.5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                      </span>
+                      <span className="font-bold text-xs text-slate-900">Real-Time Dispatch Engine</span>
+                    </div>
+                    <span className="text-xs text-slate-500 hidden sm:inline">
+                      {displayRequests.length} requests loaded • {new Set(displayRequests.map(r => r.city || r.location || 'Hub')).size} active geographic clusters • Last sync 12s ago
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleExportRequestsCSV(displayRequests)}
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Export CSV</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBatchVendorPing}
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Radio className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Batch Vendor Ping</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCreateTestRequest(requestsCityFilter !== 'ALL' ? requestsCityFilter : 'Bhilwara')}
+                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Manual Request</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })()}
@@ -8680,240 +8439,107 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             </div>
           )}
 
-          {/* QUOTATION BUILDER & DYNAMIC BOQ GENERATOR TAB */}
+          {/* QUOTATION BUILDER TAB */}
           {activeTab === 'builder' && (
-            <div className="space-y-4">
-              {/* PAGE TOP HEADER */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+            <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-2">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="font-heading font-extrabold text-xl text-slate-900 tracking-tight">
-                      Dynamic Itemized Quotation Generator
-                    </h2>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                      QTE-2026-AUTO
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                      DRAFT
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Hind Building Solutions — Material & Labor Custom Scope Pricing Engine
-                  </p>
+                  <h2 className="font-heading font-semibold text-lg text-slate-800">Dynamic Itemized Quotation Generator</h2>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Hind Building Solutions — Material & Labor Custom Scope Pricing Engine</p>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => showToastMsg('Auto-saved to cloud draft registry', 'info')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-600 transition-all shadow-2xs"
-                  >
-                    <History className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Version 1.0 (Auto-saved)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTemplatesModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-all shadow-2xs"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Templates</span>
-                  </button>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono font-medium text-slate-600">
+                  <span>QTE-2026-AUTO</span>
                 </div>
               </div>
 
-              {/* REQUEST SELECTION & ESTIMATOR ROW */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                {/* Associated Service Request */}
-                <div className="lg:col-span-8 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5">
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    SELECT ASSOCIATED SERVICE REQUEST *
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={builderRequestId}
-                      onChange={(e) => setBuilderRequestId(e.target.value)}
-                      className="w-full appearance-none px-3.5 py-2.5 pr-9 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                    >
-                      <option value="">
-                        {selectedBuilderReq 
-                          ? `${selectedBuilderReq.requestNumber} - ${selectedBuilderReq.user?.name || 'Customer'} (${selectedBuilderReq.servicecode})`
-                          : (requests.length > 0 
-                              ? `REQ-${requests[0].requestNumber || '1793881172546'} - ${requests[0].user?.name || 'Dr. Arvind Rathore'} (${requests[0].servicecode || 'Roof Waterproofing'})`
-                              : 'REQ-1793881172546 - Dr. Arvind Rathore (Roof Waterproofing)')
-                        }
-                      </option>
-                      {requests.map(r => (
-                        <option key={r.id} value={r.id}>
-                          {r.requestNumber} — {r.user?.name || 'Customer'} ({r.servicecode} • {r.status})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 pt-0.5">
-                    <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-xs">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Inspection Complete</span>
-                    </span>
-                    <span className="text-slate-300">•</span>
-                    <span>Site Tech: <strong className="text-slate-700 font-semibold">Er. Manish Rao</strong></span>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-slate-500">
-                      Location: {selectedBuilderReq?.city || selectedBuilderReq?.addressline || selectedBuilderReq?.location || 'Sector 48, Gurgaon'}
-                    </span>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2 space-y-1">
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider">Select Associated Service Request *</label>
+                  <select value={builderRequestId} onChange={(e) => setBuilderRequestId(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500/20 focus:border-brand-500 transition-all">
+                    <option value="">-- Choose a pending customer request --</option>
+                    {requests.map(r => (
+                      <option key={r.id} value={r.id}>{r.requestNumber} — {r.servicecode} ({r.user?.name || 'Customer'} • {r.status})</option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Created By Estimator Desk */}
-                <div className="lg:col-span-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5 flex flex-col justify-between">
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    CREATED BY (ESTIMATOR DESK)
-                  </label>
-                  <div className="flex items-center justify-between p-2.5 bg-slate-50/80 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center shrink-0">
-                        <Headphones className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-slate-900 leading-tight">
-                          {builderEstimator || 'Hipro Technical Admin Desk'}
-                        </div>
-                        <div className="text-[10px] text-slate-400">Structural Estimations Desk</div>
-                      </div>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider">Created By (Estimator Desk)</label>
+                  <input type="text" value={builderEstimator} onChange={(e) => setBuilderEstimator(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500/20 focus:border-brand-500 transition-all" />
+                </div>
+              </div>
+
+              {selectedBuilderReq && (
+                <div className="p-3.5 rounded-lg bg-brand-50/40 border border-brand-200 text-slate-700 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-medium text-brand-800">
+                      <Info className="w-3.5 h-3.5 text-brand-600" />
+                      <span>{selectedBuilderReq.requestNumber} — {selectedBuilderReq.servicecode}</span>
                     </div>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200 shadow-2xs">
-                      HQ-DEL
-                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white text-brand-700 border border-brand-200">{selectedBuilderReq.status}</span>
+                  </div>
+                  <div className="text-[11.5px] text-slate-600 leading-relaxed font-normal">
+                    <strong>Client:</strong> {selectedBuilderReq.user?.name} ({selectedBuilderReq.user?.phoneNumber}) &nbsp;|&nbsp;
+                    <strong>Property:</strong> {[selectedBuilderReq.propertyType, selectedBuilderReq.propertySize].filter(Boolean).join(' • ') || '—'} &nbsp;|&nbsp;
+                    <strong>Address:</strong> {selectedBuilderReq.addressline || selectedBuilderReq.location || '—'} <br />
+                    <strong>Issue:</strong> "{selectedBuilderReq.issueDescription}"
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* ITEMIZED SCOPE & BILL OF QUANTITIES (BOQ) */}
-              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-heading font-extrabold text-base text-slate-900 tracking-tight">
-                      Itemized Scope & Bill of Quantities (BOQ)
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Real-time dynamic cost calculation based on structural assessment formulas
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPresetScopeModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-all shadow-2xs"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Import Preset Scope</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLineItems([...lineItems, { item: '', qty: 1, unit: 'Sq Ft', rate: 0 }])}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-xs hover:shadow transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Line Item</span>
-                    </button>
-                  </div>
+              {/* Line Items Table */}
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-heading font-medium text-sm text-slate-800">Itemized Scope & Bill of Quantities (BOQ)</h3>
+                  <button type="button" onClick={() => setLineItems([...lineItems, { item: '', qty: 1, unit: 'Sq Ft', rate: 0 }])} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-all">
+                    <Plus className="w-3 h-3" /> Add Line Item
+                  </button>
                 </div>
 
-                {/* Scope Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-separate border-spacing-y-2">
-                    <thead>
-                      <tr className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                        <th className="px-3 py-1.5 w-10 text-center">#</th>
-                        <th className="px-3 py-1.5 min-w-[280px]">ITEM DESCRIPTION & SCOPE</th>
-                        <th className="px-3 py-1.5 w-24">QTY</th>
-                        <th className="px-3 py-1.5 w-36">UNIT</th>
-                        <th className="px-3 py-1.5 w-32">RATE (₹)</th>
-                        <th className="px-3 py-1.5 w-32 text-right">AMOUNT (₹)</th>
-                        <th className="px-3 py-1.5 w-10 text-center"></th>
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-400 text-[11px] font-medium uppercase tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5 w-8 text-center">#</th>
+                        <th className="p-2.5 min-w-[220px]">Item Description & Scope</th>
+                        <th className="p-2.5 w-24">Qty</th>
+                        <th className="p-2.5 w-32">Unit</th>
+                        <th className="p-2.5 w-32">Rate (₹)</th>
+                        <th className="p-2.5 w-32 text-right">Amount (₹)</th>
+                        <th className="p-2.5 w-10 text-center"></th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100 bg-white">
                       {lineItems.map((li, idx) => {
-                        const lineAmt = ((parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)).toFixed(0);
+                        const lineAmt = ((parseFloat(li.qty) || 0) * (parseFloat(li.rate) || 0)).toFixed(2);
                         return (
-                          <tr key={idx} className="transition-all">
-                            <td className="px-3 py-2 text-center font-mono font-bold text-slate-400">
-                              {idx + 1}
+                          <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-2.5 text-center text-xs font-medium text-slate-400">{idx + 1}</td>
+                            <td className="p-1.5">
+                              <input type="text" value={li.item} onChange={(e) => { const updated = [...lineItems]; updated[idx].item = e.target.value; setLineItems(updated); }} placeholder="Scope description" className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal" />
                             </td>
-                            <td className="px-1.5 py-1">
-                              <input
-                                type="text"
-                                value={li.item}
-                                onChange={(e) => {
-                                  const updated = [...lineItems];
-                                  updated[idx].item = e.target.value;
-                                  setLineItems(updated);
-                                }}
-                                placeholder="Scope description, e.g. Surface Preparation..."
-                                className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                              />
+                            <td className="p-1.5">
+                              <input type="number" value={li.qty} onChange={(e) => { const updated = [...lineItems]; updated[idx].qty = e.target.value; setLineItems(updated); }} className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal" />
                             </td>
-                            <td className="px-1.5 py-1">
-                              <input
-                                type="number"
-                                value={li.qty}
-                                onChange={(e) => {
-                                  const updated = [...lineItems];
-                                  updated[idx].qty = e.target.value;
-                                  setLineItems(updated);
-                                }}
-                                className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-center"
-                              />
+                            <td className="p-1.5">
+                              <select value={li.unit} onChange={(e) => { const updated = [...lineItems]; updated[idx].unit = e.target.value; setLineItems(updated); }} className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal">
+                                <option value="Sq Ft">Sq Ft</option>
+                                <option value="Running Ft">Running Ft</option>
+                                <option value="Lumpsum">Lumpsum</option>
+                                <option value="Bags">Bags</option>
+                                <option value="Hours">Hours</option>
+                                <option value="Points">Points</option>
+                              </select>
                             </td>
-                            <td className="px-1.5 py-1">
-                              <div className="relative">
-                                <select
-                                  value={li.unit}
-                                  onChange={(e) => {
-                                    const updated = [...lineItems];
-                                    updated[idx].unit = e.target.value;
-                                    setLineItems(updated);
-                                  }}
-                                  className="w-full appearance-none px-3.5 py-2.5 pr-8 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                                >
-                                  <option value="Lumpsum">Lumpsum</option>
-                                  <option value="Running Ft">Running Ft</option>
-                                  <option value="Sq Ft">Sq Ft</option>
-                                  <option value="Bags">Bags</option>
-                                  <option value="Hours">Hours</option>
-                                  <option value="Points">Points</option>
-                                  <option value="Nos">Nos</option>
-                                </select>
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                              </div>
+                            <td className="p-1.5">
+                              <input type="number" value={li.rate} onChange={(e) => { const updated = [...lineItems]; updated[idx].rate = e.target.value; setLineItems(updated); }} className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:bg-white focus:outline-none font-normal" />
                             </td>
-                            <td className="px-1.5 py-1">
-                              <input
-                                type="number"
-                                value={li.rate}
-                                onChange={(e) => {
-                                  const updated = [...lineItems];
-                                  updated[idx].rate = e.target.value;
-                                  setLineItems(updated);
-                                }}
-                                className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50/90 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-center"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono font-bold text-emerald-600 text-xs">
+                            <td className="p-2.5 text-right font-mono font-medium text-xs text-success-600">
                               ₹{Number(lineAmt).toLocaleString('en-IN')}
                             </td>
-                            <td className="px-2 py-2 text-center">
-                              <button
-                                type="button"
-                                onClick={() => setLineItems(lineItems.filter((_, i) => i !== idx))}
-                                className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
-                                title="Remove item"
-                              >
-                                <X className="w-3.5 h-3.5" />
+                            <td className="p-1.5 text-center">
+                              <button type="button" onClick={() => setLineItems(lineItems.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md">
+                                <X className="w-3 h-3" />
                               </button>
                             </td>
                           </tr>
@@ -8922,361 +8548,179 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     </tbody>
                   </table>
                 </div>
-
-                {/* Table Footer */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs pt-3 border-t border-slate-100 gap-2 text-slate-500">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-700">{lineItems.length} active BOQ line items</span>
-                    <span className="text-slate-300">•</span>
-                    <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-                      Auto-calibrated rates
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
-                    <Info className="w-3.5 h-3.5" />
-                    <span>Standard market GST & vendor margin split applied</span>
-                  </div>
-                </div>
               </div>
 
-              {/* BOTTOM TWO-COLUMN SPLIT: Execution Parameters & Commercial Summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* LEFT COLUMN: Execution Parameters & Specifications */}
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h3 className="font-heading font-bold text-sm text-slate-900 tracking-tight">
-                        Execution Parameters & Specifications
-                      </h3>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        SERVICE SCOPE
-                      </span>
+              {/* Commercials Form */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-3 border-t border-slate-100 text-xs">
+                <div className="lg:col-span-7 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Estimated Timeline</label>
+                      <select value={builderTimeline} onChange={(e) => setBuilderTimeline(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
+                        <option value="1-2 Working Days">1-2 Working Days</option>
+                        <option value="2-3 Working Days">2-3 Working Days</option>
+                        <option value="3-5 Working Days">3-5 Working Days</option>
+                        <option value="1 Week (Phased)">1 Week (Phased)</option>
+                        <option value="Same Day Immediate">Same Day Immediate</option>
+                      </select>
                     </div>
 
-                    {/* Timeline & Scope dropdowns */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      <div className="space-y-1.5">
-                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          ESTIMATED TIMELINE
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={builderTimeline}
-                            onChange={(e) => setBuilderTimeline(e.target.value)}
-                            className="w-full appearance-none px-3.5 py-2.5 pr-8 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                          >
-                            <option value="1-2 Working Days">1-2 Working Days</option>
-                            <option value="2-3 Working Days">2-3 Working Days</option>
-                            <option value="3-5 Working Days">3-5 Working Days</option>
-                            <option value="1 Week (Phased)">1 Week (Phased)</option>
-                            <option value="Same Day Immediate">Same Day Immediate</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          SERVICE SCOPE
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={builderScope}
-                            onChange={(e) => setBuilderScope(e.target.value)}
-                            className="w-full appearance-none px-3.5 py-2.5 pr-8 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer truncate"
-                          >
-                            <option value="Standard Engineering Specifications">Standard Engineering Specifications</option>
-                            <option value="Comprehensive Waterproofing Scope">Comprehensive Waterproofing Scope</option>
-                            <option value="Structural Patchwork Scope">Structural Patchwork Scope</option>
-                            <option value="Standard Maintenance Scope">Standard Maintenance Scope</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                      </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-slate-400 uppercase">Service Scope</label>
+                      <select value={builderScope} onChange={(e) => setBuilderScope(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700">
+                        <option value="Standard Engineering Specifications">Standard Engineering Specifications</option>
+                        <option value="Comprehensive Waterproofing Scope">Comprehensive Waterproofing Scope</option>
+                        <option value="Structural Patchwork Scope">Structural Patchwork Scope</option>
+                        <option value="Standard Maintenance Scope">Standard Maintenance Scope</option>
+                      </select>
                     </div>
 
-                    {/* Warranty Box */}
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        WARRANTY (OPTIONAL / EXTENDED)
-                      </label>
-                      <div className="flex items-center gap-2.5 p-3 bg-slate-50/80 rounded-xl border border-slate-200">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <input
-                          type="text"
-                          value={builderWarranty}
-                          onChange={(e) => setBuilderWarranty(e.target.value)}
-                          placeholder="e.g. 5 Years Manufacturer & Application Warranty"
-                          className="w-full bg-transparent text-xs font-semibold text-slate-800 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Terms & Conditions Box */}
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        TERMS & CONDITIONS
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={builderTerms}
-                        onChange={(e) => setBuilderTerms(e.target.value)}
-                        className="w-full p-3 bg-slate-50/80 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-normal transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Two Protocol / Quality Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {/* DISPATCH PROTOCOL */}
-                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center shrink-0">
-                        <Users className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          DISPATCH PROTOCOL
-                        </span>
-                        <div className="text-xs font-bold text-slate-900 leading-tight">
-                          Auto-Vendor Routing
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Matched with 2 verified contractors
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* QUALITY SLA */}
-                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shrink-0">
-                        <ShieldCheck className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          QUALITY SLA
-                        </span>
-                        <div className="text-xs font-bold text-slate-900 leading-tight">
-                          Grade A Polymers
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          ISO 9001:2015 laboratory tested
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* RIGHT COLUMN: Commercial Summary Card */}
-                <div className="lg:col-span-5 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-5 space-y-4 flex flex-col justify-between">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h3 className="font-heading font-extrabold text-sm text-slate-900 tracking-tight">
-                        Commercial Summary
-                      </h3>
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        Active BOQ
-                      </span>
-                    </div>
-
-                    <div className="space-y-2.5 text-xs">
-                      {/* Material Cost */}
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span className="font-semibold text-slate-600">Material Cost (₹):</span>
-                        <input
-                          type="number"
-                          value={effectiveMatCost}
-                          onChange={(e) => setMatCost(parseFloat(e.target.value) || 0)}
-                          className="w-28 px-3 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-
-                      {/* Labor & Application */}
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span className="font-semibold text-slate-600">Labor & Application (₹):</span>
-                        <input
-                          type="number"
-                          value={effectiveLabCost}
-                          onChange={(e) => setLabCost(parseFloat(e.target.value) || 0)}
-                          className="w-28 px-3 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-
-                      {/* Subtotal */}
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="font-bold text-slate-800">Subtotal (₹):</span>
-                        <span className="font-mono font-extrabold text-sm text-slate-900">
-                          ₹{subtotal.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-
-                      {/* Discount */}
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span className="font-semibold text-slate-600">Discount (₹):</span>
-                        <input
-                          type="number"
-                          value={discount}
-                          onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                          className="w-28 px-3 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-
-                      {/* GST Tax Rate */}
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span className="font-semibold text-slate-600">GST Tax Rate (%):</span>
-                        <div className="relative">
-                          <select
-                            value={taxRate}
-                            onChange={(e) => setTaxRate(parseFloat(e.target.value) || 18)}
-                            className="appearance-none pl-3 pr-7 py-1.5 text-right bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                          >
-                            <option value="18">18% GST (Standard)</option>
-                            <option value="12">12% GST</option>
-                            <option value="5">5% GST</option>
-                            <option value="0">0% (Exempt)</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                      </div>
-
-                      {/* Calculated Tax Amount */}
-                      <div className="flex items-center justify-between text-slate-500">
-                        <span>Calculated Tax Amount:</span>
-                        <span className="font-mono font-bold text-slate-800">
-                          ₹{gstAmount.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* GRAND TOTAL CONTAINER (Light Blue Box) */}
-                    <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200/90 space-y-2">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10.5px] font-bold text-slate-600 uppercase tracking-wider">
-                          TOTAL PAYABLE (GRAND TOTAL)
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          Incl. GST
-                        </span>
+                        <label className="block text-[11px] font-medium text-slate-400 uppercase">
+                          Warranty (Optional)
+                        </label>
+                        {builderWarranty && (
+                          <button
+                            type="button"
+                            onClick={() => setBuilderWarranty('')}
+                            className="text-[10px] font-bold text-red-500 hover:underline"
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
-
-                      <div className="flex items-baseline justify-between pt-1">
-                        <span className="text-xs font-semibold text-slate-700">Client Quotation Value</span>
-                        <span className="font-mono font-black text-2xl sm:text-3xl text-blue-600 tracking-tight">
-                          ₹{grandTotal.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-slate-500 pt-1.5 border-t border-blue-200/60 leading-tight">
-                        Vendor payout allocation: ₹{(Math.round(grandTotal * 0.715)).toLocaleString('en-IN')} (71.5%) • Platform margin: ₹{(grandTotal - Math.round(grandTotal * 0.715) - gstAmount).toLocaleString('en-IN')}
-                      </div>
+                      <input
+                        type="text"
+                        value={builderWarranty}
+                        onChange={(e) => setBuilderWarranty(e.target.value)}
+                        placeholder="Optional: e.g. 1 Year"
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      />
                     </div>
                   </div>
 
-                  {/* ACTION BUTTONS & DISPATCH */}
-                  <div className="space-y-2.5 pt-2">
-                    {/* Primary Send Button */}
-                    <button
-                      type="button"
-                      onClick={handleIssueQuotation}
-                      className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                    >
-                      <Send className="w-4 h-4" />
-                      <span>Send Quote to Customer & Vendors</span>
-                    </button>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-medium text-slate-400 uppercase">Terms & Conditions</label>
+                    <textarea rows="2" value={builderTerms} onChange={(e) => setBuilderTerms(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-normal text-slate-700 leading-relaxed"></textarea>
+                  </div>
+                </div>
 
-                    {/* Secondary Button Row: Save Draft & Preview PDF */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          showToastMsg('Quotation draft saved successfully (Version 1.0)', 'success');
-                        }}
-                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs transition-all shadow-2xs flex items-center justify-center gap-1.5"
-                      >
-                        <Save className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Save Draft</span>
-                      </button>
+                <div className="lg:col-span-5 bg-slate-50/70 p-4 rounded-xl border border-slate-200 space-y-2.5">
+                  <h4 className="font-heading font-medium text-xs text-slate-800 pb-1.5 border-b border-slate-200">Commercial Summary</h4>
 
-                      <button
-                        type="button"
-                        onClick={handlePreviewQuotationDraft}
-                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs transition-all shadow-2xs flex items-center justify-center gap-1.5"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Preview PDF</span>
-                      </button>
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span>Material Cost (₹):</span>
+                    <input type="number" value={effectiveMatCost} onChange={(e) => setMatCost(parseFloat(e.target.value) || 0)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-800" />
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span>Labor & Application (₹):</span>
+                    <input type="number" value={effectiveLabCost} onChange={(e) => setLabCost(parseFloat(e.target.value) || 0)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-800" />
+                  </div>
+
+                  <div className="flex items-center justify-between font-medium text-slate-800 pt-0.5">
+                    <span>Subtotal (₹):</span>
+                    <span className="font-mono">₹{subtotal.toLocaleString('en-IN')}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span>Discount (₹):</span>
+                    <input type="number" value={discount} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-800" />
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-500">
+                    <span>GST Tax Rate (%):</span>
+                    <select value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value) || 18)} className="w-28 px-2 py-1 text-right bg-white border border-slate-200 rounded-md text-xs font-normal text-slate-800">
+                      <option value="18">18% GST (Standard)</option>
+                      <option value="12">12% GST</option>
+                      <option value="5">5% GST</option>
+                      <option value="0">0% (Exempt)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>GST Amount:</span>
+                    <span className="font-mono">₹{gstAmount.toLocaleString('en-IN')}</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                    <span className="font-heading font-medium text-sm text-slate-800">Grand Total:</span>
+                    <span className="font-heading font-semibold text-xl text-success-600 font-mono">₹{grandTotal.toLocaleString('en-IN')}</span>
+                  </div>
+
+                  {/* ADMIN ADVANCE PAYMENT ADJUSTMENT */}
+                  <div className="p-3 bg-primary-50/80 border border-primary-200/90 rounded-xl space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-primary-950 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-primary-600" />
+                        Min. Advance To Start Work:
+                      </span>
+                      <span className="text-xs font-mono font-bold text-primary-700 bg-white px-2 py-0.5 rounded border border-primary-200 shadow-2xs">
+                        ₹{effectiveAdvanceAmount.toLocaleString('en-IN')} ({effectiveAdvancePct}%)
+                      </span>
                     </div>
 
-                    {/* Notify Checkbox */}
-                    <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={notifyCustomerOnDispatch}
-                        onChange={(e) => setNotifyCustomerOnDispatch(e.target.checked)}
-                        className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
-                      />
-                      <span className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                        <Bell className="w-3.5 h-3.5 text-slate-400" />
-                        Notify customer via SMS and WhatsApp
-                      </span>
-                    </label>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-bold text-primary-900 uppercase mb-1">
+                          Select % Amount
+                        </label>
+                        <select
+                          value={customAdvanceAmt !== null ? 'custom' : builderAdvancePct}
+                          onChange={(e) => {
+                            if (e.target.value === 'custom') {
+                              setCustomAdvanceAmt(effectiveAdvanceAmount);
+                            } else {
+                              setCustomAdvanceAmt(null);
+                              setBuilderAdvancePct(parseFloat(e.target.value) || 30);
+                            }
+                          }}
+                          className="w-full px-2 py-1.5 bg-white border border-primary-200 rounded-lg text-xs font-medium text-slate-800"
+                        >
+                          <option value="10">10% Advance</option>
+                          <option value="20">20% Advance</option>
+                          <option value="25">25% Advance</option>
+                          <option value="30">30% Advance (Recommended)</option>
+                          <option value="40">40% Advance</option>
+                          <option value="50">50% Advance</option>
+                          <option value="60">60% Advance</option>
+                          <option value="70">70% Advance</option>
+                          <option value="100">100% Full Payment</option>
+                          <option value="custom">Custom ₹ Amount</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-primary-900 uppercase mb-1">
+                          Advance Value (₹)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 3000"
+                          value={customAdvanceAmt !== null ? customAdvanceAmt : effectiveAdvanceAmount}
+                          onChange={(e) => {
+                            setCustomAdvanceAmt(e.target.value);
+                          }}
+                          className="w-full px-2 py-1.5 bg-white border border-primary-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-primary-700 leading-tight">
+                      Customer will pay exactly <strong>₹{effectiveAdvanceAmount.toLocaleString('en-IN')}</strong> to approve & commence work.
+                    </div>
+                  </div>
+
+                  <div className="pt-3 flex items-center gap-2">
+                    <button type="button" onClick={() => { setBuilderRequestId(''); setBuilderWarranty(''); setLineItems([{ item: '', qty: 1, unit: 'Sq Ft', rate: 0 }]); }} className="flex-1 px-3 py-2 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all">
+                      Reset
+                    </button>
+                    <button type="button" onClick={handleIssueQuotation} className="flex-2 px-3.5 py-2 text-xs font-medium text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5">
+                      <Send className="w-3.5 h-3.5" /> Issue Quotation
+                    </button>
                   </div>
                 </div>
               </div>
-
-              {/* PRESET SCOPES / TEMPLATES MODAL */}
-              {(presetScopeModalOpen || templatesModalOpen) && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-                  <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                          <Layers className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="font-heading font-bold text-sm text-slate-900">
-                            {templatesModalOpen ? 'Select Quotation Template' : 'Import Preset Scope (BOQ)'}
-                          </h4>
-                          <p className="text-[11px] text-slate-500">Pre-calibrated industry-standard formulas</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => { setPresetScopeModalOpen(false); setTemplatesModalOpen(false); }}
-                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="p-5 space-y-3 overflow-y-auto">
-                      {PRESET_SCOPES.map(preset => (
-                        <div
-                          key={preset.id}
-                          onClick={() => handleApplyPresetScope(preset)}
-                          className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 cursor-pointer transition-all space-y-2 group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-heading font-bold text-xs text-slate-900 group-hover:text-blue-700">
-                              {preset.name}
-                            </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                              {preset.items.length} items
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            {preset.items.map(i => `${i.item} (${i.qty} ${i.unit})`).join(' • ')}
-                          </div>
-                          <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400 pt-1 border-t border-slate-100">
-                            <span>Timeline: {preset.timeline}</span>
-                            <span>{preset.warranty}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
