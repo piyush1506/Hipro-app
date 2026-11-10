@@ -11,7 +11,7 @@ import {
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown, ChevronLeft, ChevronRight,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette, Download, Radio, Bell, ArrowLeftRight
+  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (
@@ -433,45 +433,6 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       console.error('Failed to load vendor quotes:', err);
     } finally {
       setIsLoadingQuotesModal(false);
-    }
-  };
-
-  const handleExportRequestsCSV = (customRequests = null) => {
-    const list = customRequests || requests || [];
-    if (list.length === 0) {
-      showToastMsg('No requests available to export.', 'info');
-      return;
-    }
-    const headers = ['Request #', 'Service', 'Sub-Service', 'Customer Name', 'Phone', 'City', 'Address', 'Status', 'Urgency', 'Date'];
-    const rows = list.map(r => [
-      `"${r.requestNumber || r.id || ''}"`,
-      `"${(r.servicecode || '').replace(/"/g, '""')}"`,
-      `"${(r.subServiceCode || '').replace(/"/g, '""')}"`,
-      `"${(r.user?.name || r.customerName || '').replace(/"/g, '""')}"`,
-      `"${(r.user?.phoneNumber || r.customerPhone || '').replace(/"/g, '""')}"`,
-      `"${(r.city || r.location || '').replace(/"/g, '""')}"`,
-      `"${(r.addressline || '').replace(/"/g, '""')}"`,
-      `"${r.status || ''}"`,
-      `"${r.urgency || 'NORMAL'}"`,
-      `"${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}"`
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `hipro_orders_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToastMsg('Requests CSV exported successfully!', 'success');
-  };
-
-  const handleBatchVendorPing = () => {
-    const pendingList = requests.filter(r => !r.vendorId && (r.sharedVendors || []).length === 0);
-    if (pendingList.length === 0) {
-      showToastMsg('All visible requests already have vendors assigned or notified.', 'info');
-    } else {
-      showToastMsg(`Batch notification ping dispatched for ${pendingList.length} unassigned inspection requests!`, 'success');
     }
   };
 
@@ -3340,275 +3301,343 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
     <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans text-[14px] font-[500] antialiased tracking-[-0.01em]">
 
       {/* SIDEBAR NAVIGATION */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/90 flex flex-col justify-between transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xs`}>
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          {/* Header Brand */}
-          <div className="h-16 px-5 flex items-center justify-between border-b border-slate-100 bg-white">
-            <div className="flex items-center gap-2">
-              <span className="font-heading font-black text-xl text-slate-900 tracking-tight">HIPRO</span>
-              <span className="bg-[#1e40af] text-white text-[10px] font-black px-2 py-0.5 rounded-full tracking-wide">LIVE</span>
-              <span className="bg-slate-100 text-slate-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-slate-200">OPS</span>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/90 flex flex-col transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xs`}>
+        <div className="h-16 px-5 flex items-center justify-between border-b border-slate-100 bg-white">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
+              <ShieldCheck className="w-5 h-5 text-primary-400" />
+            </div>
+            <div>
+              <div className="font-heading font-bold text-base tracking-tight text-slate-900 leading-none">HIPRO</div>
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mt-0.5">Technical Portal</div>
             </div>
           </div>
-
-          <div className="px-5 pt-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            TECHNICAL OPERATIONS PORTAL
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success-50 border border-success-200 text-success-700 text-[11px] font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse"></span>
+            <span>Live</span>
           </div>
-
-          <nav className="px-3 py-2 space-y-4 text-xs">
-            {/* Section 1: MAIN OPERATIONS */}
-            <div className="space-y-1">
-              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                MAIN OPERATIONS
-              </div>
-              
-              <button
-                onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'overview'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <LayoutDashboard className={`w-4 h-4 ${activeTab === 'overview' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Overview</span>
-                </div>
-                <span className="w-1.5 h-1.5 rounded-full bg-primary-600"></span>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('direct-bookings'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'direct-bookings'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Zap className={`w-4 h-4 ${activeTab === 'direct-bookings' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Instant Bookings</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'direct-bookings' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
-                }`}>
-                  {directBookings.length > 0 ? directBookings.length : 1}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('customer-activity'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'customer-activity'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <ShoppingCart className={`w-4 h-4 ${activeTab === 'customer-activity' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Leads & Carts</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'customer-activity' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
-                }`}>
-                  {activityMetrics.activeCartLeads > 0 ? `${activityMetrics.activeCartLeads} Cart` : (customerLeads.length > 0 ? `${customerLeads.length} Cart` : '1 Cart')}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'requests'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Inspection Requests</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'requests' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
-                }`}>
-                  {requests.length > 0 ? requests.length : 15}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'vendors'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Vendor Network</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'vendors' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700'
-                }`}>
-                  {vendors.length > 0 ? vendors.length : 3}
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('quotations'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'quotations'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Receipt className={`w-4 h-4 ${activeTab === 'quotations' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Quotations & BOQ Desk</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'builder'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>BOQ Generator</span>
-                </div>
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                  Auto
-                </span>
-              </button>
-            </div>
-
-            {/* Section 2: COMMUNICATIONS */}
-            <div className="space-y-1">
-              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                COMMUNICATIONS
-              </div>
-              
-              <button
-                onClick={() => { setActiveTab('chat'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'chat'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <MessageCircle className={`w-4 h-4 ${activeTab === 'chat' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Live Chat Desk</span>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-600 text-white">
-                  3 New
-                </span>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'users'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Customer Directory</span>
-                </div>
-              </button>
-            </div>
-
-            {/* Section 3: CATALOG & SYSTEMS */}
-            <div className="space-y-1">
-              <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                CATALOG & SYSTEMS
-              </div>
-              
-              <button
-                onClick={() => { setActiveTab('services'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'services'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Wrench className={`w-4 h-4 ${activeTab === 'services' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Services Catalog</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setCityModalOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <MapPin className="w-4 h-4 text-slate-500" />
-                  <span>Hubs & Geographies</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => { setActiveTab('diagnostics'); setSidebarOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                  activeTab === 'diagnostics'
-                    ? 'bg-primary-50 text-primary-700 font-bold border border-primary-200/60 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Activity className={`w-4 h-4 ${activeTab === 'diagnostics' ? 'text-primary-600' : 'text-slate-500'}`} />
-                  <span>Diagnostics & Settings</span>
-                </div>
-              </button>
-            </div>
-          </nav>
         </div>
 
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto text-xs">
+          {/* Section 1: OPERATIONS */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operations</div>
+            
+            <button
+              onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'overview'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <LayoutDashboard className={`w-4 h-4 ${activeTab === 'overview' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>Overview</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('direct-bookings'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'direct-bookings'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Zap className={`w-4 h-4 ${activeTab === 'direct-bookings' ? 'text-warning-400' : 'text-warning-500'}`} />
+                <span>Instant Bookings</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'direct-bookings' ? 'bg-warning-400 text-slate-900' : 'bg-warning-100 text-warning-800'
+              }`}>
+                {directBookings.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('customer-activity'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'customer-activity'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ShoppingCart className={`w-4 h-4 ${activeTab === 'customer-activity' ? 'text-success-400' : 'text-success-600'}`} />
+                <span>Customer Leads & Carts</span>
+              </div>
+              {activityMetrics.activeCartLeads > 0 ? (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-success-500 text-white animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                  {activityMetrics.activeCartLeads} Carts
+                </span>
+              ) : (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'customer-activity' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {customerLeads.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'requests'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>Inspection Requests</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'requests' ? 'bg-white/20 text-white' : 'bg-warning-50 text-warning-700 border border-warning-200'
+              }`}>
+                {requests.length > 0 ? requests.length : (stats ? (stats.statusCounts.SUBMITTED + stats.statusCounts.ESTIMATING) : 0)}
+              </span>
+            </button>
+
+            {/* HIGH PRIORITY: VENDOR NETWORK - Assign vendors to customer quotations */}
+            <button
+              onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'vendors'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-accent-400' : 'text-accent-600'}`} />
+                <span>Vendor Network</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-accent-50 text-accent-700 border border-accent-200'
+              }`}>
+                {vendors.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('quotations'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'quotations'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Receipt className={`w-4 h-4 ${activeTab === 'quotations' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>Quotations Desk</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'quotations' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {quotations.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'builder'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>BOQ Generator</span>
+              </div>
+              <span className="text-[9px] font-bold text-success-600 bg-success-50 px-1.5 py-0.5 rounded-md border border-success-200">
+                Auto
+              </span>
+            </button>
+          </div>
+
+          {/* Section 2: COMMUNICATIONS */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Communications</div>
+            
+            <button
+              onClick={() => { setActiveTab('chat'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'chat'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <MessageCircle className={`w-4 h-4 ${activeTab === 'chat' ? 'text-primary-400' : 'text-primary-600'}`} />
+                <span>Live Chat Desk</span>
+              </div>
+              {chatThreads.some(t => t.unreadCountAdmin > 0) ? (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-500 text-white animate-pulse">
+                  {chatThreads.reduce((acc, t) => acc + (t.unreadCountAdmin || 0), 0)} New
+                </span>
+              ) : (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'chat' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {chatThreads.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'users'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>Customer Directory</span>
+              </div>
+            </button>
+          </div>
+
+          {/* Section 3: CATALOG & MARKETING */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Catalog & Marketing</div>
+            
+            <button
+              onClick={() => { setActiveTab('services'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'services'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Wrench className={`w-4 h-4 ${activeTab === 'services' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>Services Catalog</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('adventure'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'adventure'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Compass className={`w-4 h-4 ${activeTab === 'adventure' ? 'text-danger-400' : 'text-danger-600'}`} />
+                <span>Adventure & Sports</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'adventure' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {entExperiences.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('slides'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'slides'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sparkles className={`w-4 h-4 ${activeTab === 'slides' ? 'text-warning-400' : 'text-primary-600'}`} />
+                <span>Slides & Banners</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'slides' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {slides.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('offers'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'offers'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Tag className={`w-4 h-4 ${activeTab === 'offers' ? 'text-accent-400' : 'text-accent-600'}`} />
+                <span>Offers & Coupons</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'offers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {offers.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Section 4: SYSTEM */}
+          <div className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</div>
+            
+            <button
+              onClick={() => { setActiveTab('diagnostics'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'diagnostics'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Activity className={`w-4 h-4 ${activeTab === 'diagnostics' ? 'text-primary-400' : 'text-slate-500'}`} />
+                <span>Diagnostics & API</span>
+              </div>
+            </button>
+          </div>
+        </nav>
+
         {/* User Card in Footer */}
-        <div className="p-3 border-t border-slate-100 bg-white flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-                <User className="w-4 h-4" />
+        <div className="p-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative">
+              <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                AD
               </div>
-              <div>
-                <div className="font-bold text-slate-800 text-xs">Admin Desk</div>
-                <div className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Online & Synced</span>
-                </div>
-              </div>
+              <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
             </div>
-            <div className="flex items-center gap-1 text-slate-400">
-              {onSwitchToCustomerApp && (
-                <button
-                  onClick={onSwitchToCustomerApp}
-                  title="Switch to Customer App"
-                  className="p-1 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                >
-                  <ArrowLeftRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  title="Logout"
-                  className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              )}
+            <div className="min-w-0">
+              <div className="font-bold text-slate-800 text-xs truncate leading-tight">Admin Desk</div>
+              <div className="text-[10px] text-slate-400 truncate">Online & Synced</div>
             </div>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium px-1">
-            <span>HQ Central</span>
-            <span className="font-mono">v3.4.1</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => fetchAllData(true)}
+              title="Sync Database"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            {onSwitchToVendor && (
+              <button
+                onClick={onSwitchToVendor}
+                title="Switch to Vendor Portal"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 transition-all"
+              >
+                <HardHat className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Log Out of Super Admin"
+                className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-all"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -3617,69 +3646,72 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
       <div className="flex-1 md:pl-64 flex flex-col min-w-0">
 
         {/* TOPBAR */}
-        <header className="h-16 bg-white border-b border-slate-200/80 sticky top-0 z-40 px-6 sm:px-8 flex items-center justify-between shadow-2xs">
+        <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 px-6 sm:px-8 flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-all">
               <Menu className="w-5 h-5" />
             </button>
-            
-            {/* Left element: switch or img pill */}
-            <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-600 font-semibold text-xs border border-slate-300">
-              img
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Hipro Portal</span>
+                <span className="text-slate-300">/</span>
+                <h1 className="font-heading font-bold text-base text-slate-900 capitalize leading-tight">
+                  {activeTab === 'overview' ? 'Dashboard Overview' :
+                    activeTab === 'direct-bookings' ? 'Instant Maintenance Bookings' :
+                      activeTab === 'customer-activity' ? 'Customer Exploration & Active Carts' :
+                        activeTab === 'requests' ? 'Inspection Requests' :
+                        activeTab === 'quotations' ? 'Quotations Desk' :
+                          activeTab === 'builder' ? 'BOQ Quotation Generator' :
+                            activeTab === 'chat' ? 'Live Customer Chat Desk' :
+                              activeTab === 'services' ? 'Services Catalog' :
+                                activeTab === 'adventure' ? 'Adventure & Sports Catalog' :
+                                activeTab === 'slides' ? 'Slides & Banners' :
+                                  activeTab === 'offers' ? 'Coupons & Offers' :
+                                    activeTab === 'users' ? 'Customer Directory' : 'System Diagnostics'}
+                </h1>
+              </div>
             </div>
-
-            {/* Hub dropdown pill: 📍 All Hubs (16) ⌵ */}
-            <button
-              onClick={() => setCityModalOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-full border border-slate-200/80 transition-all cursor-pointer"
-            >
-              <MapPin className="w-3.5 h-3.5 text-slate-500" />
-              <span>All Hubs ({operationalCities.length > 0 ? operationalCities.length : 16})</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
-            </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Search Input with ⌘K */}
-            <div className="relative hidden md:block w-72">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="flex items-center gap-2.5">
+            <div className="relative hidden sm:block w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder="Search orders, BOQs, client phone..."
-                className="w-full pl-9 pr-10 py-1.5 bg-slate-100/80 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
+                placeholder="Search orders, quotes, customers... (⌘K)"
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 focus:bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
               />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
-                ⌘K
-              </span>
             </div>
 
-            {/* SYNC STATUS: ACTIVE pill */}
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200/80 rounded-full text-[11px] font-bold text-slate-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>SYNC STATUS: ACTIVE</span>
-            </div>
-
-            {/* + New BOQ Quote button */}
             <button
-              onClick={() => setActiveTab('builder')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all cursor-pointer"
+              onClick={() => fetchAllData(true)}
+              title="Sync live database"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>New BOQ Quote</span>
+              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Sync</span>
             </button>
 
-            {/* Notification Bell */}
-            <div className="relative p-1.5 text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer">
-              <Bell className="w-4 h-4" />
-              <span className="w-2 h-2 rounded-full bg-primary-600 absolute top-1 right-1"></span>
-            </div>
+            {onSwitchToCustomerApp && (
+              <button
+                onClick={onSwitchToCustomerApp}
+                title="Switch to Mobile Customer Demo"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all shadow-xs"
+              >
+                <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
+                <span className="hidden sm:inline">Customer App</span>
+              </button>
+            )}
 
-            {/* User Avatar Circle */}
-            <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs">
-              <User className="w-4 h-4" />
-            </div>
+            <button
+              onClick={() => setActiveTab('builder')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>New Quote</span>
+            </button>
           </div>
         </header>
 
@@ -5782,15 +5814,59 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             }
 
             return (
-              <div className="space-y-4">
-                {/* 1. TOP HUB BAR (Across Operational Hubs) */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    <span>HUB:</span>
-                  </span>
+              <div className="space-y-5">
+                {/* 1. TOP HEADER & METRIC CONTROLLER */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold">
+                        <ClipboardList className="w-4 h-4" />
+                      </div>
+                      <h2 className="font-heading font-bold text-lg text-slate-900">
+                        Inspection Requests & Site Audits
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                        {displayRequests.length} Showing
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                      Review customer damage evidence, schedule physical civil site audits, assign connected vendors, and issue itemized BOQ quotations.
+                    </p>
+                  </div>
 
-                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+                  {/* Header Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => fetchRequests()}
+                      disabled={isLoadingRequests}
+                      title="Sync Inspection Requests"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingRequests ? 'animate-spin' : ''}`} />
+                      <span>{isLoadingRequests ? 'Syncing...' : 'Sync Requests'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCreateTestRequest('Udaipur')}
+                      title="Seed a realistic test inspection request in Udaipur"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>+ Seed Test Lead</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. MULTI-CITY QUICK SWITCHER BAR */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Operational Hub:</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1">
                     {availableCities.map(c => {
                       const isSel = requestsCityFilter === c;
                       const cCount = c === 'ALL'
@@ -5802,39 +5878,40 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           key={c}
                           type="button"
                           onClick={() => setRequestsCityFilter(c)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                             isSel
-                              ? 'bg-black text-white shadow-xs'
-                              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/90'
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-primary-400' : 'bg-primary-500'}`} />
-                          <span>{c === 'ALL' ? 'All Hubs' : c}</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isSel ? 'bg-white/20 text-white' : 'text-slate-500'}`}>
+                          <span>{c === 'ALL' ? '🌐 All Hubs' : `📍 ${c}`}</span>
+                          <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
+                            isSel ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                          }`}>
                             {cCount}
                           </span>
                         </button>
                       );
                     })}
-
-                    <button
-                      type="button"
-                      onClick={() => setCityModalOpen(true)}
-                      className="px-3 py-1.5 rounded-full text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-dashed border-slate-300 flex items-center gap-1 shrink-0 transition-all cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Add Hub</span>
-                    </button>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCityModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0 shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Hub</span>
+                  </button>
                 </div>
 
                 {/* Active Hub Alert Banner */}
                 {requestsCityFilter !== 'ALL' && (
-                  <div className="bg-primary-50/90 border border-primary-200 rounded-xl px-4 py-2 flex items-center justify-between text-xs text-primary-800 shadow-2xs">
+                  <div className="bg-primary-50/90 border border-primary-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-primary-800 shadow-2xs">
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-primary-600 shrink-0" />
+                      <MapPin className="w-4 h-4 text-primary-600 shrink-0" />
                       <span>
-                        Showing requests for <strong>📍 {requestsCityFilter}</strong> ({filteredByCityRequests.length} of {requests.length} total).
+                        Showing requests for <strong>📍 {requestsCityFilter}</strong> only ({filteredByCityRequests.length} of {requests.length} total). Requests in other cities are hidden by this hub filter.
                       </span>
                     </div>
                     <button
@@ -5847,16 +5924,18 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
                 )}
 
-                {/* 2. STATUS FILTER TABS ROW & SEARCH BAR */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+                {/* 3. STATUS FILTER PILLS & SEARCH BAR */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   {/* Status Pills */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
                     {[
                       { id: 'ALL', label: 'All Requests', count: countAll },
-                      { id: 'VENDOR_QUOTES', label: '★ Vendor Quotes Received', count: countVendorQuotes },
+                      { id: 'VENDOR_QUOTES', label: '⭐ Vendor Quotes Received', count: countVendorQuotes, highlight: countVendorQuotes > 0 },
                       { id: 'NEEDS_REVIEW', label: 'Needs Estimating', count: countNeedsReview },
                       { id: 'SITE_AUDIT', label: 'Site Audit Req.', count: countSiteAudit },
-                      { id: 'QUOTED', label: 'Quoted', count: countQuoted }
+                      { id: 'QUOTED', label: 'Quoted', count: countQuoted },
+                      { id: 'ACTIVE', label: 'In Execution', count: countActive },
+                      { id: 'COMPLETED', label: 'Completed', count: countCompleted }
                     ].map(st => {
                       const isStActive = requestsStatusFilter === st.id;
                       return (
@@ -5864,15 +5943,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           key={st.id}
                           type="button"
                           onClick={() => setRequestsStatusFilter(st.id)}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                             isStActive
-                              ? 'bg-primary-600 text-white shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'
+                              ? 'bg-primary-600 text-white shadow-xs font-bold'
+                              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                           }`}
                         >
                           <span>{st.label}</span>
                           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
-                            isStActive ? 'bg-white/25 text-white' : 'bg-white/80 text-slate-600'
+                            isStActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                           }`}>
                             {st.count}
                           </span>
@@ -5881,46 +5960,34 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     })}
                   </div>
 
-                  {/* Search Input & Sync */}
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-full md:w-64 shrink-0">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={requestsSearch}
-                        onChange={(e) => setRequestsSearch(e.target.value)}
-                        placeholder="Search orders, BOQs, client phone..."
-                        className="w-full pl-9 pr-7 py-1.5 bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
-                      />
-                      {requestsSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setRequestsSearch('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => fetchRequests()}
-                      disabled={isLoadingRequests}
-                      title="Sync Live Database"
-                      className="p-1.5 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRequests ? 'animate-spin' : ''}`} />
-                    </button>
+                  {/* Search Input */}
+                  <div className="relative w-full md:w-80 shrink-0">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={requestsSearch}
+                      onChange={(e) => setRequestsSearch(e.target.value)}
+                      placeholder="Search customer, phone, request #..."
+                      className="w-full pl-9 pr-8 py-1.5 bg-white text-xs text-slate-700 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium"
+                    />
+                    {requestsSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setRequestsSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* 3. MAIN CONTENT AREA */}
+                {/* 4. MAIN CONTENT AREA */}
                 {isLoadingRequests && requests.length === 0 ? (
                   // Skeleton Loading State
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                    {[1, 2].map(k => (
-                      <div key={k} className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs animate-pulse space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                    {[1, 2, 3].map(k => (
+                      <div key={k} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs animate-pulse space-y-4">
                         <div className="flex justify-between items-center">
                           <div className="h-5 w-32 bg-slate-200 rounded-md" />
                           <div className="h-5 w-20 bg-slate-200 rounded-full" />
@@ -5933,7 +6000,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                   </div>
                 ) : displayRequests.length === 0 ? (
                   // Resilient Empty State
-                  <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center shadow-xs">
+                  <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center shadow-xs">
                     <div className="w-14 h-14 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mx-auto mb-4">
                       <ClipboardList className="w-7 h-7" />
                     </div>
@@ -5954,7 +6021,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                             setRequestsStatusFilter('ALL');
                             setRequestsSearch('');
                           }}
-                          className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+                          className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
                         >
                           Clear All Filters
                         </button>
@@ -5962,105 +6029,107 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                       <button
                         type="button"
                         onClick={() => fetchAllData(true)}
-                        className="px-4 py-2 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                        className="px-4 py-2 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl transition-all inline-flex items-center gap-1.5"
                       >
                         <RefreshCw className="w-3.5 h-3.5" /> Sync Live Database
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleCreateTestRequest('Bhilwara')}
-                        className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                        onClick={() => handleCreateTestRequest('Udaipur')}
+                        className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all inline-flex items-center gap-1.5"
                       >
                         <PlusCircle className="w-3.5 h-3.5" /> + Seed Test Request
                       </button>
                     </div>
                   </div>
                 ) : (
-                  // Grid of Rich Request Cards (Exact 2-column layout from screenshot)
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  // Grid of Rich Request Cards
+                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
                     {displayRequests.map(req => {
                       const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
                       const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
                       const isAuditScheduled = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
+                      const hasQuote = (req.quotations || []).length > 0 || quotations.some(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+                      const assignedVendor = vendors.find(v => v.id === req.vendorId);
 
                       return (
                         <div
                           key={req.id}
-                          className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                          className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
                         >
                           <div className="space-y-4">
-                            {/* Card Header Row: # REQ-1794040980747 | NORMAL | [Eye Details] | • QUOTE_REQUESTED */}
+                            {/* Card Header: Request #, Urgency, Status */}
                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRequestDetail(req)}
-                                  className="font-mono font-bold text-xs text-primary-600 bg-primary-50 hover:bg-primary-100 px-2.5 py-1 rounded-lg border border-primary-100 cursor-pointer transition-colors"
-                                  title="Click to view full inspection requirement"
+                                  className="font-mono font-bold text-sm sm:text-base text-primary-600 hover:text-primary-800 hover:underline tracking-wide cursor-pointer text-left"
+                                  title="Click to view full inspection requirement, photos & vendor details"
                                 >
-                                  #{req.requestNumber}
+                                  {req.requestNumber}
                                 </button>
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                                   isUrgent
-                                    ? 'bg-rose-50 text-rose-600 border border-rose-200 animate-pulse'
+                                    ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
                                     : 'bg-slate-100 text-slate-600 border border-slate-200'
                                 }`}>
                                   {req.urgency || 'NORMAL'}
                                 </span>
                                 {isAuditScheduled && (
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-warning-50 text-warning-800 border border-warning-300 flex items-center gap-1 shadow-2xs">
-                                    <MapPin className="w-3 h-3 text-warning-600" /> Audit Req.
+                                    <MapPin className="w-3 h-3 text-warning-600" /> Site Audit Req.
                                   </span>
                                 )}
                               </div>
-
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRequestDetail(req)}
-                                  className="px-3 py-1 rounded-lg text-xs font-bold bg-black text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
                                   title="View full requirement, photos & vendor quotations"
                                 >
                                   <Eye className="w-3.5 h-3.5" />
                                   <span>Details</span>
                                 </button>
-
-                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary-50 text-primary-700 border border-primary-200/80 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-primary-600" />
-                                  <span>{req.status}</span>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide ${getStatusBadge(req.status)}`}>
+                                  {req.status}
                                 </span>
+                                {req.customerRating && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200" title={req.customerReview || 'Customer rating'}>
+                                    <span className="text-amber-500">★</span> {req.customerRating.toFixed(1)}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
-                            {/* HIGH-VISIBILITY SLEEK BLACK BANNER: VENDOR QUOTATIONS RECEIVED */}
+                            {/* HIGH VISIBILITY: VENDOR QUOTATION ALERT CALLOUT */}
                             {(req.vendorQuotes || []).length > 0 && (
                               <div
-                                onClick={() => handleOpenVendorQuotesModal(req)}
-                                className="bg-black text-white rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md cursor-pointer hover:bg-slate-900 transition-all group"
+                                onClick={() => handleOpenRequestDetail(req, 'quotes')}
+                                className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-xl cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between gap-3 group"
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center font-bold text-xs shrink-0 group-hover:scale-105 transition-transform">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0 group-hover:scale-105 transition-transform">
                                     <Tag className="w-4 h-4" />
                                   </div>
                                   <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-bold text-sm text-white">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-bold text-emerald-950">
                                         {(req.vendorQuotes || []).length} Vendor {(req.vendorQuotes || []).length === 1 ? 'Quotation' : 'Quotations'} Received!
                                       </span>
-                                      <span className="text-[11px] font-mono font-bold bg-black border border-white/30 text-white px-2 py-0.5 rounded-md">
+                                      <span className="text-[11px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
                                         Lowest: ₹{Math.min(...(req.vendorQuotes || []).map(q => q.quotePrice)).toLocaleString('en-IN')}
                                       </span>
                                     </div>
-                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
-                                      Bids submitted by: {(req.vendorQuotes || []).map(q => q.vendorBusiness || q.vendorName || 'Contractor').join(', ')}
+                                    <p className="text-[11px] text-emerald-700 mt-0.5 line-clamp-1">
+                                      From: {(req.vendorQuotes || []).map(q => q.vendorBusiness || q.vendorName || 'Contractor').join(', ')}
                                     </p>
                                   </div>
                                 </div>
-
                                 <button
                                   type="button"
-                                  onClick={(e) => { e.stopPropagation(); handleOpenVendorQuotesModal(req); }}
-                                  className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold rounded-xl transition-all shrink-0 flex items-center gap-1"
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all shrink-0 flex items-center gap-1 shadow-xs"
                                 >
                                   <span>Review & Award</span>
                                   <ArrowRight className="w-3.5 h-3.5" />
@@ -6068,148 +6137,122 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               </div>
                             )}
 
-                            {/* Service Title, Sub-Service & Hub Location Badge */}
+                            {/* Service Category & Sub Service */}
                             <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <h3 className="font-heading font-bold text-lg text-slate-900 tracking-tight">
-                                    {req.servicecode}
-                                  </h3>
-                                  {req.subServiceCode && (
-                                    <p className="text-xs font-semibold text-primary-600 mt-0.5">
-                                      {req.subServiceCode}
-                                    </p>
-                                  )}
-                                </div>
-
-                                {(req.city || req.location || req.addressline) && (
-                                  <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-700 border border-slate-200/80 flex items-center gap-1 shrink-0">
-                                    <MapPin className="w-3.5 h-3.5 text-primary-600" />
-                                    <span>{req.city || req.location || 'Site Hub'}</span>
+                              <div className="flex items-center justify-between gap-2">
+                                <h3 className="font-heading font-bold text-base sm:text-lg text-slate-900 tracking-tight">
+                                  {req.servicecode}
+                                </h3>
+                                {(req.city || req.location) && (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 text-primary-600" />
+                                    <span>{req.city || req.location}</span>
                                   </span>
                                 )}
                               </div>
-                            </div>
-
-                            {/* Reported Issue Callout */}
-                            <div className="p-3 bg-blue-50/40 rounded-xl border border-blue-100/80 text-xs text-slate-700 font-normal space-y-1">
-                              <div className="flex items-center gap-1.5 text-rose-600 font-bold text-xs">
-                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                <span>Reported Issue:</span>
-                              </div>
-                              <p className="italic text-slate-600 font-medium pl-5 leading-relaxed">
-                                "{req.issueDescription || 'Customer inspection completed. Scope of work awaiting contractor quotation.'}"
-                              </p>
-                            </div>
-
-                            {/* Damage Evidence Photo Gallery */}
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                <span>Site Evidence ({media.length} items):</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setActivePhotoModal({ photos: media, index: 0, title: `${req.requestNumber} Site Evidence` })}
-                                  className="text-primary-600 hover:underline flex items-center gap-0.5 font-semibold capitalize cursor-pointer"
-                                >
-                                  <span>Click to inspect</span>
-                                  <ExternalLink className="w-3 h-3 ml-0.5" />
-                                </button>
-                              </div>
-
-                              {media.length > 0 ? (
-                                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                                  {media.slice(0, 4).map((img, i) => (
-                                    <div
-                                      key={i}
-                                      onClick={() => setActivePhotoModal({ photos: media, index: i, title: `${req.requestNumber} Site Evidence` })}
-                                      className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 relative group shrink-0 cursor-pointer shadow-2xs hover:border-primary-500 transition-all"
-                                    >
-                                      <img
-                                        src={img}
-                                        alt="Site evidence"
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
-                                      />
-                                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] font-medium text-center py-0.5">
-                                        Photo #{i + 1}
-                                      </span>
-                                    </div>
-                                  ))}
-                                  {media.length > 4 && (
-                                    <div
-                                      onClick={() => setActivePhotoModal({ photos: media, index: 4, title: `${req.requestNumber} Site Evidence` })}
-                                      className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 relative group shrink-0 cursor-pointer shadow-2xs hover:border-primary-500 transition-all"
-                                    >
-                                      <img
-                                        src={media[4]}
-                                        alt="Site evidence"
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
-                                      />
-                                      <div className="absolute inset-0 bg-black/65 backdrop-blur-2xs flex flex-col items-center justify-center text-white text-xs font-bold">
-                                        <span>+{media.length - 4}</span>
-                                        <span className="text-[9px] uppercase font-semibold">MORE</span>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="p-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center space-y-1">
-                                  <div className="text-slate-400 text-xs">No site photos or videos uploaded</div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSiteAudit(req)}
-                                    className="text-[11px] font-semibold text-primary-600 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
-                                  >
-                                    <MapPin className="w-3 h-3" />
-                                    <span>Dispatch Engineer to Capture Media</span>
-                                  </button>
-                                </div>
+                              {req.subServiceCode && (
+                                <p className="text-xs sm:text-sm font-semibold text-primary-600 mt-0.5">
+                                  {req.subServiceCode}
+                                </p>
                               )}
                             </div>
 
+                            {/* Issue Description Callout */}
+                            <div className="p-3.5 bg-slate-50/90 rounded-xl text-xs sm:text-sm text-slate-700 leading-relaxed border border-slate-200 font-normal">
+                              <div className="flex items-start gap-1.5">
+                                <AlertCircle className="w-4 h-4 text-warning-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <strong className="text-slate-900 mr-1">Reported Issue:</strong>
+                                  {req.issueDescription || 'No description provided'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Damage Photos & Videos Gallery */}
+                            {media.length > 0 ? (
+                              <div className="space-y-1.5">
+                                <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
+                                  <span>Site Evidence ({media.length} items):</span>
+                                  <span className="text-[11px] text-primary-600 font-medium">Click to inspect</span>
+                                </div>
+                                <div className="flex gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
+                                  {media.map((itemUrl, i) => {
+                                    const isVid = isVideoMedia(itemUrl);
+                                    return (
+                                      <div
+                                        key={i}
+                                        onClick={() => setActivePhotoModal({ photos: media, index: i, title: `${req.requestNumber} Site Evidence` })}
+                                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border-2 border-slate-200 cursor-pointer relative group shrink-0 hover:border-primary-500 hover:shadow-md transition-all"
+                                      >
+                                        {isVid ? (
+                                          <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white">
+                                            <Video className="w-6 h-6 text-primary-400 group-hover:scale-110 transition-transform" />
+                                            <span className="text-[9px] font-bold mt-1">Video</span>
+                                          </div>
+                                        ) : (
+                                          <img
+                                            src={itemUrl}
+                                            alt="Damage evidence"
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80'; }}
+                                          />
+                                        )}
+                                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/75 backdrop-blur-xs text-white text-[9.5px] font-semibold text-center py-0.5">
+                                          {isVid ? 'Play Video' : `Photo #${i + 1}`}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400 italic text-center">
+                                No site photos or videos uploaded
+                              </div>
+                            )}
+
                             {/* Customer & Site Details Grid */}
-                            <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-3.5 space-y-2 text-xs text-slate-700">
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                                  <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <span className="truncate">{req.user?.name || req.customerName || 'Customer'}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 font-semibold text-primary-600">
-                                  <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <a href={`tel:${req.user?.phoneNumber || req.customerPhone || ''}`} className="hover:underline">
-                                    {req.user?.phoneNumber || req.customerPhone || 'N/A'}
-                                  </a>
-                                </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100 text-slate-600">
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-semibold text-slate-800">{req.user?.name || req.customerName || 'Customer'}</span>
                               </div>
-
-                              <div className="grid grid-cols-2 gap-2 text-slate-600">
-                                <div className="flex items-center gap-1.5">
-                                  <Home className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <span className="truncate">{req.propertyType || 'Villa'} ({req.propertySize || '200 sq ft'})</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <span className="truncate">{req.preferredDate || 'Flexible'} {req.preferredTime ? `• ${req.preferredTime}` : ''}</span>
-                                </div>
+                              <div className="flex items-center gap-2 font-mono">
+                                <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                                <a
+                                  href={`tel:${req.user?.phoneNumber || req.customerPhone || ''}`}
+                                  className="font-medium text-primary-600 hover:underline"
+                                >
+                                  {req.user?.phoneNumber || req.customerPhone || 'N/A'}
+                                </a>
                               </div>
-
-                              <div className="flex items-center gap-1.5 text-slate-500 pt-0.5 border-t border-slate-200/60">
-                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate" title={req.addressline || req.location || ''}>
-                                  {req.addressline || req.location || 'Site address'}
+                              <div className="flex items-center gap-2">
+                                <Home className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700 truncate">
+                                  {req.propertyType || 'House'} ({req.propertySize || 'Standard'})
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700">
+                                  {req.preferredDate || 'Flexible'} {req.preferredTime ? `• ${req.preferredTime}` : ''}
+                                </span>
+                              </div>
+                              <div className="col-span-1 sm:col-span-2 flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="font-medium text-slate-700 truncate" title={req.addressline || req.location || ''}>
+                                  {req.addressline || req.location || 'Site address not provided'}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Vendor Quoting & Project Assignment Section */}
-                            <div className="bg-blue-50/30 border border-blue-100 rounded-2xl p-3.5 space-y-2.5">
+                            {/* Connected Vendor Quoting & Project Assignment Section */}
+                            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2.5">
                               <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="font-bold text-slate-800 flex items-center gap-1.5">
                                   <HardHat className="w-3.5 h-3.5 text-primary-600" />
                                   <span>Vendor Quoting & Project Assignment:</span>
                                 </span>
-
                                 {isProjectAwarded(req) ? (
                                   <button
                                     type="button"
@@ -6217,52 +6260,83 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                                       const v = vendors.find(x => x.id === req.vendorId || x.name === req.assignedVendorName);
                                       if (v) handleOpenVendorDetail(v);
                                     }}
-                                    className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 transition-all cursor-pointer"
+                                    className="text-[10px] font-bold text-success-700 bg-success-50 hover:bg-success-100 px-2.5 py-0.5 rounded-full border border-success-200 flex items-center gap-1 transition-all cursor-pointer"
                                     title="Click to view full contractor profile & KYC"
                                   >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                                    <CheckCircle2 className="w-3 h-3 text-success-600" />
                                     <span>Awarded: {req.assignedVendorName}</span>
-                                    <ExternalLink className="w-2.5 h-2.5 text-emerald-600 ml-0.5" />
+                                    <ExternalLink className="w-2.5 h-2.5 text-success-600 ml-0.5" />
+                                  </button>
+                                ) : (req.vendorQuotes || []).length > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenRequestDetail(req, 'quotes')}
+                                    className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 transition-all cursor-pointer"
+                                    title="Click to review quotes and award contractor"
+                                  >
+                                    <Tag className="w-3 h-3 text-amber-600" />
+                                    <span>{(req.vendorQuotes || []).length} Quote{(req.vendorQuotes || []).length > 1 ? 's' : ''} Received (Pending Award)</span>
                                   </button>
                                 ) : (
-                                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                    <span>UNASSIGNED</span>
+                                  <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                                    Unassigned
                                   </span>
                                 )}
                               </div>
 
+                              {/* Two Core Action Buttons: Share with Vendors & View Quotations */}
                               <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenShareVendorsModal(req)}
-                                  className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                                    (req.sharedVendors || []).length > 0
+                                      ? 'bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-200'
+                                      : 'bg-primary-600 hover:bg-primary-700 text-white shadow-primary-500/20'
+                                  }`}
                                 >
-                                  <Share2 className="w-3.5 h-3.5 text-slate-500" />
-                                  <span>Shared ({(req.sharedVendors || []).length})</span>
+                                  <Share2 className="w-3.5 h-3.5" />
+                                  <span>
+                                    {(req.sharedVendors || []).length > 0
+                                      ? `Shared (${req.sharedVendors.length})`
+                                      : 'Share with Vendors'}
+                                  </span>
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => handleOpenVendorQuotesModal(req)}
-                                  className={`px-3 py-2 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer ${
-                                    (req.vendorQuotes || []).length > 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-primary-600 hover:bg-primary-700'
+                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                                    (req.vendorQuotes || []).length > 0
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                                   }`}
                                 >
                                   <Tag className="w-3.5 h-3.5" />
-                                  <span>Quotes ({(req.vendorQuotes || []).length})</span>
+                                  <span>
+                                    {(req.vendorQuotes || []).length > 0
+                                      ? `Quotes (${req.vendorQuotes.length})`
+                                      : 'Quotes (0)'}
+                                  </span>
                                 </button>
                               </div>
 
+                              {isProjectAwarded(req) && req.assignedVendorName && req.assignedQuotePrice && (
+                                <div className="text-[11px] text-emerald-700 bg-emerald-50/70 px-2.5 py-1 rounded-lg border border-emerald-200/80 flex items-center justify-between">
+                                  <span>Assigned Quote Price:</span>
+                                  <span className="font-mono font-bold">₹{Number(req.assignedQuotePrice).toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+
                               {/* Secondary Direct Select Dropdown */}
                               {!isProjectAwarded(req) && (
-                                <div>
+                                <div className="pt-1 flex items-center gap-2">
                                   <select
                                     value={req.vendorId || ''}
                                     onChange={(e) => {
                                       if (e.target.value) handleAssignVendorDirect(req.id, e.target.value);
                                     }}
-                                    className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                                    className="w-full text-[11px] font-semibold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   >
                                     <option value="">-- Or Direct Assign Connected Vendor --</option>
                                     {vendors.map(v => (
@@ -6275,32 +6349,158 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                               )}
                             </div>
 
-                            {/* Service Timeline (Customer View) */}
-                            <div className="pt-1 flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                                <Activity className="w-3.5 h-3.5 text-primary-600" />
-                                <span>Service Timeline (Customer View)</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-primary-700 text-[11px] flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-primary-600" />
-                                  <span>Stage {getTimelineStepIndex(req.status) + 1} of 5</span>
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  {[0, 1, 2, 3, 4].map(idx => {
-                                    const currentIdx = getTimelineStepIndex(req.status);
-                                    const isPastOrCurrent = idx <= currentIdx;
-                                    return (
-                                      <span
-                                        key={idx}
-                                        className={`w-2 h-2 rounded-full transition-all ${
-                                          isPastOrCurrent ? 'bg-primary-600' : 'bg-slate-200'
-                                        }`}
-                                      />
-                                    );
-                                  })}
+                            {/* Interactive 5-Step Customer Timeline Stage Controller */}
+                            <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                                  <Clock className="w-4 h-4 text-primary-600" />
+                                  <span>Service Timeline (Customer View)</span>
                                 </div>
+                                <span className="text-[11px] font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-md border border-primary-200">
+                                  Stage {getTimelineStepIndex(req.status) + 1} of 5
+                                </span>
                               </div>
+
+                              {/* Mini Progress Bar */}
+                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-primary-600 h-full transition-all duration-300"
+                                  style={{ width: `${((getTimelineStepIndex(req.status) + 1) / 5) * 100}%` }}
+                                />
+                              </div>
+
+                              {/* 5 Milestone Step Buttons */}
+                              <div className="grid grid-cols-5 gap-1 pt-0.5">
+                                {TIMELINE_STAGES.map((stg, idx) => {
+                                  const currentIdx = getTimelineStepIndex(req.status);
+                                  const isPast = idx < currentIdx;
+                                  const isCurrent = idx === currentIdx;
+
+                                  let btnStyle = 'bg-white text-slate-500 border-slate-200 hover:border-primary-400 hover:text-primary-600';
+                                  if (isCurrent) {
+                                    btnStyle = 'bg-primary-600 text-white border-primary-600 shadow-xs font-bold ring-2 ring-primary-500/20';
+                                  } else if (isPast) {
+                                    btnStyle = 'bg-success-50 text-success-700 border-success-300 font-semibold';
+                                  }
+
+                                  return (
+                                    <button
+                                      key={stg.key}
+                                      type="button"
+                                      onClick={() => handleUpdateStatus(req.id, stg.key)}
+                                      title={`Set Timeline to: ${stg.label} (${stg.desc})`}
+                                      className={`px-1 py-1 rounded-lg border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${btnStyle}`}
+                                    >
+                                      <div className="flex items-center justify-center">
+                                        {isPast ? (
+                                          <Check className="w-3 h-3 text-success-600" />
+                                        ) : (
+                                          <span className={`text-[9.5px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold ${
+                                            isCurrent ? 'bg-white text-primary-600' : 'bg-slate-100 text-slate-600'
+                                          }`}>
+                                            {stg.step}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[9.5px] leading-tight truncate max-w-full font-medium">
+                                        {stg.label}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                                <span>💡 Tap milestone to update app status</span>
+                                <span className="font-semibold text-slate-600">
+                                  {TIMELINE_STAGES[getTimelineStepIndex(req.status)]?.desc}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card Footer: Status Changer & Action Buttons */}
+                          <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-slate-500">Status:</span>
+                              <select
+                                value={req.status}
+                                onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
+                                className="text-xs font-semibold px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                              >
+                                <option value="SUBMITTED">SUBMITTED</option>
+                                <option value="AUDIT_SCHEDULED">AUDIT_SCHEDULED (Physical Audit)</option>
+                                <option value="ESTIMATING">ESTIMATING (Digital Review)</option>
+                                <option value="QUOTED">QUOTED</option>
+                                <option value="ACCEPTED">ACCEPTED</option>
+                                <option value="IN_PROGRESS">IN_PROGRESS</option>
+                                <option value="COMPLETED">COMPLETED</option>
+                                <option value="REJECTED">REJECTED</option>
+                              </select>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Require Site Audit Toggle */}
+                              {(() => {
+                                const isAuditReq = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || req.requiresSiteAudit;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSiteAudit(req)}
+                                    title={isAuditReq ? 'Site audit is currently marked REQUIRED. Click to toggle.' : 'Mark this request as requiring a physical on-site audit inspection.'}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border shadow-xs flex items-center gap-1.5 transition-all ${
+                                      isAuditReq
+                                        ? 'bg-warning-100 text-warning-900 border-warning-400 hover:bg-warning-200 ring-2 ring-warning-400/20 font-bold'
+                                        : 'bg-white text-slate-700 border-slate-300 hover:border-warning-400 hover:bg-warning-50 hover:text-warning-800'
+                                    }`}
+                                  >
+                                    <MapPin className={`w-3.5 h-3.5 ${isAuditReq ? 'text-warning-700 fill-warning-300' : 'text-slate-400'}`} />
+                                    <span>{isAuditReq ? 'Audit: REQUIRED' : 'Require Audit'}</span>
+                                  </button>
+                                );
+                              })()}
+
+                              {/* Open Dedicated Detail Page */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRequestDetail(req)}
+                                title="Open Full Inspection Details Page"
+                                className="px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-slate-600" />
+                                <span>Details</span>
+                              </button>
+
+                              {/* Chat with Customer */}
+                              <button
+                                type="button"
+                                onClick={() => openChatForRequest(req)}
+                                title="Open Live Chat with Customer"
+                                className="px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-primary-600" />
+                                <span>Chat</span>
+                              </button>
+
+                              {/* Build BOQ Quote */}
+                              <button
+                                type="button"
+                                onClick={() => handleStartQuote(req)}
+                                title="Create itemized estimate in BOQ builder"
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-success-600 hover:bg-success-700 rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
+                              >
+                                <Calculator className="w-3.5 h-3.5" />
+                                <span>Build Quote</span>
+                              </button>
+
+                              {/* Delete Request */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRequest(req.id)}
+                                title="Delete request"
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -6308,51 +6508,6 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     })}
                   </div>
                 )}
-
-                {/* 4. REAL-TIME DISPATCH ENGINE STICKY BOTTOM BAR */}
-                <div className="sticky bottom-0 z-20 mt-6 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3.5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                      </span>
-                      <span className="font-bold text-xs text-slate-900">Real-Time Dispatch Engine</span>
-                    </div>
-                    <span className="text-xs text-slate-500 hidden sm:inline">
-                      {displayRequests.length} requests loaded • {new Set(displayRequests.map(r => r.city || r.location || 'Hub')).size} active geographic clusters • Last sync 12s ago
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleExportRequestsCSV(displayRequests)}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Export CSV</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleBatchVendorPing}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Radio className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Batch Vendor Ping</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCreateTestRequest(requestsCityFilter !== 'ALL' ? requestsCityFilter : 'Bhilwara')}
-                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>+ Manual Request</span>
-                    </button>
-                  </div>
-                </div>
               </div>
             );
           })()}
@@ -7491,8 +7646,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                     })}
                   </div>
 
-                  {/* Specific Specialization Pills Grid (Dynamic & Smaller) */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-1.5">
+                  {/* Specific Specialization Pills Grid (Dynamic & Clean) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     {(categoryPills.length > 0 ? categoryPills : [
                       { id: 'waterproofing', name: 'Waterproofing', slug: 'waterproofing', color: '#0284c7', vendorCount: 0 },
                       { id: 'civil', name: 'Civil & Masonry', slug: 'civil', color: '#6366f1', vendorCount: 0 },
@@ -7514,23 +7669,20 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                           key={cat.id}
                           type="button"
                           onClick={() => setVendorCategoryFilter(isSelected ? 'ALL' : (cat.slug || cat.id || ''))}
-                          className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 ${
+                          className={`px-3 py-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2 ${
                             isSelected
-                              ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
-                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                              isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {count}
-                            </span>
-                          </div>
-                          <div className="mt-1 font-bold text-[9px] truncate leading-tight">
+                          <span className="font-semibold text-xs leading-snug truncate">
                             {cat.name}
-                          </div>
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {count}
+                          </span>
                         </button>
                       );
                     })}
