@@ -128,6 +128,23 @@ const CATEGORIES = [
   }
 ];
 
+const RAW_ADMIN_ROUTE = (import.meta.env.VITE_ADMIN_ROUTE || '/master-console').trim().toLowerCase();
+const ADMIN_ROUTE = RAW_ADMIN_ROUTE.startsWith('/')
+  ? (RAW_ADMIN_ROUTE.replace(/\/+$/, '') || '/master-console')
+  : `/${RAW_ADMIN_ROUTE.replace(/\/+$/, '')}`;
+
+const isAdminRouteMatch = (pathname, hash, search) => {
+  const cleanPath = (pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+  const cleanHash = (hash || '').toLowerCase();
+  const routeSlug = ADMIN_ROUTE.replace(/^\//, '');
+  return (
+    cleanPath === ADMIN_ROUTE ||
+    cleanHash === `#${routeSlug}` ||
+    search.includes(`redirect=${encodeURIComponent(ADMIN_ROUTE)}`) ||
+    search.includes(`redirect=${ADMIN_ROUTE}`)
+  );
+};
+
 export default function App() {
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -138,20 +155,16 @@ export default function App() {
       const role = localStorage.getItem('hipro_user_role');
 
       if (hash === '#client') return 'client';
-      if (search.includes('redirect=%2fadmin') || search.includes('redirect=/admin')) {
-        try { window.history.replaceState(null, '', '/admin'); } catch (e) {}
+      if (isAdminRouteMatch(path, hash, search)) {
+        if (search.includes('redirect=')) {
+          try { window.history.replaceState(null, '', ADMIN_ROUTE); } catch (e) {}
+        }
         return (token && role === 'ADMIN') ? 'admin' : 'admin_login';
       }
       if (hash.includes('register') || path.includes('/register')) return 'register';
-      if (hash.includes('admin') || path.includes('/admin')) {
-        return (token && role === 'ADMIN') ? 'admin' : 'admin_login';
-      }
-      if (hash.includes('vendor') || path.includes('/vendor') || path.includes('/partner')) {
-        return (token && role === 'VENDOR') ? 'vendor' : 'login';
-      }
-      if (hash.includes('login') || path.includes('/login')) return 'login';
+      return (token && role === 'VENDOR') ? 'vendor' : 'login';
     }
-    return 'admin_login';
+    return 'login';
   });
 
   // Listen for navigation changes
@@ -165,14 +178,12 @@ export default function App() {
 
       if (hash === '#client') {
         setViewMode('client');
-      } else if (search.includes('redirect=%2fadmin') || search.includes('redirect=/admin') || hash.includes('admin') || path.includes('/admin')) {
+      } else if (isAdminRouteMatch(path, hash, search)) {
         setViewMode((token && role === 'ADMIN') ? 'admin' : 'admin_login');
       } else if (hash.includes('register') || path.includes('/register')) {
         setViewMode('register');
-      } else if (hash.includes('vendor') || path.includes('/vendor') || path.includes('/partner')) {
+      } else {
         setViewMode((token && role === 'VENDOR') ? 'vendor' : 'login');
-      } else if (hash.includes('login') || path.includes('/login')) {
-        setViewMode('login');
       }
     };
 
@@ -806,16 +817,66 @@ export default function App() {
     return <AdminLoginPage onLoginSuccess={() => setViewMode('admin')} />;
   }
   if (viewMode === 'register') {
-    return <VendorRegisterPage onRegisterSuccess={() => setViewMode('vendor')} onSwitchToLogin={() => setViewMode('login')} />;
+    return (
+      <VendorRegisterPage
+        onRegisterSuccess={() => {
+          try { window.history.replaceState(null, '', '/'); } catch (e) {}
+          setViewMode('vendor');
+        }}
+        onSwitchToLogin={() => {
+          try { window.history.pushState(null, '', '/'); } catch (e) {}
+          setViewMode('login');
+        }}
+      />
+    );
   }
   if (viewMode === 'login') {
-    return <LoginPage onLoginSuccess={() => setViewMode('vendor')} onSwitchToRegister={() => setViewMode('register')} />;
+    return (
+      <LoginPage
+        onLoginSuccess={() => setViewMode('vendor')}
+        onSwitchToRegister={() => {
+          try { window.history.pushState(null, '', '/register'); } catch (e) {}
+          setViewMode('register');
+        }}
+      />
+    );
   }
   if (viewMode === 'vendor') {
-    return <VendorPanel onSwitchToSuperAdmin={() => setViewMode('admin_login')} onLogout={() => setViewMode('login')} />;
+    return (
+      <VendorPanel
+        onLogout={() => {
+          localStorage.removeItem('hipro_auth_token');
+          localStorage.removeItem('hipro_user_role');
+          localStorage.removeItem('hipro_user');
+          localStorage.removeItem('hipro_vendor');
+          try { window.history.replaceState(null, '', '/'); } catch (e) {}
+          setViewMode('login');
+        }}
+      />
+    );
   }
   if (viewMode === 'admin') {
-    return <AdminApp onSwitchToCustomerApp={() => setViewMode('client')} onSwitchToVendor={() => setViewMode('login')} onLogout={() => setViewMode('admin_login')} />;
+    return (
+      <AdminApp
+        onSwitchToCustomerApp={() => setViewMode('client')}
+        onSwitchToVendor={() => {
+          localStorage.removeItem('hipro_auth_token');
+          localStorage.removeItem('hipro_user_role');
+          localStorage.removeItem('hipro_user');
+          localStorage.removeItem('hipro_vendor');
+          try { window.history.replaceState(null, '', '/'); } catch (e) {}
+          setViewMode('login');
+        }}
+        onLogout={() => {
+          localStorage.removeItem('hipro_auth_token');
+          localStorage.removeItem('hipro_user_role');
+          localStorage.removeItem('hipro_user');
+          localStorage.removeItem('hipro_vendor');
+          try { window.history.replaceState(null, '', ADMIN_ROUTE); } catch (e) {}
+          setViewMode('admin_login');
+        }}
+      />
+    );
   }
 
   return (
