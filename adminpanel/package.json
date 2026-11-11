@@ -4,6 +4,9 @@
   "private": true,
   "description": "Hipro Admin & Vendor Portal with Frontend & Backend",
   "scripts": {
+    "dev": "npm --prefix backend run dev",
+    "dev:all": "npx concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "start": "npm --prefix backend start",
     "start:backend": "npm --prefix backend start",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
