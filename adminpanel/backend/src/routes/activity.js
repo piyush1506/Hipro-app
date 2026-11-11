@@ -117,6 +117,62 @@ router.post('/track', async (req, res) => {
       io.to('admin_room').emit('customer_activity_event', activityRecord);
     }
 
+    // If customer added to cart and we have their contact, generate/update CART lead for Telecallers
+    if (eventType === 'ADDED_TO_CART' && finalCustomerPhone) {
+      try {
+        const cleanPhone = finalCustomerPhone.trim();
+        const existingCartLead = await prisma.lead.findFirst({
+          where: {
+            customerPhone: cleanPhone,
+            source: 'CART',
+            status: { in: ['NEW', 'CONTACTED'] }
+          }
+        });
+
+        if (existingCartLead) {
+          await prisma.lead.update({
+            where: { id: existingCartLead.id },
+            data: {
+              serviceName: serviceName || existingCartLead.serviceName,
+              subServiceName: subServiceName || existingCartLead.subServiceName,
+              issueDescription: `Cart updated: ${subServiceName || serviceName || 'Items added'}`,
+              city: finalCity || existingCartLead.city
+            }
+          });
+        } else {
+          const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+          const rand = Math.floor(1000 + Math.random() * 9000);
+          await prisma.lead.create({
+            data: {
+              leadNumber: `LEAD-CART-${dateStr}-${rand}`,
+              source: 'CART',
+              customerId: validUserId || null,
+              customerName: finalCustomerName || 'Cart Visitor',
+              customerPhone: cleanPhone,
+              customerEmail: finalCustomerEmail || null,
+              serviceId: serviceId || null,
+              subServiceId: subServiceId || null,
+              serviceName: serviceName || 'Cart Item',
+              subServiceName: subServiceName || null,
+              issueDescription: `Customer added ${subServiceName || serviceName || 'item'} to cart`,
+              city: finalCity || 'Bhilwara',
+              status: 'NEW',
+              statusHistory: {
+                create: {
+                  fromStatus: 'NONE',
+                  toStatus: 'NEW',
+                  changedBy: 'SYSTEM',
+                  notes: 'Lead generated automatically from customer cart activity'
+                }
+              }
+            }
+          });
+        }
+      } catch (cartLeadErr) {
+        console.warn('Cart lead generation warning:', cartLeadErr.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       activityId: activityRecord.id,

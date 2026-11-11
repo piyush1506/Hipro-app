@@ -39,13 +39,49 @@ const getVendorCategories = async (req, res) => {
 // GET /api/v1/vendors - List all vendors (with optional filters)
 const getVendors = async (req, res) => {
   try {
-    const { city, state, specialization, category, status, search } = req.query;
+    const {
+      city,
+      state,
+      specialization,
+      category,
+      status,
+      search,
+      vendorType,
+      materialCategory,
+      laborCategory,
+      sortBy = 'created_at',
+      order = 'desc'
+    } = req.query;
+
     const where = {};
     const andConditions = [];
 
     if (city) where.city = city;
     if (state) where.state = state;
     
+    // Vendor Type filter (MATERIAL, LABOR, BOTH)
+    if (vendorType && vendorType.toUpperCase() !== 'ALL') {
+      const typeUpper = vendorType.toUpperCase();
+      if (typeUpper === 'MATERIAL' || typeUpper === 'LABOR') {
+        where.OR = [
+          { vendorType: typeUpper },
+          { vendorType: 'BOTH' }
+        ];
+      } else {
+        where.vendorType = typeUpper;
+      }
+    }
+
+    // Material Category filter
+    if (materialCategory && materialCategory.toLowerCase() !== 'all') {
+      where.materialCategories = { has: materialCategory };
+    }
+
+    // Labor Category filter
+    if (laborCategory && laborCategory.toLowerCase() !== 'all') {
+      where.laborCategories = { has: laborCategory };
+    }
+
     if (category && category.toLowerCase() !== 'all') {
       const catLower = category.toLowerCase();
       if (catLower === 'adventure' || catLower === 'services') {
@@ -81,7 +117,16 @@ const getVendors = async (req, res) => {
       where.AND = andConditions;
     }
 
-    const isAdmin = req.user && (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN');
+    const sortField = ['rating', 'experience', 'name', 'minCharge', 'created_at'].includes(sortBy)
+      ? sortBy
+      : 'created_at';
+    const sortOrder = order.toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+    const isAdmin = req.user && (
+      req.user.role === 'ADMIN' ||
+      req.user.role === 'SUPER_ADMIN' ||
+      (req.user.permissions && req.user.permissions.includes('vendors.view'))
+    );
 
     let vendors;
     if (isAdmin) {
@@ -89,10 +134,10 @@ const getVendors = async (req, res) => {
         where,
         include: {
           _count: {
-            select: { vendorQuotes: true, assignedJobs: true, ratings: true }
+            select: { vendorQuotes: true, assignedJobs: true, ratings: true, rfqs: true }
           }
         },
-        orderBy: { created_at: 'desc' }
+        orderBy: { [sortField]: sortOrder }
       });
     } else {
       // Safe public projection: Never leak KYC, Aadhaar, PAN, Bank docs, or password/passcode hashes
@@ -108,6 +153,9 @@ const getVendors = async (req, res) => {
           city: true,
           category: true,
           specialization: true,
+          vendorType: true,
+          materialCategories: true,
+          laborCategories: true,
           experience: true,
           status: true,
           capacity: true,
@@ -123,7 +171,7 @@ const getVendors = async (req, res) => {
             select: { vendorQuotes: true, assignedJobs: true, ratings: true }
           }
         },
-        orderBy: { created_at: 'desc' }
+        orderBy: { [sortField]: sortOrder }
       });
     }
 
@@ -232,7 +280,28 @@ const DEFAULT_CAPACITY_LIMITS = {
 // POST /api/v1/vendors - Create a new vendor
 const createVendor = async (req, res) => {
   try {
-    const { name, businessName, phone, email, state, city, cityId, category, specialization, experience, status, capacity, rating, minCharge, imageUrl, maxConcurrentJobs } = req.body;
+    const {
+      name,
+      businessName,
+      phone,
+      email,
+      state,
+      city,
+      cityId,
+      category,
+      specialization,
+      experience,
+      status,
+      capacity,
+      rating,
+      minCharge,
+      imageUrl,
+      maxConcurrentJobs,
+      vendorType = 'LABOR',
+      materialCategories = [],
+      laborCategories = [],
+      gstinNumber
+    } = req.body;
 
     if (!name || !businessName || !phone || !city || !specialization) {
       return res.status(400).json({ success: false, message: 'Name, business name, phone, city, and specialization are required' });
@@ -271,9 +340,13 @@ const createVendor = async (req, res) => {
         capacity: validCapacity,
         maxConcurrentJobs: finalMaxJobs,
         currentJobCount: 0,
-        rating: rating ? parseFloat(rating) : null,
+        rating: rating ? parseFloat(rating) : 5.0,
         minCharge: minCharge ? parseFloat(minCharge) : null,
-        imageUrl: imageUrl || null
+        imageUrl: imageUrl || null,
+        vendorType: (vendorType || 'LABOR').toUpperCase(),
+        materialCategories: Array.isArray(materialCategories) ? materialCategories : [],
+        laborCategories: Array.isArray(laborCategories) ? laborCategories : [],
+        gstinNumber: gstinNumber ? gstinNumber.trim().toUpperCase() : null
       }
     });
 
@@ -289,7 +362,28 @@ const createVendor = async (req, res) => {
 // PUT /api/v1/vendors/:id - Update vendor
 const updateVendor = async (req, res) => {
   try {
-    const { name, businessName, phone, email, state, city, cityId, category, specialization, experience, status, capacity, rating, minCharge, imageUrl, maxConcurrentJobs } = req.body;
+    const {
+      name,
+      businessName,
+      phone,
+      email,
+      state,
+      city,
+      cityId,
+      category,
+      specialization,
+      experience,
+      status,
+      capacity,
+      rating,
+      minCharge,
+      imageUrl,
+      maxConcurrentJobs,
+      vendorType,
+      materialCategories,
+      laborCategories,
+      gstinNumber
+    } = req.body;
 
     const updateData = {
       name: name || undefined,
@@ -305,7 +399,11 @@ const updateVendor = async (req, res) => {
       status: status || undefined,
       rating: rating ? parseFloat(rating) : undefined,
       minCharge: minCharge ? parseFloat(minCharge) : undefined,
-      imageUrl: imageUrl || undefined
+      imageUrl: imageUrl || undefined,
+      vendorType: vendorType ? vendorType.toUpperCase() : undefined,
+      materialCategories: Array.isArray(materialCategories) ? materialCategories : undefined,
+      laborCategories: Array.isArray(laborCategories) ? laborCategories : undefined,
+      gstinNumber: gstinNumber !== undefined ? (gstinNumber ? gstinNumber.trim().toUpperCase() : null) : undefined
     };
 
     if (capacity) {

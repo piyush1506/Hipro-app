@@ -276,6 +276,48 @@ router.post('/', authenticateUser,
       }
     });
 
+    // Automatically generate pipeline Lead for Telecallers & Civil Engineers
+    try {
+      const leadNumber = `LEAD-${newRequest.requestNumber.replace(/^REQ-/, '')}`;
+      await prisma.lead.create({
+        data: {
+          leadNumber,
+          source: 'INSPECTION',
+          customerId: user.id,
+          customerName: user.name || 'Customer',
+          customerPhone: user.phoneNumber || phone,
+          customerEmail: user.email || null,
+          customerAddress: addressline || req.body.address || location || null,
+          serviceId: req.body.serviceId || null,
+          subServiceId: req.body.subServiceId || null,
+          serviceName: servicecode || req.body.categoryName || '',
+          subServiceName: subServiceCode || req.body.subServiceName || '',
+          issueDescription: issueDescription || '',
+          mediaUrl: mediaList,
+          propertyType: propertyType || '',
+          propertySize: propertySize || '',
+          location: location || addressline || '',
+          city: req.body.city || 'Bhilwara',
+          latitude: req.body.latitude ? parseFloat(req.body.latitude) : null,
+          longitude: req.body.longitude ? parseFloat(req.body.longitude) : null,
+          preferredDate: preferredDate || null,
+          preferredTime: preferredTime || null,
+          status: 'NEW',
+          originalRequestId: newRequest.id,
+          statusHistory: {
+            create: {
+              fromStatus: 'NONE',
+              toStatus: 'NEW',
+              changedBy: 'SYSTEM',
+              notes: `Lead generated automatically from inspection request ${newRequest.requestNumber}`
+            }
+          }
+        }
+      });
+    } catch (leadSyncErr) {
+      console.warn('Lead auto-generation warning:', leadSyncErr.message);
+    }
+
     // Real-Time Socket Broadcast: Notify Admin Panel safely without broadcasting customer credentials
     try {
       const io = req.app.get('io');

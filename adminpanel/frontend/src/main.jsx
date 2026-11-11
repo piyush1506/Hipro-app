@@ -136,13 +136,18 @@ function AppRoot() {
     setTargetPortal(nextView);
   };
 
-  // Dedicated Admin Route (`/master-console`)
+  // Dedicated Admin & Staff Route (`/master-console`)
+  const isStaffRole = (role) => {
+    return Boolean(role && role !== 'VENDOR' && role !== 'CUSTOMER' && role !== 'USER');
+  };
+
   if (targetPortal === 'admin') {
-    if (!authState.isAuthenticated || authState.role !== 'ADMIN') {
+    if (!authState.isAuthenticated || !isStaffRole(authState.role)) {
       return <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
     }
     return (
       <AdminApp
+        currentUserRole={authState.role}
         onSwitchToCustomerApp={() => {
           window.location.href = '/';
         }}

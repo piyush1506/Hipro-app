@@ -20,6 +20,7 @@ model Service {
     subServices    SubService[]
     requests       ServiceRequest[]
     directBookings DirectBooking[]
+    leads          Lead[]
     created_at     DateTime        @default(now())
 }
 
@@ -40,6 +41,7 @@ model SubService {
     requiredFields  Json?
     requests        ServiceRequest[]
     directBookings  DirectBooking[]
+    leads           Lead[]
     created_at      DateTime        @default(now())
 }
 
@@ -59,6 +61,7 @@ model user {
     activities     CustomerActivity[]
     supportConversations SupportConversation[]
     supportAgent   SupportAgent?
+    leads          Lead[]
     created_at     DateTime         @default(now())
 }
 
@@ -420,6 +423,12 @@ model Vendor {
     minCharge       Float    @default(0.0)
     imageUrl        String?
 
+    // Classification: MATERIAL, LABOR, BOTH
+    vendorType        String   @default("LABOR") // "MATERIAL" | "LABOR" | "BOTH"
+    materialCategories String[] @default([])
+    laborCategories    String[] @default([])
+    gstinNumber        String?
+
     // Document Verification Fields
     aadhaarNumber     String?   // Aadhaar number
     aadhaarUrl        String?   // Uploaded Aadhaar document URL
@@ -435,8 +444,12 @@ model Vendor {
     assignedJobs    ServiceRequest[] @relation("VendorAssignedJobs")
     sharedRequests  VendorSharedRequest[]
     ratings         VendorRating[]
+    rfqs            RFQ[]
+    materialAssignments MaterialRequirement[] @relation("MaterialVendorAssignment")
+    laborAssignments    LaborRequirement[]    @relation("LaborVendorAssignment")
 
     @@index([category])
+    @@index([vendorType])
     @@index([city])
     @@index([specialization])
     @@index([status])
@@ -501,4 +514,283 @@ model VendorRating {
 
     @@index([vendorId])
     @@index([bookingId])
+}
+
+// ==========================================
+// RBAC & MULTI-ROLE STAFF SYSTEM
+// ==========================================
+
+model Role {
+    id          String        @id @default(uuid())
+    name        String        @unique // "SUPER_ADMIN", "TELECALLER", "CIVIL_ENGINEER", "PURCHASE_PERSON" or custom
+    displayName String
+    description String?
+    isSystem    Boolean       @default(false)
+    isActive    Boolean       @default(true)
+    permissions Json          @default("[]") // Array of strings e.g. ["leads.view", "leads.verify"]
+    createdAt   DateTime      @default(now())
+    updatedAt   DateTime      @updatedAt
+
+    staffMembers StaffMember[]
+
+    @@index([name])
+}
+
+model StaffMember {
+    id           String       @id @default(uuid())
+    name         String
+    email        String       @unique
+    phone        String?      @unique
+    password     String       // bcrypt hashed
+    roleId       String
+    role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+    isActive     Boolean      @default(true)
+    profileImage String?
+    createdBy    String?
+    lastLoginAt  DateTime?
+    createdAt    DateTime     @default(now())
+    updatedAt    DateTime     @updatedAt
+
+    verifiedLeads       Lead[]              @relation("LeadVerifiedBy")
+    assignedLeads       Lead[]              @relation("LeadAssignedTo")
+    requirementAnalyses RequirementAnalysis[]
+    rfqsSent            RFQ[]
+    projectsManaged     Project[]
+
+    @@index([email])
+    @@index([roleId])
+}
+
+// ==========================================
+// LEAD PIPELINE SYSTEM
+// ==========================================
+
+model Lead {
+    id               String       @id @default(uuid())
+    leadNumber       String       @unique
+    source           String       // "CART", "PAYMENT", "INSPECTION", "DIRECT_BOOKING", "MANUAL"
+
+    // Customer Info
+    customerId       String?
+    customer         user?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+    customerName     String
+    customerPhone    String
+    customerEmail    String?
+    customerAddress  String?
+
+    // Service Info
+    serviceId        String?
+    service          Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+    subServiceId     String?
+    subService       SubService?  @relation(fields: [subServiceId], references: [id], onDelete: SetNull)
+    serviceName      String?
+    subServiceName   String?
+    issueDescription String?
+    mediaUrl         String[]     @default([])
+
+    // Property & Location
+    propertyType     String?
+    propertySize     String?
+    location         String?
+    city             String?
+    latitude         Float?
+    longitude        Float?
+    preferredDate    String?
+    preferredTime    String?
+
+    // Pipeline Status
+    status           String       @default("NEW")
+    // NEW, CONTACTED, VERIFIED, SITE_VISIT_SCHEDULED, SITE_VISITED, REQUIREMENTS_CREATED,
+    // PROCUREMENT_IN_PROGRESS, QUOTATIONS_RECEIVED, VENDORS_ASSIGNED, PROJECT_STARTED, IN_PROGRESS, COMPLETED, REJECTED, CANCELLED
+
+    // Telecaller Qualification
+    verifiedById     String?
+    verifiedBy       StaffMember? @relation("LeadVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+    verifiedAt       DateTime?
+    telecallerNotes  String?
+
+    // Civil Engineer Assignment
+    assignedToId     String?
+    assignedTo       StaffMember? @relation("LeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+    assignedAt       DateTime?
+
+    originalRequestId String?
+
+    createdAt        DateTime     @default(now())
+    updatedAt        DateTime     @updatedAt
+
+    requirementAnalysis RequirementAnalysis?
+    project             Project?
+    statusHistory       LeadStatusHistory[]
+
+    @@index([status])
+    @@index([source])
+    @@index([assignedToId])
+    @@index([verifiedById])
+    @@index([city])
+}
+
+model LeadStatusHistory {
+    id         String   @id @default(uuid())
+    leadId     String
+    lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+    fromStatus String
+    toStatus   String
+    changedBy  String   // Staff name or "SYSTEM"
+    notes      String?
+    createdAt  DateTime @default(now())
+
+    @@index([leadId])
+}
+
+// ==========================================
+// REQUIREMENT ANALYSIS & PROCUREMENT
+// ==========================================
+
+model RequirementAnalysis {
+    id             String       @id @default(uuid())
+    leadId         String       @unique
+    lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+    engineerId     String
+    engineer       StaffMember  @relation(fields: [engineerId], references: [id], onDelete: Restrict)
+
+    siteNotes      String?
+    sitePhotos     String[]     @default([])
+    siteVideos     String[]     @default([])
+    inspectionDate DateTime?
+
+    estimatedBudget   Float?
+    estimatedDuration String?
+
+    createdAt      DateTime     @default(now())
+    updatedAt      DateTime     @updatedAt
+
+    materialRequirements MaterialRequirement[]
+    laborRequirements    LaborRequirement[]
+
+    @@index([leadId])
+    @@index([engineerId])
+}
+
+model MaterialRequirement {
+    id                    String              @id @default(uuid())
+    requirementAnalysisId String
+    requirementAnalysis   RequirementAnalysis @relation(fields: [requirementAnalysisId], references: [id], onDelete: Cascade)
+
+    materialName          String
+    materialCategory      String              // e.g. "Carpentry", "Iron & Steel", "Cement", etc.
+    specification         String?
+    quantity              Float
+    unit                  String              // "Sq Ft", "Kg", "Bags", "Pieces", etc.
+    estimatedRate         Float?
+    notes                 String?
+
+    status                String              @default("PENDING") // PENDING, RFQ_SENT, QUOTATIONS_RECEIVED, VENDOR_ASSIGNED, DELIVERED, CANCELLED
+
+    assignedVendorId      String?
+    assignedVendor        Vendor?             @relation("MaterialVendorAssignment", fields: [assignedVendorId], references: [id], onDelete: SetNull)
+    assignedPrice         Float?
+    assignedAt            DateTime?
+
+    createdAt             DateTime            @default(now())
+    updatedAt             DateTime            @updatedAt
+
+    rfqs                  RFQ[]
+
+    @@index([requirementAnalysisId])
+    @@index([materialCategory])
+    @@index([status])
+}
+
+model LaborRequirement {
+    id                    String              @id @default(uuid())
+    requirementAnalysisId String
+    requirementAnalysis   RequirementAnalysis @relation(fields: [requirementAnalysisId], references: [id], onDelete: Cascade)
+
+    laborType             String              // "Mason", "Helper", "Carpenter", "Electrician", etc.
+    laborCategory         String              // "Civil", "Carpentry", "Electrical", etc.
+    numberOfWorkers       Int                 @default(1)
+    durationDays          Int?
+    skillLevel            String?             // "Skilled", "Semi-Skilled", "Unskilled"
+    description           String?
+    estimatedRate         Float?
+
+    status                String              @default("PENDING") // PENDING, RFQ_SENT, QUOTATIONS_RECEIVED, VENDOR_ASSIGNED, ACTIVE, COMPLETED, CANCELLED
+
+    assignedVendorId      String?
+    assignedVendor        Vendor?             @relation("LaborVendorAssignment", fields: [assignedVendorId], references: [id], onDelete: SetNull)
+    assignedPrice         Float?
+    assignedAt            DateTime?
+
+    createdAt             DateTime            @default(now())
+    updatedAt             DateTime            @updatedAt
+
+    rfqs                  RFQ[]
+
+    @@index([requirementAnalysisId])
+    @@index([laborType])
+    @@index([status])
+}
+
+model RFQ {
+    id                    String               @id @default(uuid())
+    rfqNumber             String               @unique
+    type                  String               // "MATERIAL" | "LABOR"
+
+    materialRequirementId String?
+    materialRequirement   MaterialRequirement? @relation(fields: [materialRequirementId], references: [id], onDelete: Cascade)
+
+    laborRequirementId    String?
+    laborRequirement      LaborRequirement?    @relation(fields: [laborRequirementId], references: [id], onDelete: Cascade)
+
+    sentById              String
+    sentBy                StaffMember          @relation(fields: [sentById], references: [id], onDelete: Restrict)
+
+    vendorId              String
+    vendor                Vendor               @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+    status                String               @default("SENT") // SENT, VIEWED, QUOTED, ACCEPTED, REJECTED, EXPIRED
+
+    quotedPrice           Float?
+    quotedTimeline        String?
+    quotedNotes           String?
+    qualityDetails        String?
+    quotedAt              DateTime?
+
+    attachments           String[]             @default([])
+
+    sentAt                DateTime             @default(now())
+    expiresAt             DateTime?
+    updatedAt             DateTime             @updatedAt
+
+    @@index([vendorId])
+    @@index([type])
+    @@index([status])
+    @@index([materialRequirementId])
+    @@index([laborRequirementId])
+}
+
+model Project {
+    id            String       @id @default(uuid())
+    projectNumber String       @unique
+    leadId        String       @unique
+    lead          Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+    managerId     String
+    manager       StaffMember  @relation(fields: [managerId], references: [id], onDelete: Restrict)
+
+    status        String       @default("PLANNING") // PLANNING, MATERIAL_PROCUREMENT, LABOR_MOBILIZATION, IN_PROGRESS, INSPECTION, COMPLETED, CLOSED
+
+    startDate     DateTime?
+    estimatedEnd  DateTime?
+    actualEnd     DateTime?
+    totalBudget   Float?
+    notes         String?
+
+    createdAt     DateTime     @default(now())
+    updatedAt     DateTime     @updatedAt
+
+    @@index([managerId])
+    @@index([status])
 }

@@ -169,6 +169,12 @@ app.use('/api/v1/vendor-quotes', require('./routes/vendors'));
 app.use('/api/v1/payments', require('./routes/payments'));
 app.use('/api/v1/partners', require('./routes/services'));
 app.use('/api/v1/activity', require('./routes/activity'));
+app.use('/api/v1/staff', require('./routes/staff'));
+app.use('/api/v1/roles', require('./routes/roles'));
+app.use('/api/v1/leads', require('./routes/leads'));
+app.use('/api/v1/requirements', require('./routes/requirements'));
+app.use('/api/v1/rfq', require('./routes/rfq'));
+app.use('/api/v1/projects', require('./routes/projects'));
 
 // AI Customer Support & Live Handoff System
 const { initializeChatSocket } = require('./sockets/chat.socket');

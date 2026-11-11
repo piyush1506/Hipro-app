@@ -46,7 +46,10 @@ async function authenticate(req, res, next) {
     // Attach identity & role to request
     req.user = {
       id: userId,
+      staffId: decoded.staffId || (decoded.role !== 'VENDOR' && decoded.role !== 'CUSTOMER' ? userId : null),
       role: (decoded.role || 'CUSTOMER').toUpperCase(),
+      roleName: decoded.roleName || (decoded.role || 'CUSTOMER').toUpperCase(),
+      permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
       vendorId: decoded.vendorId || (decoded.role === 'VENDOR' ? userId : null),
       email: decoded.email || null,
       name: decoded.name || null
@@ -205,7 +208,10 @@ async function optionalAuth(req, res, next) {
       if (userId) {
         req.user = {
           id: userId,
+          staffId: decoded.staffId || (decoded.role !== 'VENDOR' && decoded.role !== 'CUSTOMER' ? userId : null),
           role: (decoded.role || 'CUSTOMER').toUpperCase(),
+          roleName: decoded.roleName || (decoded.role || 'CUSTOMER').toUpperCase(),
+          permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
           vendorId: decoded.vendorId || (decoded.role === 'VENDOR' ? userId : null),
           email: decoded.email || null,
           name: decoded.name || null
@@ -218,10 +224,43 @@ async function optionalAuth(req, res, next) {
   next();
 }
 
+/**
+ * Permission-Based Authorization Guard (RBAC)
+ * Checks whether user has the required granular permission,
+ * '*' wildcard permission, or is a SUPER_ADMIN / ADMIN.
+ */
+function requirePermission(permission) {
+  return function (req, res, next) {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Super Admin has unrestricted access to everything
+    if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'ADMIN') {
+      return next();
+    }
+
+    const permissions = req.user.permissions || [];
+    if (permissions.includes('*') || permissions.includes(permission)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Access Denied: Missing permission '${permission}'`,
+      requiredPermission: permission
+    });
+  };
+}
+
 module.exports = {
   optionalAuth,
   authenticate,
   requireAdmin,
+  requirePermission,
   requireVendor,
   requireRole,
   preventVendorIDOR,

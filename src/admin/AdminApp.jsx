@@ -11,8 +11,13 @@ import {
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown, ChevronLeft, ChevronRight,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette
+  Edit, Edit2, Edit3, LogOut, Video, Play, Building2, Palette, FolderKanban, Package
 } from 'lucide-react';
+import LeadsPipelineView from './components/pipeline/LeadsPipelineView.jsx';
+import RequirementBuilderView from './components/pipeline/RequirementBuilderView.jsx';
+import ProcurementRFQView from './components/pipeline/ProcurementRFQView.jsx';
+import ProjectsExecutionView from './components/pipeline/ProjectsExecutionView.jsx';
+import StaffRoleManagerView from './components/pipeline/StaffRoleManagerView.jsx';
 
 const API_BASE = (typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || 
@@ -24,8 +29,51 @@ const API_BASE = (typeof window !== 'undefined' && (
   ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000')
   : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
-export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
-  const [activeTab, setActiveTab] = useState('overview');
+export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
+  const [currentUserRole, setCurrentUserRole] = useState(() => {
+    return propUserRole || localStorage.getItem('hipro_user_role') || 'SUPER_ADMIN';
+  });
+
+  const [userPermissions, setUserPermissions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hipro_permissions');
+      return saved ? JSON.parse(saved) : ['*'];
+    } catch {
+      return ['*'];
+    }
+  });
+
+  const [selectedLeadForReq, setSelectedLeadForReq] = useState(null);
+  const [selectedLeadForProc, setSelectedLeadForProc] = useState(null);
+
+  const canAccess = (tabKey) => {
+    const role = (currentUserRole || 'SUPER_ADMIN').toUpperCase();
+    if (tabKey === 'staff-roles') {
+      return role === 'SUPER_ADMIN' || userPermissions.includes('*') || userPermissions.includes('manage_roles') || userPermissions.includes('manage_staff');
+    }
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || userPermissions.includes('*')) return true;
+
+    if (role === 'TELECALLER') {
+      return ['leads', 'customer-activity', 'chat', 'users'].includes(tabKey);
+    }
+    if (role === 'CIVIL_ENGINEER') {
+      return ['leads', 'builder', 'procurement', 'projects', 'vendors', 'quotations'].includes(tabKey);
+    }
+    if (role === 'PURCHASE_PERSON') {
+      return ['procurement', 'vendors', 'quotations', 'overview'].includes(tabKey);
+    }
+    return false;
+  };
+
+  const getInitialTab = () => {
+    const role = (currentUserRole || 'SUPER_ADMIN').toUpperCase();
+    if (role === 'TELECALLER') return 'leads';
+    if (role === 'CIVIL_ENGINEER') return 'leads';
+    if (role === 'PURCHASE_PERSON') return 'procurement';
+    return 'overview';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab);
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
   const [quotations, setQuotations] = useState([]);
@@ -3322,282 +3370,399 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto text-xs">
-          {/* Section 1: OPERATIONS */}
+          {/* Section 1: OPERATIONS & PIPELINE */}
           <div className="space-y-1">
-            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operations</div>
+            <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              {currentUserRole === 'TELECALLER' ? 'Telecaller Desk' :
+               currentUserRole === 'CIVIL_ENGINEER' ? 'Civil Engineering Desk' :
+               currentUserRole === 'PURCHASE_PERSON' ? 'Procurement Desk' : 'Operations & Pipeline'}
+            </div>
             
-            <button
-              onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'overview'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className={`w-4 h-4 ${activeTab === 'overview' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Overview</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('direct-bookings'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'direct-bookings'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Zap className={`w-4 h-4 ${activeTab === 'direct-bookings' ? 'text-warning-400' : 'text-warning-500'}`} />
-                <span>Instant Bookings</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'direct-bookings' ? 'bg-warning-400 text-slate-900' : 'bg-warning-100 text-warning-800'
-              }`}>
-                {directBookings.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('customer-activity'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'customer-activity'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <ShoppingCart className={`w-4 h-4 ${activeTab === 'customer-activity' ? 'text-success-400' : 'text-success-600'}`} />
-                <span>Customer Leads & Carts</span>
-              </div>
-              {activityMetrics.activeCartLeads > 0 ? (
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-success-500 text-white animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                  {activityMetrics.activeCartLeads} Carts
-                </span>
-              ) : (
+            {/* 1. LEADS PIPELINE (Telecaller, Civil Engineer, Super Admin) */}
+            {canAccess('leads') && (
+              <button
+                onClick={() => { setActiveTab('leads'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'leads'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ClipboardList className={`w-4 h-4 ${activeTab === 'leads' ? 'text-primary-400' : 'text-primary-600'}`} />
+                  <span>Leads Pipeline</span>
+                </div>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'customer-activity' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  activeTab === 'leads' ? 'bg-white/20 text-white' : 'bg-primary-50 text-primary-700 border border-primary-200'
                 }`}>
-                  {customerLeads.length}
+                  Pipeline
                 </span>
-              )}
-            </button>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'requests'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Inspection Requests</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'requests' ? 'bg-white/20 text-white' : 'bg-warning-50 text-warning-700 border border-warning-200'
-              }`}>
-                {requests.length > 0 ? requests.length : (stats ? (stats.statusCounts.SUBMITTED + stats.statusCounts.ESTIMATING) : 0)}
-              </span>
-            </button>
+            {/* 2. MATERIAL PROCUREMENT & RFQs (Purchase Person, Civil Engineer, Super Admin) */}
+            {canAccess('procurement') && (
+              <button
+                onClick={() => { setActiveTab('procurement'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'procurement'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Package className={`w-4 h-4 ${activeTab === 'procurement' ? 'text-cyan-400' : 'text-cyan-600'}`} />
+                  <span>Procurement & RFQs</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'procurement' ? 'bg-white/20 text-white' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                }`}>
+                  RFQ
+                </span>
+              </button>
+            )}
 
-            {/* HIGH PRIORITY: VENDOR NETWORK - Assign vendors to customer quotations */}
-            <button
-              onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'vendors'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-accent-400' : 'text-accent-600'}`} />
-                <span>Vendor Network</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-accent-50 text-accent-700 border border-accent-200'
-              }`}>
-                {vendors.length}
-              </span>
-            </button>
+            {/* 3. ACTIVE PROJECTS EXECUTION (Civil Engineer, Super Admin) */}
+            {canAccess('projects') && (
+              <button
+                onClick={() => { setActiveTab('projects'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'projects'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <FolderKanban className={`w-4 h-4 ${activeTab === 'projects' ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  <span>Active Projects</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'projects' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                }`}>
+                  Build
+                </span>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('quotations'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'quotations'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Receipt className={`w-4 h-4 ${activeTab === 'quotations' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Quotations Desk</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'quotations' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {quotations.length}
-              </span>
-            </button>
+            {canAccess('overview') && (
+              <button
+                onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'overview'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <LayoutDashboard className={`w-4 h-4 ${activeTab === 'overview' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>Overview</span>
+                </div>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'builder'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>BOQ Generator</span>
-              </div>
-              <span className="text-[9px] font-bold text-success-600 bg-success-50 px-1.5 py-0.5 rounded-md border border-success-200">
-                Auto
-              </span>
-            </button>
+            {canAccess('direct-bookings') && (
+              <button
+                onClick={() => { setActiveTab('direct-bookings'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'direct-bookings'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Zap className={`w-4 h-4 ${activeTab === 'direct-bookings' ? 'text-warning-400' : 'text-warning-500'}`} />
+                  <span>Instant Bookings</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'direct-bookings' ? 'bg-warning-400 text-slate-900' : 'bg-warning-100 text-warning-800'
+                }`}>
+                  {directBookings.length}
+                </span>
+              </button>
+            )}
+
+            {canAccess('customer-activity') && (
+              <button
+                onClick={() => { setActiveTab('customer-activity'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'customer-activity'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ShoppingCart className={`w-4 h-4 ${activeTab === 'customer-activity' ? 'text-success-400' : 'text-success-600'}`} />
+                  <span>Customer Leads & Carts</span>
+                </div>
+                {activityMetrics.activeCartLeads > 0 ? (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-success-500 text-white animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                    {activityMetrics.activeCartLeads} Carts
+                  </span>
+                ) : (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'customer-activity' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {customerLeads.length}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {canAccess('requests') && (
+              <button
+                onClick={() => { setActiveTab('requests'); setSidebarOpen(false); fetchRequests(); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'requests'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ClipboardList className={`w-4 h-4 ${activeTab === 'requests' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>Inspection Requests</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'requests' ? 'bg-white/20 text-white' : 'bg-warning-50 text-warning-700 border border-warning-200'
+                }`}>
+                  {requests.length > 0 ? requests.length : (stats ? (stats.statusCounts.SUBMITTED + stats.statusCounts.ESTIMATING) : 0)}
+                </span>
+              </button>
+            )}
+
+            {/* HIGH PRIORITY: VENDOR NETWORK */}
+            {canAccess('vendors') && (
+              <button
+                onClick={() => { setActiveTab('vendors'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'vendors'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className={`w-4 h-4 ${activeTab === 'vendors' ? 'text-accent-400' : 'text-accent-600'}`} />
+                  <span>Vendor Network</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-accent-50 text-accent-700 border border-accent-200'
+                }`}>
+                  {vendors.length}
+                </span>
+              </button>
+            )}
+
+            {canAccess('quotations') && (
+              <button
+                onClick={() => { setActiveTab('quotations'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'quotations'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Receipt className={`w-4 h-4 ${activeTab === 'quotations' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>Quotations Desk</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'quotations' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {quotations.length}
+                </span>
+              </button>
+            )}
+
+            {canAccess('builder') && (
+              <button
+                onClick={() => { setActiveTab('builder'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'builder'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Calculator className={`w-4 h-4 ${activeTab === 'builder' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>BOQ Generator</span>
+                </div>
+                <span className="text-[9px] font-bold text-success-600 bg-success-50 px-1.5 py-0.5 rounded-md border border-success-200">
+                  Auto
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Section 2: COMMUNICATIONS */}
           <div className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Communications</div>
             
-            <button
-              onClick={() => { setActiveTab('chat'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'chat'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <MessageCircle className={`w-4 h-4 ${activeTab === 'chat' ? 'text-primary-400' : 'text-primary-600'}`} />
-                <span>Live Chat Desk</span>
-              </div>
-              {chatThreads.some(t => t.unreadCountAdmin > 0) ? (
-                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-500 text-white animate-pulse">
-                  {chatThreads.reduce((acc, t) => acc + (t.unreadCountAdmin || 0), 0)} New
-                </span>
-              ) : (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'chat' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {chatThreads.length}
-                </span>
-              )}
-            </button>
+            {canAccess('chat') && (
+              <button
+                onClick={() => { setActiveTab('chat'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'chat'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <MessageCircle className={`w-4 h-4 ${activeTab === 'chat' ? 'text-primary-400' : 'text-primary-600'}`} />
+                  <span>Live Chat Desk</span>
+                </div>
+                {chatThreads.some(t => t.unreadCountAdmin > 0) ? (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-500 text-white animate-pulse">
+                    {chatThreads.reduce((acc, t) => acc + (t.unreadCountAdmin || 0), 0)} New
+                  </span>
+                ) : (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'chat' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {chatThreads.length}
+                  </span>
+                )}
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'users'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Customer Directory</span>
-              </div>
-            </button>
+            {canAccess('users') && (
+              <button
+                onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'users'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>Customer Directory</span>
+                </div>
+              </button>
+            )}
           </div>
 
           {/* Section 3: CATALOG & MARKETING */}
           <div className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Catalog & Marketing</div>
             
-            <button
-              onClick={() => { setActiveTab('services'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'services'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Wrench className={`w-4 h-4 ${activeTab === 'services' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Services Catalog</span>
-              </div>
-            </button>
+            {canAccess('services') && (
+              <button
+                onClick={() => { setActiveTab('services'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'services'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Wrench className={`w-4 h-4 ${activeTab === 'services' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>Services Catalog</span>
+                </div>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('adventure'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'adventure'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Compass className={`w-4 h-4 ${activeTab === 'adventure' ? 'text-danger-400' : 'text-danger-600'}`} />
-                <span>Adventure & Sports</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'adventure' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {entExperiences.length}
-              </span>
-            </button>
+            {canAccess('adventure') && (
+              <button
+                onClick={() => { setActiveTab('adventure'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'adventure'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Compass className={`w-4 h-4 ${activeTab === 'adventure' ? 'text-danger-400' : 'text-danger-600'}`} />
+                  <span>Adventure & Sports</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'adventure' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {entExperiences.length}
+                </span>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('slides'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'slides'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className={`w-4 h-4 ${activeTab === 'slides' ? 'text-warning-400' : 'text-primary-600'}`} />
-                <span>Slides & Banners</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'slides' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {slides.length}
-              </span>
-            </button>
+            {canAccess('slides') && (
+              <button
+                onClick={() => { setActiveTab('slides'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'slides'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className={`w-4 h-4 ${activeTab === 'slides' ? 'text-warning-400' : 'text-primary-600'}`} />
+                  <span>Slides & Banners</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'slides' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {slides.length}
+                </span>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setActiveTab('offers'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'offers'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Tag className={`w-4 h-4 ${activeTab === 'offers' ? 'text-accent-400' : 'text-accent-600'}`} />
-                <span>Offers & Coupons</span>
-              </div>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'offers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {offers.length}
-              </span>
-            </button>
+            {canAccess('offers') && (
+              <button
+                onClick={() => { setActiveTab('offers'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'offers'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Tag className={`w-4 h-4 ${activeTab === 'offers' ? 'text-accent-400' : 'text-accent-600'}`} />
+                  <span>Offers & Coupons</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'offers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {offers.length}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Section 4: SYSTEM */}
           <div className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</div>
             
-            <button
-              onClick={() => { setActiveTab('diagnostics'); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                activeTab === 'diagnostics'
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Activity className={`w-4 h-4 ${activeTab === 'diagnostics' ? 'text-primary-400' : 'text-slate-500'}`} />
-                <span>Diagnostics & API</span>
-              </div>
-            </button>
+            {canAccess('diagnostics') && (
+              <button
+                onClick={() => { setActiveTab('diagnostics'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'diagnostics'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Activity className={`w-4 h-4 ${activeTab === 'diagnostics' ? 'text-primary-400' : 'text-slate-500'}`} />
+                  <span>Diagnostics & API</span>
+                </div>
+              </button>
+            )}
+
+            {canAccess('staff-roles') && (
+              <button
+                onClick={() => { setActiveTab('staff-roles'); setSidebarOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'staff-roles'
+                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className={`w-4 h-4 ${activeTab === 'staff-roles' ? 'text-violet-400' : 'text-violet-600'}`} />
+                  <span>Access & Staff Roles</span>
+                </div>
+                <span className="text-[9px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded-md border border-violet-200">
+                  RBAC
+                </span>
+              </button>
+            )}
           </div>
         </nav>
 
@@ -3606,13 +3771,15 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative">
               <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                AD
+                {(currentUserRole || 'AD').substring(0, 2).toUpperCase()}
               </div>
               <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-slate-800 text-xs truncate leading-tight">Admin Desk</div>
-              <div className="text-[10px] text-slate-400 truncate">Online & Synced</div>
+              <div className="font-bold text-slate-800 text-xs truncate leading-tight capitalize">
+                {(currentUserRole || 'Super Admin').replace(/_/g, ' ').toLowerCase()}
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">Hipro Desk • Online</div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -3635,7 +3802,7 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
             {onLogout && (
               <button
                 onClick={onLogout}
-                title="Log Out of Super Admin"
+                title="Log Out"
                 className="p-1.5 rounded-lg text-danger-500 hover:text-danger-700 hover:bg-danger-50 transition-all"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -3659,18 +3826,23 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Hipro Portal</span>
                 <span className="text-slate-300">/</span>
                 <h1 className="font-heading font-bold text-base text-slate-900 capitalize leading-tight">
-                  {activeTab === 'overview' ? 'Dashboard Overview' :
+                  {activeTab === 'leads' ? 'Leads Qualification & Operations Pipeline' :
+                    activeTab === 'procurement' ? 'Procurement & Vendor RFQ Desk' :
+                    activeTab === 'projects' ? 'Active Projects & Site Execution' :
+                    activeTab === 'staff-roles' ? 'Staff Members & Role Permissions' :
+                    activeTab === 'overview' ? 'Dashboard Overview' :
                     activeTab === 'direct-bookings' ? 'Instant Maintenance Bookings' :
-                      activeTab === 'customer-activity' ? 'Customer Exploration & Active Carts' :
-                        activeTab === 'requests' ? 'Inspection Requests' :
-                        activeTab === 'quotations' ? 'Quotations Desk' :
-                          activeTab === 'builder' ? 'BOQ Quotation Generator' :
-                            activeTab === 'chat' ? 'Live Customer Chat Desk' :
-                              activeTab === 'services' ? 'Services Catalog' :
-                                activeTab === 'adventure' ? 'Adventure & Sports Catalog' :
-                                activeTab === 'slides' ? 'Slides & Banners' :
-                                  activeTab === 'offers' ? 'Coupons & Offers' :
-                                    activeTab === 'users' ? 'Customer Directory' : 'System Diagnostics'}
+                    activeTab === 'customer-activity' ? 'Customer Exploration & Active Carts' :
+                    activeTab === 'requests' ? 'Inspection Requests' :
+                    activeTab === 'vendors' ? 'Vendor Network' :
+                    activeTab === 'quotations' ? 'Quotations Desk' :
+                    activeTab === 'builder' ? 'Civil Requirement Analysis & BOQ Generator' :
+                    activeTab === 'chat' ? 'Live Customer Chat Desk' :
+                    activeTab === 'services' ? 'Services Catalog' :
+                    activeTab === 'adventure' ? 'Adventure & Sports Catalog' :
+                    activeTab === 'slides' ? 'Slides & Banners' :
+                    activeTab === 'offers' ? 'Coupons & Offers' :
+                    activeTab === 'users' ? 'Customer Directory' : 'System Diagnostics'}
                 </h1>
               </div>
             </div>
@@ -3720,6 +3892,46 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
         {/* DYNAMIC TAB BODY */}
         <main className="flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
+
+          {/* LEADS PIPELINE TAB */}
+          {activeTab === 'leads' && (
+            <LeadsPipelineView
+              currentUserRole={currentUserRole}
+              userPermissions={userPermissions}
+              onOpenRequirementBuilder={(lead) => {
+                setSelectedLeadForReq(lead);
+                setActiveTab('builder');
+              }}
+              onOpenProcurement={(lead) => {
+                setSelectedLeadForProc(lead);
+                setActiveTab('procurement');
+              }}
+            />
+          )}
+
+          {/* PROCUREMENT & RFQ DESK TAB */}
+          {activeTab === 'procurement' && (
+            <ProcurementRFQView
+              selectedLead={selectedLeadForProc}
+              currentUserRole={currentUserRole}
+              onBack={() => setActiveTab('leads')}
+              onVendorsAssigned={() => {
+                setActiveTab('projects');
+              }}
+            />
+          )}
+
+          {/* PROJECT EXECUTION TAB */}
+          {activeTab === 'projects' && (
+            <ProjectsExecutionView
+              currentUserRole={currentUserRole}
+            />
+          )}
+
+          {/* STAFF & ROLES ACCESS CONTROL TAB */}
+          {activeTab === 'staff-roles' && (
+            <StaffRoleManagerView />
+          )}
 
           {/* OVERVIEW TAB - HIPRO COMMAND & OPERATIONS */}
           {activeTab === 'overview' && (() => {
@@ -8622,7 +8834,38 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
 
           {/* QUOTATION BUILDER TAB */}
           {activeTab === 'builder' && (
-            <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-xs space-y-5">
+            selectedLeadForReq ? (
+              <RequirementBuilderView
+                selectedLead={selectedLeadForReq}
+                onBack={() => {
+                  setSelectedLeadForReq(null);
+                  setActiveTab('leads');
+                }}
+                onRequirementCreated={(lead) => {
+                  setSelectedLeadForProc(lead || selectedLeadForReq);
+                  setActiveTab('procurement');
+                }}
+              />
+            ) : (
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm border border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-500 text-white">CIVIL SUITE</span>
+                    <h3 className="font-bold text-sm">Civil Engineer Site Requirement Analysis</h3>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">To perform a full site analysis with split Material & Labor requirements for purchasing and contractor dispatch, pick a lead from the pipeline.</p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('leads')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-xs font-semibold whitespace-nowrap self-start sm:self-auto transition-all shadow-xs"
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>Pick Lead from Pipeline</span>
+                </button>
+              </div>
+
+              <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-xs space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-2">
                 <div>
                   <h2 className="font-heading font-semibold text-lg text-slate-800">Dynamic Itemized Quotation Generator</h2>
@@ -8934,7 +9177,8 @@ export default function AdminApp({ onSwitchToCustomerApp, onLogout, onSwitchToVe
                 </div>
               </div>
             </div>
-          )}
+            </div>
+          ))}
 
           {/* LIVE CHAT DESK TAB */}
           {activeTab === 'chat' && (

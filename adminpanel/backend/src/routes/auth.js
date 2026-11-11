@@ -388,6 +388,10 @@ router.patch('/phone', authenticateUser, async (req, res) => {
 // Authenticates credentials directly from the database
 // ==========================================
 
+// POST /api/v1/auth/staff/login - Unified Staff Login (All roles: Super Admin, Telecaller, Civil Engineer, Purchase Person)
+const { loginStaff } = require('../controllers/staff.controller');
+router.post('/staff/login', adminAuthLimiter, loginStaff);
+
 // POST /api/v1/auth/admin/login - Authenticate Super Admin from DB
 router.post('/admin/login', adminAuthLimiter, async (req, res) => {
   try {
@@ -637,7 +641,11 @@ router.post('/vendor/register', authLimiter, async (req, res) => {
       panNumber,
       aadhaarFile,      // base64 data URL
       panFile,          // base64 data URL
-      bankPassbookFile  // base64 data URL
+      bankPassbookFile, // base64 data URL
+      vendorType = 'LABOR', // 'MATERIAL' | 'LABOR' | 'BOTH'
+      materialCategories = [],
+      laborCategories = [],
+      gstinNumber
     } = req.body;
 
     if (!name || !name.trim()) {
@@ -732,6 +740,10 @@ router.post('/vendor/register', authLimiter, async (req, res) => {
         status: 'active',
         rating: 5.0,
         minCharge: selectedCategory === 'Adventure' ? 1200 : 500,
+        vendorType: (vendorType || 'LABOR').toUpperCase(),
+        materialCategories: Array.isArray(materialCategories) ? materialCategories : [],
+        laborCategories: Array.isArray(laborCategories) ? laborCategories : [],
+        gstinNumber: gstinNumber ? gstinNumber.trim().toUpperCase() : null,
         // Document verification fields
         aadhaarNumber: aadhaarNumber ? aadhaarNumber.trim().replace(/\s/g, '') : null,
         aadhaarUrl,

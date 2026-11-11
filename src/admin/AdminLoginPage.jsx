@@ -33,7 +33,8 @@ export default function AdminLoginPage({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/auth/admin/login`, {
+      // Try unified staff login first (supports all roles: Super Admin, Telecaller, Civil Engineer, Purchase Person)
+      let res = await fetch(`${API_BASE}/api/v1/auth/staff/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -42,22 +43,39 @@ export default function AdminLoginPage({ onLoginSuccess }) {
         }),
       });
 
+      // Fallback to legacy admin login if staff endpoint is not reached
+      if (res.status === 404) {
+        res = await fetch(`${API_BASE}/api/v1/auth/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: adminEmail.trim(),
+            password: adminPassword
+          }),
+        });
+      }
+
       const data = await res.json();
 
       if (data.success && data.token) {
+        const userRole = (data.staff?.role || data.user?.role || 'ADMIN').toUpperCase();
+        const permissions = data.staff?.permissions || (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' ? ['*'] : []);
+
         localStorage.setItem('hipro_auth_token', data.token);
-        localStorage.setItem('hipro_user_role', 'ADMIN');
-        localStorage.setItem('hipro_user', JSON.stringify(data.user));
-        setSuccessMsg('Master authentication verified. Initializing Super Admin Console...');
+        localStorage.setItem('hipro_user_role', userRole);
+        localStorage.setItem('hipro_user', JSON.stringify(data.staff || data.user));
+        localStorage.setItem('hipro_permissions', JSON.stringify(permissions));
+
+        setSuccessMsg(`Access verified for ${data.staff?.name || 'Administrator'} (${data.staff?.roleDisplayName || userRole}). Initializing workspace...`);
         setTimeout(() => {
           if (onLoginSuccess) {
-            onLoginSuccess('ADMIN', data);
+            onLoginSuccess(userRole, data);
           } else if (typeof window !== 'undefined') {
             window.location.reload();
           }
-        }, 600);
+        }, 500);
       } else {
-        setError(data.message || 'Access Denied: Invalid administrator credentials.');
+        setError(data.message || 'Access Denied: Invalid staff credentials.');
       }
     } catch (err) {
       console.error('Admin login network error:', err);
@@ -132,7 +150,7 @@ export default function AdminLoginPage({ onLoginSuccess }) {
           <form onSubmit={handleAdminSubmit} noValidate className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Master Administrator Email *
+                Staff / Administrator Work Email *
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -140,7 +158,7 @@ export default function AdminLoginPage({ onLoginSuccess }) {
                   type="email"
                   value={adminEmail}
                   onChange={(e) => setAdminEmail(e.target.value)}
-                  placeholder="admin@hipro.in"
+                  placeholder="e.g. telecaller@hipro.in, engineer@hipro.in, or admin@hipro.in"
                   className="w-full pl-9 pr-3 py-2.5 text-xs text-white bg-slate-800/80 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-medium transition-all"
                   autoFocus
                 />

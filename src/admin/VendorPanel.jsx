@@ -11,7 +11,7 @@ import {
   ExternalLink, Link2, Eye, EyeOff, Upload, Tag, Percent, Ticket,
   MessageCircle, CheckCheck, TrendingUp, HardHat, CheckCircle, ChevronDown,
   Filter, UserCheck, AlertTriangle, ArrowUpRight, Award, Shield, UserPlus, ShoppingCart, Compass,
-  Edit, Edit2, Edit3, LogOut, CreditCard, Banknote, Briefcase
+  Edit, Edit2, Edit3, LogOut, CreditCard, Banknote, Briefcase, Package
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
@@ -34,6 +34,16 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
   const [quotePrice, setQuotePrice] = useState('');
   const [quoteNotes, setQuoteNotes] = useState('');
   const [quoteTimeline, setQuoteTimeline] = useState('1-2 Working Days');
+
+  // ==================== PROCUREMENT RFQ STATE ====================
+  const [vendorRFQs, setVendorRFQs] = useState([]);
+  const [rfqModalOpen, setRfqModalOpen] = useState(false);
+  const [respondingRFQ, setRespondingRFQ] = useState(null);
+  const [rfqQuotedPrice, setRfqQuotedPrice] = useState('');
+  const [rfqQuotedTimeline, setRfqQuotedTimeline] = useState('2-3 Working Days');
+  const [rfqQualityDetails, setRfqQualityDetails] = useState('');
+  const [rfqQuotedNotes, setRfqQuotedNotes] = useState('');
+  const [submittingRFQQuote, setSubmittingRFQQuote] = useState(false);
 
   // ==================== QUOTATION & BOQ BUILDER STATE ====================
   const [builderRequestId, setBuilderRequestId] = useState('');
@@ -328,11 +338,68 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
       await Promise.all([
         fetchVendorRequests(),
         fetchVendorQuotes(),
+        fetchVendorRFQs(),
         fetchAssignedJobs(),
         fetchAdventureBookings(),
       ]);
     } catch (e) {
       console.error('Failed to fetch vendor data:', e);
+    }
+  };
+
+  const fetchVendorRFQs = async () => {
+    if (!vendorProfile?.id) return;
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/rfq/vendor/inbox?vendorId=${vendorProfile.id}`, { headers });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.rfqs)) {
+        setVendorRFQs(data.rfqs);
+      } else {
+        setVendorRFQs([]);
+      }
+    } catch (e) {
+      console.error('fetchVendorRFQs error:', e);
+      setVendorRFQs([]);
+    }
+  };
+
+  const handleSubmitRFQResponse = async (e) => {
+    e.preventDefault();
+    if (!respondingRFQ || !rfqQuotedPrice) return;
+    setSubmittingRFQQuote(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('hipro_auth_token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/v1/rfq/${respondingRFQ.id}/respond`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          quotedPrice: parseFloat(rfqQuotedPrice),
+          quotedTimeline: rfqQuotedTimeline,
+          qualityDetails: rfqQualityDetails,
+          quotedNotes: rfqQuotedNotes
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Quotation successfully submitted to Hipro Procurement Desk!', 'success');
+        setRfqModalOpen(false);
+        setRespondingRFQ(null);
+        setRfqQuotedPrice('');
+        setRfqQualityDetails('');
+        setRfqQuotedNotes('');
+        fetchVendorRFQs();
+      } else {
+        showToast(data.message || 'Failed to submit quote', 'error');
+      }
+    } catch (err) {
+      showToast('Error submitting quote: ' + err.message, 'error');
+    } finally {
+      setSubmittingRFQQuote(false);
     }
   };
 
@@ -733,6 +800,31 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
               </button>
 
               <button
+                onClick={() => { setActiveTab('rfqs'); setSidebarOpen(false); fetchVendorRFQs(); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                  activeTab === 'rfqs'
+                    ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Package className={`w-4 h-4 ${activeTab === 'rfqs' ? 'text-white' : 'text-slate-500'}`} />
+                  <span>Procurement RFQs</span>
+                </div>
+                {vendorRFQs.filter(r => r.status === 'SENT').length > 0 ? (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
+                    {vendorRFQs.filter(r => r.status === 'SENT').length} New
+                  </span>
+                ) : (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'rfqs' ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {vendorRFQs.length}
+                  </span>
+                )}
+              </button>
+
+              <button
                 onClick={() => { setActiveTab('assigned'); setSidebarOpen(false); }}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
                   activeTab === 'assigned'
@@ -836,6 +928,7 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   {activeTab === 'dashboard' ? (isAdventure ? 'Operator Dashboard' : 'Service Dashboard') :
                     activeTab === 'requests' ? 'Customer Requests' :
                     activeTab === 'quotes' ? 'My Quotations' :
+                    activeTab === 'rfqs' ? 'Procurement RFQs (Materials & Labor)' :
                     activeTab === 'assigned' ? 'Assigned Jobs' :
                     activeTab === 'adventure' ? 'Adventure Bookings & Passes' : 'Support Desk'}
                 </h1>
@@ -1953,6 +2046,174 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
             </div>
           )}
 
+          {/* PROCUREMENT RFQS TAB */}
+          {activeTab === 'rfqs' && (
+            <div className="space-y-5">
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      PROCUREMENT NETWORK
+                    </span>
+                    <h2 className="font-heading font-semibold text-base text-slate-800">Procurement RFQs (Material & Labor)</h2>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Requests for Quotation sent by Hipro Civil Engineers and Purchase Managers for material supply and specialized labor contracts.
+                  </p>
+                </div>
+                <button
+                  onClick={fetchVendorRFQs}
+                  className="px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-all inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh RFQs
+                </button>
+              </div>
+
+              {vendorRFQs.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200/80 p-12 text-center shadow-xs">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                    <Package className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-slate-700 text-sm">No RFQs in your inbox</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    When the purchase person or civil engineer creates a material or labor requirement matching your category, the RFQ will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {vendorRFQs.map((rfq) => {
+                    const isMaterial = rfq.type === 'MATERIAL';
+                    const mat = rfq.materialRequirement;
+                    const lab = rfq.laborRequirement;
+                    const lead = mat?.requirementAnalysis?.lead || lab?.requirementAnalysis?.lead;
+                    const isPending = rfq.status === 'SENT';
+
+                    return (
+                      <div
+                        key={rfq.id}
+                        className={`bg-white rounded-xl border transition-all p-5 shadow-xs flex flex-col justify-between ${
+                          isPending ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'
+                        }`}
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  isMaterial ? 'bg-cyan-50 text-cyan-700 border border-cyan-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                }`}>
+                                  {isMaterial ? 'MATERIAL' : 'LABOR'}
+                                </span>
+                                <span className="font-mono text-xs font-bold text-slate-800">{rfq.rfqNumber}</span>
+                              </div>
+                              <h3 className="font-bold text-sm text-slate-800 mt-1">
+                                {isMaterial ? mat?.materialName : lab?.laborType}
+                              </h3>
+                              <p className="text-[11px] text-slate-500">
+                                Category: {isMaterial ? mat?.materialCategory : lab?.laborCategory}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              rfq.status === 'ASSIGNED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                              rfq.status === 'QUOTED' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                              'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                            }`}>
+                              {rfq.status === 'ASSIGNED' ? 'AWARDED' : rfq.status}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 rounded-lg p-3 text-xs space-y-1.5 border border-slate-100">
+                            {isMaterial ? (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Requested Quantity:</span>
+                                  <span className="font-bold text-slate-800">{mat?.quantity} {mat?.unit}</span>
+                                </div>
+                                {mat?.specification && (
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-500">Specifications:</span>
+                                    <span className="font-medium text-slate-700">{mat?.specification}</span>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Required Workers:</span>
+                                  <span className="font-bold text-slate-800">{lab?.numberOfWorkers} workers</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Duration:</span>
+                                  <span className="font-medium text-slate-700">{lab?.durationDays} days</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-500">Skill Level:</span>
+                                  <span className="font-medium text-slate-700">{lab?.skillLevel}</span>
+                                </div>
+                              </>
+                            )}
+                            {lead && (
+                              <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                                <span className="text-slate-500">Project / City:</span>
+                                <span className="font-medium text-slate-700">{lead.city || 'Standard Hub'}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {rfq.status !== 'SENT' && (
+                            <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3 text-xs space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span className="text-emerald-700 font-medium">Your Quoted Price:</span>
+                                <span className="font-bold text-emerald-900 font-mono text-sm">
+                                  ₹{rfq.quotedPrice?.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              {rfq.quotedTimeline && (
+                                <div className="flex justify-between text-[11px] text-emerald-700">
+                                  <span>Timeline:</span>
+                                  <span className="font-medium">{rfq.quotedTimeline}</span>
+                                </div>
+                              )}
+                              {rfq.qualityDetails && (
+                                <div className="text-[11px] text-emerald-700 pt-1 border-t border-emerald-200/60">
+                                  <span className="font-semibold">Quality Details:</span> {rfq.qualityDetails}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400">
+                            Sent: {new Date(rfq.sentAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                          {isPending ? (
+                            <button
+                              onClick={() => {
+                                setRespondingRFQ(rfq);
+                                setRfqQuotedPrice(isMaterial ? (mat?.estimatedRate ? (mat.estimatedRate * mat.quantity).toString() : '') : (lab?.estimatedRate ? (lab.estimatedRate * lab.numberOfWorkers * lab.durationDays).toString() : ''));
+                                setRfqQualityDetails('');
+                                setRfqQuotedNotes('');
+                                setRfqModalOpen(true);
+                              }}
+                              className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-all inline-flex items-center gap-1.5"
+                            >
+                              <Send className="w-3.5 h-3.5" /> Submit Quotation
+                            </button>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-600">
+                              {rfq.status === 'ASSIGNED' ? '🎉 Winning Contract' : 'Quote Submitted'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ASSIGNED JOBS TAB */}
           {activeTab === 'assigned' && (
             <div className="space-y-5">
@@ -2507,6 +2768,126 @@ export default function VendorPanel({ onSwitchToSuperAdmin, onLogout }) {
                   className="px-5 py-2 rounded-lg text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-sm hover:shadow-md transition-all"
                 >
                   Submit Quotation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RFQ RESPONSE MODAL */}
+      {rfqModalOpen && respondingRFQ && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setRfqModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600">
+                  {respondingRFQ.type === 'MATERIAL' ? 'Material Supply Quotation' : 'Labor Contract Quotation'}
+                </span>
+                <h3 className="font-heading font-bold text-slate-800 text-base mt-0.5">
+                  Submit Quotation for {respondingRFQ.rfqNumber}
+                </h3>
+              </div>
+              <button
+                onClick={() => setRfqModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitRFQResponse} className="p-5 space-y-4">
+              <div className="bg-slate-50 rounded-xl p-3 text-xs border border-slate-100 space-y-1">
+                <div className="font-bold text-slate-800">
+                  {respondingRFQ.type === 'MATERIAL'
+                    ? respondingRFQ.materialRequirement?.materialName
+                    : respondingRFQ.laborRequirement?.laborType}
+                </div>
+                <div className="text-slate-500 text-[11px]">
+                  {respondingRFQ.type === 'MATERIAL' ? (
+                    <>Quantity Needed: <strong>{respondingRFQ.materialRequirement?.quantity} {respondingRFQ.materialRequirement?.unit}</strong></>
+                  ) : (
+                    <>Workers: <strong>{respondingRFQ.laborRequirement?.numberOfWorkers} workers</strong> for <strong>{respondingRFQ.laborRequirement?.durationDays} days</strong></>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Total Quoted Price (₹) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-mono">₹</span>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="0.01"
+                    value={rfqQuotedPrice}
+                    onChange={(e) => setRfqQuotedPrice(e.target.value)}
+                    placeholder="Enter total competitive price"
+                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Quality & Specification Details *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={rfqQualityDetails}
+                  onChange={(e) => setRfqQualityDetails(e.target.value)}
+                  placeholder={respondingRFQ.type === 'MATERIAL'
+                    ? "e.g., ISI marked Grade-A plywood, waterproof 19mm, Greenply / Century with 10 yr warranty"
+                    : "e.g., Certified skilled masons with minimum 6 yrs experience, safety PPE included"}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Delivery / Mobilization Timeline
+                </label>
+                <input
+                  type="text"
+                  value={rfqQuotedTimeline}
+                  onChange={(e) => setRfqQuotedTimeline(e.target.value)}
+                  placeholder="e.g. 2-3 Days or Immediate"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Additional Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={rfqQuotedNotes}
+                  onChange={(e) => setRfqQuotedNotes(e.target.value)}
+                  placeholder="Any terms, unloading details, or notes for the purchase manager..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setRfqModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingRFQQuote}
+                  className="px-5 py-2 rounded-lg text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-all disabled:opacity-50"
+                >
+                  {submittingRFQQuote ? 'Submitting Quote...' : 'Submit to Purchase Manager'}
                 </button>
               </div>
             </form>

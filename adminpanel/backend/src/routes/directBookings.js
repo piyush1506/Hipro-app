@@ -461,6 +461,43 @@ router.post('/', authenticate, async (req, res) => {
       }
     });
 
+    // Automatically generate pipeline Lead for Telecaller / Operations team
+    try {
+      const leadNumber = `LEAD-${newBooking.bookingNumber.replace(/^HIP-/, 'DB-')}`;
+      await prisma.lead.create({
+        data: {
+          leadNumber,
+          source: 'PAYMENT',
+          customerId: validUserId || null,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          customerAddress: customerAddress.trim(),
+          serviceId: subService.serviceId,
+          subServiceId: subService.id,
+          serviceName: subService.service.name,
+          subServiceName: subService.titleEn,
+          issueDescription: `Prepaid Direct Booking: ${subService.titleEn} (₹${totalAmount})`,
+          city: bookingCity,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null,
+          preferredDate: scheduledDate.trim(),
+          preferredTime: scheduledSlot.trim(),
+          status: 'VERIFIED',
+          originalRequestId: newBooking.id,
+          statusHistory: {
+            create: {
+              fromStatus: 'NONE',
+              toStatus: 'VERIFIED',
+              changedBy: 'SYSTEM',
+              notes: `Lead generated automatically from paid direct booking ${newBooking.bookingNumber}`
+            }
+          }
+        }
+      });
+    } catch (dbLeadErr) {
+      console.warn('DirectBooking lead creation warning:', dbLeadErr.message);
+    }
+
     // Real-Time Notification to Admin Panel via Socket.IO (targeted to admin room only)
     const io = req.app.get('io');
     if (io) {
