@@ -76,19 +76,44 @@ const ALL_PERMISSION_MODULES = [
     ]
   },
   {
-    module: 'Quotations & Billing',
+    module: 'Quotations & BOQ',
     permissions: [
-      { key: 'quotations.view', label: 'View Customer Quotations' },
+      { key: 'quotations.view', label: 'View Customer Quotations Desk' },
       { key: 'quotations.create', label: 'Generate Official BOQ Quotations' },
-      { key: 'quotations.approve', label: 'Approve Quotations' }
+      { key: 'quotations.approve', label: 'Approve & Issue Quotations' }
     ]
   },
   {
-    module: 'System Administration',
+    module: 'Customer Communications & Chat',
     permissions: [
-      { key: 'rbac.manage', label: 'Manage Staff Members & Roles' },
-      { key: 'services.edit', label: 'Manage Services Catalog' },
-      { key: 'reports.view', label: 'View Reports & Analytics' }
+      { key: 'chat.view', label: 'Access Live Customer Chat Desk' },
+      { key: 'users.view', label: 'View Customer Directory & Profile' }
+    ]
+  },
+  {
+    module: 'Bookings & Maintenance Requests',
+    permissions: [
+      { key: 'bookings.view', label: 'View Instant Maintenance Bookings' },
+      { key: 'requests.view', label: 'View Customer Inspection Requests' },
+      { key: 'activity.view', label: 'View Customer Leads & Active Carts' }
+    ]
+  },
+  {
+    module: 'Catalog & Marketing',
+    permissions: [
+      { key: 'services.view', label: 'View & Edit Services Catalog' },
+      { key: 'adventure.view', label: 'View Adventure & Sports Catalog' },
+      { key: 'slides.view', label: 'Manage Slides & Promotional Banners' },
+      { key: 'offers.view', label: 'Manage Coupons & Discount Offers' }
+    ]
+  },
+  {
+    module: 'System & Executive Overview',
+    permissions: [
+      { key: 'overview.view', label: 'View Command Center & Financial Overview' },
+      { key: 'reports.view', label: 'View Business Analytics & Reports' },
+      { key: 'rbac.manage', label: 'Manage Staff Members & Roles (Admin)' },
+      { key: 'diagnostics.view', label: 'View Diagnostics & API Telemetry' }
     ]
   }
 ];
@@ -601,3 +626,4 @@ export default function StaffRoleManagerView() {
     </div>
   );
 }
+

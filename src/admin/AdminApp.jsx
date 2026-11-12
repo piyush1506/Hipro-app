@@ -43,34 +43,177 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
     }
   });
 
+  const [roleDisplayName, setRoleDisplayName] = useState(() => {
+    return localStorage.getItem('hipro_user_role_display') || '';
+  });
+
+  const [currentUserStaff, setCurrentUserStaff] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hipro_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [availableRoles, setAvailableRoles] = useState([]);
+
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/roles`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.roles)) {
+          setAvailableRoles(data.roles);
+        }
+      } catch (e) {
+        console.error('Fetch roles error:', e);
+      }
+    };
+    fetchRoles();
+  }, []);
+
   const [selectedLeadForReq, setSelectedLeadForReq] = useState(null);
   const [selectedLeadForProc, setSelectedLeadForProc] = useState(null);
 
   const canAccess = (tabKey) => {
     const role = (currentUserRole || 'SUPER_ADMIN').toUpperCase();
-    if (tabKey === 'staff-roles') {
-      return role === 'SUPER_ADMIN' || userPermissions.includes('*') || userPermissions.includes('manage_roles') || userPermissions.includes('manage_staff');
-    }
-    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || userPermissions.includes('*')) return true;
+    const perms = Array.isArray(userPermissions) ? userPermissions : [];
 
-    if (role === 'TELECALLER') {
-      return ['leads', 'customer-activity', 'chat', 'users'].includes(tabKey);
+    // 1. Super Admin or wildcard access always has full clearance
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || perms.includes('*')) {
+      return true;
     }
-    if (role === 'CIVIL_ENGINEER') {
-      return ['leads', 'builder', 'procurement', 'projects', 'vendors', 'quotations'].includes(tabKey);
+
+    // 2. Staff Roles & RBAC Management (Super Admin only or explicit rbac.manage permission)
+    if (tabKey === 'staff-roles') {
+      return (
+        perms.includes('rbac.manage') ||
+        perms.includes('manage_roles') ||
+        perms.includes('manage_staff')
+      );
     }
-    if (role === 'PURCHASE_PERSON') {
-      return ['procurement', 'vendors', 'quotations', 'overview'].includes(tabKey);
+
+    const hasPerm = (p) => perms.includes(p);
+    const hasPrefix = (prefix) => perms.some((p) => typeof p === 'string' && p.startsWith(prefix));
+
+    // 3. Dynamic check against the permissions assigned to this role by the Admin
+    let hasGranularAccess = false;
+    switch (tabKey) {
+      case 'overview':
+        hasGranularAccess = hasPerm('overview.view') || hasPerm('reports.view');
+        break;
+      case 'leads':
+        hasGranularAccess = hasPerm('leads.view') || hasPrefix('leads.');
+        break;
+      case 'builder':
+        hasGranularAccess = (
+          hasPerm('requirements.create') ||
+          hasPerm('requirements.view') ||
+          hasPerm('quotations.create') ||
+          hasPrefix('requirements.')
+        );
+        break;
+      case 'procurement':
+        hasGranularAccess = (
+          hasPerm('procurement.view') ||
+          hasPerm('labor.view') ||
+          hasPrefix('procurement.') ||
+          hasPrefix('labor.')
+        );
+        break;
+      case 'projects':
+        hasGranularAccess = hasPerm('projects.view') || hasPrefix('projects.');
+        break;
+      case 'requests':
+        hasGranularAccess = hasPerm('requests.view') || hasPerm('leads.view') || hasPrefix('requests.');
+        break;
+      case 'direct-bookings':
+        hasGranularAccess = hasPerm('bookings.view');
+        break;
+      case 'customer-activity':
+        hasGranularAccess = hasPerm('activity.view') || hasPerm('leads.view');
+        break;
+      case 'vendors':
+        hasGranularAccess = hasPerm('vendors.view') || hasPrefix('vendors.');
+        break;
+      case 'quotations':
+        hasGranularAccess = hasPerm('quotations.view') || hasPrefix('quotations.');
+        break;
+      case 'chat':
+        hasGranularAccess = hasPerm('chat.view');
+        break;
+      case 'users':
+        hasGranularAccess = hasPerm('users.view');
+        break;
+      case 'services':
+        hasGranularAccess = hasPerm('services.view') || hasPerm('services.edit');
+        break;
+      case 'adventure':
+        hasGranularAccess = hasPerm('adventure.view');
+        break;
+      case 'slides':
+        hasGranularAccess = hasPerm('slides.view');
+        break;
+      case 'offers':
+        hasGranularAccess = hasPerm('offers.view');
+        break;
+      case 'diagnostics':
+        hasGranularAccess = hasPerm('diagnostics.view');
+        break;
+      default:
+        hasGranularAccess = hasPerm(tabKey);
+        break;
     }
+
+    if (hasGranularAccess) return true;
+
+    // 4. Fallback defaults for legacy predefined roles if specific permissions array is empty
+    if (perms.length === 0 || perms.every(p => p === '')) {
+      if (role === 'TELECALLER') {
+        return ['leads', 'customer-activity', 'chat', 'users'].includes(tabKey);
+      }
+      if (role === 'CIVIL_ENGINEER') {
+        return ['leads', 'builder', 'procurement', 'projects', 'vendors', 'quotations'].includes(tabKey);
+      }
+      if (role === 'PURCHASE_PERSON') {
+        return ['procurement', 'vendors', 'quotations', 'overview'].includes(tabKey);
+      }
+    }
+
     return false;
   };
 
   const getInitialTab = () => {
     const role = (currentUserRole || 'SUPER_ADMIN').toUpperCase();
-    if (role === 'TELECALLER') return 'leads';
-    if (role === 'CIVIL_ENGINEER') return 'leads';
-    if (role === 'PURCHASE_PERSON') return 'procurement';
-    return 'overview';
+    if ((role === 'SUPER_ADMIN' || role === 'ADMIN') && canAccess('overview')) return 'overview';
+
+    // Priority order to find the first section accessible to this role
+    const candidateTabs = [
+      'leads',
+      'procurement',
+      'builder',
+      'projects',
+      'customer-activity',
+      'direct-bookings',
+      'requests',
+      'vendors',
+      'quotations',
+      'chat',
+      'users',
+      'overview',
+      'services',
+      'adventure',
+      'slides',
+      'offers',
+      'diagnostics',
+      'staff-roles'
+    ];
+
+    for (const tab of candidateTabs) {
+      if (canAccess(tab)) return tab;
+    }
+    return 'leads';
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
@@ -3373,9 +3516,12 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
           {/* Section 1: OPERATIONS & PIPELINE */}
           <div className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              {currentUserRole === 'TELECALLER' ? 'Telecaller Desk' :
+              {roleDisplayName || (
+               currentUserRole === 'TELECALLER' ? 'Telecaller Desk' :
                currentUserRole === 'CIVIL_ENGINEER' ? 'Civil Engineering Desk' :
-               currentUserRole === 'PURCHASE_PERSON' ? 'Procurement Desk' : 'Operations & Pipeline'}
+               currentUserRole === 'PURCHASE_PERSON' ? 'Procurement Desk' :
+               currentUserRole === 'SUPER_ADMIN' ? 'Operations & Pipeline' : `${currentUserRole} Panel`
+              )}
             </div>
             
             {/* 1. LEADS PIPELINE (Telecaller, Civil Engineer, Super Admin) */}
@@ -3776,10 +3922,10 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
               <span className="w-2 h-2 rounded-full bg-success-500 absolute -bottom-0.5 -right-0.5 border-2 border-white"></span>
             </div>
             <div className="min-w-0">
-              <div className="font-bold text-slate-800 text-xs truncate leading-tight capitalize">
-                {(currentUserRole || 'Super Admin').replace(/_/g, ' ').toLowerCase()}
+              <div className="font-bold text-slate-800 text-xs truncate leading-tight">
+                {roleDisplayName || (currentUserRole || 'Super Admin').replace(/_/g, ' ')}
               </div>
-              <div className="text-[10px] text-slate-400 truncate">Hipro Desk • Online</div>
+              <div className="text-[10px] text-slate-400 truncate">{currentUserStaff?.name || 'Staff User'} • Active</div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -3849,29 +3995,63 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Quick Role Switcher (Preview dashboards for any role) */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 pl-2 hidden lg:inline uppercase tracking-wider">Role:</span>
-              <select
-                value={currentUserRole}
-                onChange={(e) => {
-                  const newRole = e.target.value;
-                  setCurrentUserRole(newRole);
-                  localStorage.setItem('hipro_user_role', newRole);
-                  if (newRole === 'TELECALLER') setActiveTab('leads');
-                  else if (newRole === 'CIVIL_ENGINEER') setActiveTab('leads');
-                  else if (newRole === 'PURCHASE_PERSON') setActiveTab('procurement');
-                  else setActiveTab('overview');
-                }}
-                className="text-xs font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary-500 shadow-xs cursor-pointer"
-                title="Switch role dashboard preview"
-              >
-                <option value="SUPER_ADMIN">👑 Super Admin</option>
-                <option value="TELECALLER">📞 Telecaller</option>
-                <option value="CIVIL_ENGINEER">📐 Civil Engineer</option>
-                <option value="PURCHASE_PERSON">📦 Purchase Person</option>
-              </select>
-            </div>
+            {/* Quick Role Switcher for Super Admin or Role Badge for Staff */}
+            {canAccess('staff-roles') ? (
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 pl-2 hidden lg:inline uppercase tracking-wider">Preview Role:</span>
+                <select
+                  value={currentUserRole}
+                  onChange={(e) => {
+                    const newRoleName = e.target.value;
+                    const match = availableRoles.find(r => r.name === newRoleName);
+                    setCurrentUserRole(newRoleName);
+                    const disp = match?.displayName || newRoleName;
+                    setRoleDisplayName(disp);
+                    localStorage.setItem('hipro_user_role', newRoleName);
+                    localStorage.setItem('hipro_user_role_display', disp);
+
+                    const newPerms = match?.permissions || (newRoleName === 'SUPER_ADMIN' ? ['*'] : []);
+                    setUserPermissions(newPerms);
+                    localStorage.setItem('hipro_permissions', JSON.stringify(newPerms));
+
+                    // Pick candidate tab for this role
+                    const candidate = [
+                      'leads', 'procurement', 'builder', 'projects', 'customer-activity',
+                      'direct-bookings', 'requests', 'vendors', 'quotations', 'chat',
+                      'users', 'overview', 'services'
+                    ].find(t => {
+                      if (newRoleName === 'SUPER_ADMIN') return t === 'overview';
+                      if (newRoleName === 'TELECALLER') return t === 'leads';
+                      if (newRoleName === 'CIVIL_ENGINEER') return t === 'leads';
+                      if (newRoleName === 'PURCHASE_PERSON') return t === 'procurement';
+                      return newPerms.includes('*') || newPerms.includes(`${t}.view`);
+                    });
+                    setActiveTab(candidate || 'leads');
+                  }}
+                  className="text-xs font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary-500 shadow-xs cursor-pointer"
+                  title="Switch role dashboard preview"
+                >
+                  <option value="SUPER_ADMIN">👑 Super Admin (Full Master)</option>
+                  {availableRoles.filter(r => r.name !== 'SUPER_ADMIN').map(r => (
+                    <option key={r.id || r.name} value={r.name}>
+                      {r.displayName}
+                    </option>
+                  ))}
+                  {availableRoles.length === 0 && (
+                    <>
+                      <option value="TELECALLER">📞 Telecaller</option>
+                      <option value="CIVIL_ENGINEER">📐 Civil Engineer</option>
+                      <option value="PURCHASE_PERSON">📦 Purchase Person</option>
+                    </>
+                  )}
+                </select>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-50 border border-primary-200 text-primary-800 rounded-xl text-xs font-bold shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
+                <span>{roleDisplayName || currentUserRole}</span>
+              </div>
+            )}
 
             <div className="relative hidden sm:block w-72">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />

@@ -59,14 +59,16 @@ export default function AdminLoginPage({ onLoginSuccess }) {
 
       if (data.success && data.token) {
         const userRole = (data.staff?.role || data.user?.role || 'ADMIN').toUpperCase();
+        const userRoleDisplay = data.staff?.roleDisplayName || data.staff?.role || userRole;
         const permissions = data.staff?.permissions || (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' ? ['*'] : []);
 
         localStorage.setItem('hipro_auth_token', data.token);
         localStorage.setItem('hipro_user_role', userRole);
+        localStorage.setItem('hipro_user_role_display', userRoleDisplay);
         localStorage.setItem('hipro_user', JSON.stringify(data.staff || data.user));
         localStorage.setItem('hipro_permissions', JSON.stringify(permissions));
 
-        setSuccessMsg(`Access verified for ${data.staff?.name || 'Administrator'} (${data.staff?.roleDisplayName || userRole}). Initializing workspace...`);
+        setSuccessMsg(`Access verified for ${data.staff?.name || 'Administrator'} (${userRoleDisplay}). Initializing workspace...`);
         setTimeout(() => {
           if (onLoginSuccess) {
             onLoginSuccess(userRole, data);
