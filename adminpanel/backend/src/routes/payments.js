@@ -218,6 +218,20 @@ router.post('/create-order', authenticate, async (req, res) => {
         if (offersRouter && typeof offersRouter.readOffers === 'function') {
           const offers = offersRouter.readOffers();
           const cleanCode = incomingCoupon.trim().toUpperCase();
+
+          // Enforce one-time per customer restriction
+          const checkUser = {
+            userId: req.user?.id || req.body.userId,
+            phone: customerPhone || req.body.customerPhone || req.user?.phoneNumber || req.user?.phone,
+            email: customerEmail || req.body.customerEmail || req.user?.email
+          };
+          if (offersRouter.hasCustomerUsedCoupon && offersRouter.hasCustomerUsedCoupon(cleanCode, checkUser)) {
+            return res.status(400).json({
+              success: false,
+              message: `You have already used coupon "${cleanCode}". Each coupon can only be used once per customer.`
+            });
+          }
+
           const matchingOffer = offers.find(o => (o.code || '').trim().toUpperCase() === cleanCode);
           if (matchingOffer && matchingOffer.isActive !== false) {
             const minAmt = parseFloat(matchingOffer.minAmount || 0);
@@ -536,6 +550,27 @@ router.post('/verify', authenticate, async (req, res) => {
         });
       } catch (err) {
         console.warn('DirectBooking payment update notice:', err.message);
+      }
+    }
+
+    // 5. Record coupon redemption if coupon was applied
+    const redeemedCoupon = rzPaymentData?.notes?.couponCode || req.body.couponCode;
+    if (redeemedCoupon && typeof redeemedCoupon === 'string' && redeemedCoupon.trim()) {
+      try {
+        const offersRouter = require('./offers');
+        if (offersRouter && typeof offersRouter.recordCouponRedemption === 'function') {
+          offersRouter.recordCouponRedemption({
+            couponCode: redeemedCoupon,
+            userId: req.user?.id,
+            phone: req.user?.phoneNumber || rzPaymentData?.notes?.customerPhone || req.body.customerPhone,
+            email: req.user?.email || rzPaymentData?.notes?.customerEmail || req.body.customerEmail,
+            orderId: razorpay_order_id,
+            bookingNumber: bookingNumber || rzPaymentData?.notes?.bookingNumber || null,
+            quotationId: quotationId || rzPaymentData?.notes?.quotationId || null
+          });
+        }
+      } catch (cErr) {
+        console.error('Coupon redemption recording notice in /verify:', cErr);
       }
     }
 

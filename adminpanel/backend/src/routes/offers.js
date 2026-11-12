@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin, optionalAuth } = require('../middleware/auth');
 
 const OFFERS_FILE = path.join(__dirname, '../../uploads/offers.json');
+const REDEMPTIONS_FILE = path.join(__dirname, '../../uploads/coupon_redemptions.json');
 
 function readOffers() {
   try {
@@ -31,6 +32,103 @@ function writeOffers(offers) {
     console.error('Error writing offers file:', err);
     return false;
   }
+}
+
+function readRedemptions() {
+  try {
+    if (!fs.existsSync(REDEMPTIONS_FILE)) {
+      fs.mkdirSync(path.dirname(REDEMPTIONS_FILE), { recursive: true });
+      fs.writeFileSync(REDEMPTIONS_FILE, '[]', 'utf-8');
+      return [];
+    }
+    const data = fs.readFileSync(REDEMPTIONS_FILE, 'utf-8');
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Error reading redemptions file:', err);
+    return [];
+  }
+}
+
+function writeRedemptions(redemptions) {
+  try {
+    fs.mkdirSync(path.dirname(REDEMPTIONS_FILE), { recursive: true });
+    fs.writeFileSync(REDEMPTIONS_FILE, JSON.stringify(redemptions, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Error writing redemptions file:', err);
+    return false;
+  }
+}
+
+function normalizePhone(p) {
+  if (!p) return null;
+  const digits = String(p).replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+/**
+ * Checks whether a customer has already used a specific coupon code.
+ * Matches by userId, 10-digit phone, or email to prevent duplicate usage.
+ */
+function hasCustomerUsedCoupon(couponCode, { userId, phone, email } = {}) {
+  if (!couponCode || typeof couponCode !== 'string') return false;
+  const cleanCode = couponCode.trim().toUpperCase();
+  const redemptions = readRedemptions();
+
+  const cleanPhone = normalizePhone(phone);
+  const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+  const cleanUserId = userId ? String(userId).trim() : null;
+
+  return redemptions.some(r => {
+    if ((r.couponCode || '').trim().toUpperCase() !== cleanCode) return false;
+
+    // 1. Match by userId
+    if (cleanUserId && r.userId && String(r.userId).trim() === cleanUserId) {
+      return true;
+    }
+
+    // 2. Match by 10-digit phone number
+    if (cleanPhone && r.phone) {
+      const rPhone = normalizePhone(r.phone);
+      if (rPhone && rPhone === cleanPhone) return true;
+    }
+
+    // 3. Match by email address
+    if (cleanEmail && r.email && String(r.email).trim().toLowerCase() === cleanEmail) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+/**
+ * Persists a coupon redemption record when a booking or quotation payment completes.
+ */
+function recordCouponRedemption({ couponCode, userId, phone, email, orderId, bookingNumber, quotationId } = {}) {
+  if (!couponCode || typeof couponCode !== 'string' || !couponCode.trim()) return;
+  const cleanCode = couponCode.trim().toUpperCase();
+
+  // Guard against duplicate records
+  if (hasCustomerUsedCoupon(cleanCode, { userId, phone, email })) {
+    return;
+  }
+
+  const redemptions = readRedemptions();
+  redemptions.push({
+    id: `red_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    couponCode: cleanCode,
+    userId: userId ? String(userId).trim() : null,
+    phone: normalizePhone(phone),
+    email: email ? String(email).trim().toLowerCase() : null,
+    orderId: orderId || null,
+    bookingNumber: bookingNumber || null,
+    quotationId: quotationId || null,
+    redeemedAt: new Date().toISOString()
+  });
+
+  writeRedemptions(redemptions);
 }
 
 function calculateDiscount(discountStr, amount) {
@@ -64,9 +162,9 @@ function calculateDiscount(discountStr, amount) {
 }
 
 // POST /api/v1/offers/validate - Validate coupon code & compute discount
-router.post('/validate', (req, res) => {
+router.post('/validate', optionalAuth, (req, res) => {
   try {
-    const { code, amount, section } = req.body;
+    const { code, amount, section, userId, phone, email } = req.body;
     if (!code || typeof code !== 'string') {
       return res.status(400).json({ success: false, message: 'Coupon code is required' });
     }
@@ -88,6 +186,18 @@ router.post('/validate', (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Coupon "${trimmedCode}" is no longer active.`
+      });
+    }
+
+    // Check one-time per customer restriction
+    const customerUserId = req.user?.id || userId;
+    const customerPhone = phone || req.body.customerPhone || req.user?.phoneNumber || req.user?.phone;
+    const customerEmail = email || req.body.customerEmail || req.user?.email;
+
+    if (hasCustomerUsedCoupon(trimmedCode, { userId: customerUserId, phone: customerPhone, email: customerEmail })) {
+      return res.status(400).json({
+        success: false,
+        message: `You have already used coupon "${trimmedCode}". Each coupon can only be used once per customer.`
       });
     }
 
@@ -154,9 +264,9 @@ router.post('/validate', (req, res) => {
 });
 
 // GET /api/v1/offers - Public endpoint for mobile app
-router.get('/', (req, res) => {
+router.get('/', optionalAuth, (req, res) => {
   try {
-    const { section } = req.query;
+    const { section, phone, userId, email } = req.query;
     const offers = readOffers();
     let active = offers
       .filter(o => o.isActive !== false)
@@ -179,12 +289,28 @@ router.get('/', (req, res) => {
       }
     }
 
+    // Filter out coupons that this customer has ALREADY redeemed
+    const customerUserId = req.user?.id || userId;
+    const customerPhone = phone || req.user?.phoneNumber || req.user?.phone;
+    const customerEmail = email || req.user?.email;
+
+    if (customerUserId || customerPhone || customerEmail) {
+      active = active.filter(o => !hasCustomerUsedCoupon(o.code, {
+        userId: customerUserId,
+        phone: customerPhone,
+        email: customerEmail
+      }));
+    }
+
     return res.json({
       success: true,
       count: active.length,
       offers: active
     });
   } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to retrieve offers', error: err.message });
+  }
+});
     return res.status(500).json({ success: false, message: 'Failed to retrieve offers', error: err.message });
   }
 });
@@ -317,4 +443,6 @@ router.delete(['/:id', '/admin/:id'], authenticate, requireAdmin, (req, res) => 
 
 router.readOffers = readOffers;
 router.calculateDiscount = calculateDiscount;
+router.hasCustomerUsedCoupon = hasCustomerUsedCoupon;
+router.recordCouponRedemption = recordCouponRedemption;
 module.exports = router;

@@ -517,6 +517,26 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'No valid sub-services found for direct booking' });
     }
 
+    // Record coupon redemption if coupon was applied
+    const redeemedCoupon = req.body.couponCode;
+    if (redeemedCoupon && typeof redeemedCoupon === 'string' && redeemedCoupon.trim()) {
+      try {
+        const offersRouter = require('./offers');
+        if (offersRouter && typeof offersRouter.recordCouponRedemption === 'function') {
+          offersRouter.recordCouponRedemption({
+            couponCode: redeemedCoupon,
+            userId: validUserId,
+            phone: customerPhone,
+            email: req.user?.email,
+            orderId: razorpayOrderId,
+            bookingNumber: createdBookings.map(b => b.bookingNumber).join(', ')
+          });
+        }
+      } catch (cErr) {
+        console.error('Failed to record coupon redemption in directBookings:', cErr);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Direct booking confirmed successfully',
