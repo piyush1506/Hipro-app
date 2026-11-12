@@ -168,7 +168,18 @@ router.post('/create-order', authenticate, async (req, res) => {
 
       payableAmount = parseFloat(booking.onlinePaidAmount || booking.visitingCharge || 199.0);
     }
-    // 3. Backend calculates amount from SubService record
+    // 3. Backend calculates amount from SubService record or multi-item cart
+    else if (Array.isArray(req.body.subServiceIds) && req.body.subServiceIds.length > 0) {
+      const subServices = await prisma.subService.findMany({
+        where: { id: { in: req.body.subServiceIds } }
+      });
+      let total = 0;
+      for (const ss of subServices) {
+        let base = parseFloat(ss.visitingCharge || 199.0);
+        total += base;
+      }
+      payableAmount = total > 0 ? total : (req.body.amount ? parseFloat(req.body.amount) : 199.0);
+    }
     else if (subServiceId) {
       const subService = await prisma.subService.findUnique({
         where: { id: subServiceId }

@@ -3499,7 +3499,7 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
   const selectedBuilderReq = requests.find(r => r.id === builderRequestId);
 
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans text-[14px] font-[500] antialiased tracking-[-0.01em]">
+    <div className="staff-mono-theme min-h-screen flex bg-slate-50 text-slate-900 font-sans text-[14px] font-normal antialiased tracking-[-0.01em]">
 
       {/* SIDEBAR NAVIGATION */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/90 flex flex-col transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xs`}>

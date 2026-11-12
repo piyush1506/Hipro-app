@@ -238,10 +238,16 @@ router.post('/', authenticate, async (req, res) => {
       razorpaySignature
     } = req.body;
 
-    if (!subServiceId || !customerName || !customerPhone || !customerAddress || !scheduledDate || !scheduledSlot) {
+    const targetSubServiceIds = (Array.isArray(req.body.items) && req.body.items.length > 0)
+      ? req.body.items.map(i => i.subServiceId).filter(Boolean)
+      : (Array.isArray(req.body.subServiceIds) && req.body.subServiceIds.length > 0)
+        ? req.body.subServiceIds.filter(Boolean)
+        : (req.body.subServiceId ? [req.body.subServiceId] : []);
+
+    if (targetSubServiceIds.length === 0 || !customerName || !customerPhone || !customerAddress || !scheduledDate || !scheduledSlot) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required booking fields (subServiceId, customerName, customerPhone, customerAddress, scheduledDate, scheduledSlot)'
+        message: 'Missing required booking fields (service/subservices, customerName, customerPhone, customerAddress, scheduledDate, scheduledSlot)'
       });
     }
 
@@ -322,195 +328,197 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
 
-    // Strictly fetch sub-service from database to get genuine visiting charge
-    const subService = await prisma.subService.findUnique({
-      where: { id: subServiceId },
-      include: { service: true }
-    });
-
-    if (!subService) {
-      return res.status(404).json({ success: false, message: 'Selected sub-service not found' });
-    }
-
-    if (!subService.isActive || !subService.bookNowEnabled) {
-      return res.status(400).json({ success: false, message: 'Direct booking is currently disabled for this sub-service' });
-    }
-
-    // Locked Server Pricing (Client-side price is never trusted)
-    const visitingCharge = subService.visitingCharge || 199.0;
-    let additionalTotal = 0;
-    if (subService.requiredFields) {
-      try {
-        const rf = typeof subService.requiredFields === 'string' ? JSON.parse(subService.requiredFields) : subService.requiredFields;
-        const charges = rf.charges || rf.additionalCharges || (Array.isArray(rf) ? rf.filter(f => f.fieldType === 'charge' || f.fieldType === 'fee' || f.isCharge === true) : []);
-        if (Array.isArray(charges)) {
-          for (const c of charges) {
-            const amt = parseFloat(c.amount || 0);
-            if (!isNaN(amt) && !c.isFree) additionalTotal += amt;
-          }
-        }
-      } catch (err) {}
-    }
-    const onlinePaidAmount = visitingCharge + additionalTotal;
-    const totalAmount = visitingCharge + additionalTotal;
-
-    const bookingNumber = await generateBookingNumber();
-
-    const initialHistory = [
-      {
-        status: 'CONFIRMED',
-        paymentStatus: paymentVerified ? 'PAID' : 'PENDING_VERIFICATION',
-        timestamp: new Date().toISOString(),
-        actor: 'CUSTOMER_PREPAY',
-        note: `Online payment ${paymentVerified ? 'verified' : 'received (pending reconciliation)'} via Razorpay: ₹${onlinePaidAmount}`
-      }
-    ];
-
-    // Bug #10 fix: Use authenticated userId from JWT, not from request body
+    // Process each target sub-service (supports single booking or multi-item cart)
     const validUserId = req.user.id;
-
     const bookingCity = (city || '').trim();
+    const createdBookings = [];
 
-    // Bug #7 fix: Only assign local-city providers, never cross-city fallback
-    let assignedProvider = null;
-    try {
-      const activeVendor = await prisma.vendor.findFirst({
-        where: {
-          city: { equals: bookingCity, mode: 'insensitive' },
-          status: 'active'
-        },
-        orderBy: { rating: 'desc' }
+    for (const sid of targetSubServiceIds) {
+      const subService = await prisma.subService.findUnique({
+        where: { id: sid },
+        include: { service: true }
       });
-      if (activeVendor) {
-        assignedProvider = {
-          id: activeVendor.id,
-          name: activeVendor.name,
-          phone: activeVendor.phone,
-          role: `${activeVendor.businessName} • ${activeVendor.specialization}`,
-          photo: activeVendor.imageUrl || null,
-          rating: activeVendor.rating || 0
-        };
-      }
-    } catch (vErr) {
-      console.warn('Vendor lookup notice:', vErr.message);
-    }
 
-    // Bug #7 fix: Only assign partners from the SAME CITY
-    if (!assignedProvider) {
-      const partner = await prisma.partner.findFirst({
-        where: {
-          cityName: { equals: bookingCity, mode: 'insensitive' },
-          isActive: true
-        },
-        orderBy: { rating: 'desc' }
-      });
-      if (partner) {
-        assignedProvider = {
-          id: partner.id,
-          name: partner.name,
-          phone: partner.phone,
-          role: partner.role || '',
-          photo: partner.photo || null,
-          rating: partner.rating || 4.9
-        };
-      }
-    }
+      if (!subService || !subService.isActive) continue;
 
-    const newBooking = await prisma.directBooking.create({
-      data: {
-        bookingNumber,
-        userId: validUserId,
-        serviceId: subService.serviceId,
-        subServiceId: subService.id,
-        serviceName: subService.service.name,
-        subServiceName: subService.titleEn,
-        subServiceDesc: subService.desc,
-        customFieldAnswers: customFieldAnswers || null,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        customerAddress: customerAddress.trim(),
-        city: bookingCity,
-        pincode: pincode ? pincode.trim() : null,
-        landmark: landmark ? landmark.trim() : null,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        scheduledDate: scheduledDate.trim(),
-        scheduledSlot: scheduledSlot.trim(),
-        visitingCharge,
-        onlinePaidAmount,
-        additionalWorkAmount: 0.0,
-        totalAmount,
-        status: assignedProvider ? 'ASSIGNED' : 'CONFIRMED',
-        technicianId: assignedProvider ? assignedProvider.id : null,
-        technicianName: assignedProvider ? assignedProvider.name : null,
-        technicianPhone: assignedProvider ? assignedProvider.phone : null,
-        technicianRole: assignedProvider ? assignedProvider.role : 'Authorized Service Provider',
-        technicianPhoto: assignedProvider ? assignedProvider.photo : null,
-        technicianRating: assignedProvider ? assignedProvider.rating : 4.8,
-        assignedAt: assignedProvider ? new Date() : null,
-        paymentStatus: paymentVerified ? 'PAID' : 'PENDING_VERIFICATION',
-        paymentMethod: 'ONLINE',
-        razorpayPaymentId: razorpayPaymentId,
-        razorpayOrderId: razorpayOrderId,
-        notes: notes ? notes.trim() : null,
-        statusHistory: initialHistory
-      },
-      include: {
-        service: true,
-        subService: true
+      // Locked Server Pricing (Client-side price is never trusted)
+      const visitingCharge = subService.visitingCharge || 199.0;
+      let additionalTotal = 0;
+      if (subService.requiredFields) {
+        try {
+          const rf = typeof subService.requiredFields === 'string' ? JSON.parse(subService.requiredFields) : subService.requiredFields;
+          const charges = rf.charges || rf.additionalCharges || (Array.isArray(rf) ? rf.filter(f => f.fieldType === 'charge' || f.fieldType === 'fee' || f.isCharge === true) : []);
+          if (Array.isArray(charges)) {
+            for (const c of charges) {
+              const amt = parseFloat(c.amount || 0);
+              if (!isNaN(amt) && !c.isFree) additionalTotal += amt;
+            }
+          }
+        } catch (err) {}
       }
-    });
+      const onlinePaidAmount = visitingCharge + additionalTotal;
+      const totalAmount = visitingCharge + additionalTotal;
 
-    // Automatically generate pipeline Lead for Telecaller / Operations team
-    try {
-      const leadNumber = `LEAD-${newBooking.bookingNumber.replace(/^HIP-/, 'DB-')}`;
-      await prisma.lead.create({
+      const bookingNumber = await generateBookingNumber();
+
+      const initialHistory = [
+        {
+          status: 'CONFIRMED',
+          paymentStatus: paymentVerified ? 'PAID' : 'PENDING_VERIFICATION',
+          timestamp: new Date().toISOString(),
+          actor: 'CUSTOMER_PREPAY',
+          note: `Online payment ${paymentVerified ? 'verified' : 'received'} via Razorpay: ₹${onlinePaidAmount}`
+        }
+      ];
+
+      // Bug #7 fix: Only assign local-city providers
+      let assignedProvider = null;
+      try {
+        const activeVendor = await prisma.vendor.findFirst({
+          where: {
+            city: { equals: bookingCity, mode: 'insensitive' },
+            status: 'active'
+          },
+          orderBy: { rating: 'desc' }
+        });
+        if (activeVendor) {
+          assignedProvider = {
+            id: activeVendor.id,
+            name: activeVendor.name,
+            phone: activeVendor.phone,
+            role: `${activeVendor.businessName} • ${activeVendor.specialization}`,
+            photo: activeVendor.imageUrl || null,
+            rating: activeVendor.rating || 0
+          };
+        }
+      } catch (vErr) {
+        console.warn('Vendor lookup notice:', vErr.message);
+      }
+
+      if (!assignedProvider) {
+        const partner = await prisma.partner.findFirst({
+          where: {
+            cityName: { equals: bookingCity, mode: 'insensitive' },
+            isActive: true
+          },
+          orderBy: { rating: 'desc' }
+        });
+        if (partner) {
+          assignedProvider = {
+            id: partner.id,
+            name: partner.name,
+            phone: partner.phone,
+            role: partner.role || '',
+            photo: partner.photo || null,
+            rating: partner.rating || 4.9
+          };
+        }
+      }
+
+      const newBooking = await prisma.directBooking.create({
         data: {
-          leadNumber,
-          source: 'PAYMENT',
-          customerId: validUserId || null,
-          customerName: customerName.trim(),
-          customerPhone: customerPhone.trim(),
-          customerAddress: customerAddress.trim(),
+          bookingNumber,
+          userId: validUserId,
           serviceId: subService.serviceId,
           subServiceId: subService.id,
           serviceName: subService.service.name,
           subServiceName: subService.titleEn,
-          issueDescription: `Prepaid Direct Booking: ${subService.titleEn} (₹${totalAmount})`,
+          subServiceDesc: subService.desc,
+          customFieldAnswers: customFieldAnswers || null,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          customerAddress: customerAddress.trim(),
           city: bookingCity,
+          pincode: pincode ? pincode.trim() : null,
+          landmark: landmark ? landmark.trim() : null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
-          preferredDate: scheduledDate.trim(),
-          preferredTime: scheduledSlot.trim(),
-          status: 'VERIFIED',
-          originalRequestId: newBooking.id,
-          statusHistory: {
-            create: {
-              fromStatus: 'NONE',
-              toStatus: 'VERIFIED',
-              changedBy: 'SYSTEM',
-              notes: `Lead generated automatically from paid direct booking ${newBooking.bookingNumber}`
-            }
-          }
+          scheduledDate: scheduledDate.trim(),
+          scheduledSlot: scheduledSlot.trim(),
+          visitingCharge,
+          onlinePaidAmount,
+          additionalWorkAmount: 0.0,
+          totalAmount,
+          status: assignedProvider ? 'ASSIGNED' : 'CONFIRMED',
+          technicianId: assignedProvider ? assignedProvider.id : null,
+          technicianName: assignedProvider ? assignedProvider.name : null,
+          technicianPhone: assignedProvider ? assignedProvider.phone : null,
+          technicianRole: assignedProvider ? assignedProvider.role : 'Authorized Service Provider',
+          technicianPhoto: assignedProvider ? assignedProvider.photo : null,
+          technicianRating: assignedProvider ? assignedProvider.rating : 4.8,
+          assignedAt: assignedProvider ? new Date() : null,
+          paymentStatus: paymentVerified ? 'PAID' : 'PENDING_VERIFICATION',
+          paymentMethod: 'ONLINE',
+          razorpayPaymentId: razorpayPaymentId,
+          razorpayOrderId: razorpayOrderId,
+          notes: notes ? notes.trim() : null,
+          statusHistory: initialHistory
+        },
+        include: {
+          service: true,
+          subService: true
         }
       });
-    } catch (dbLeadErr) {
-      console.warn('DirectBooking lead creation warning:', dbLeadErr.message);
+
+      // Automatically generate pipeline Lead for Telecaller / Operations team
+      try {
+        const leadNumber = `LEAD-${newBooking.bookingNumber.replace(/^HIP-/, 'DB-')}`;
+        await prisma.lead.create({
+          data: {
+            leadNumber,
+            source: 'PAYMENT',
+            customerId: validUserId || null,
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            customerAddress: customerAddress.trim(),
+            serviceId: subService.serviceId,
+            subServiceId: subService.id,
+            serviceName: subService.service.name,
+            subServiceName: subService.titleEn,
+            issueDescription: `Prepaid Direct Booking: ${subService.titleEn} (₹${totalAmount})`,
+            city: bookingCity,
+            latitude: latitude ? parseFloat(latitude) : null,
+            longitude: longitude ? parseFloat(longitude) : null,
+            preferredDate: scheduledDate.trim(),
+            preferredTime: scheduledSlot.trim(),
+            status: 'VERIFIED',
+            originalRequestId: newBooking.id,
+            statusHistory: {
+              create: {
+                fromStatus: 'NONE',
+                toStatus: 'VERIFIED',
+                changedBy: 'SYSTEM',
+                notes: `Lead generated automatically from paid direct booking ${newBooking.bookingNumber}`
+              }
+            }
+          }
+        });
+      } catch (dbLeadErr) {
+        console.warn('DirectBooking lead creation warning:', dbLeadErr.message);
+      }
+
+      // Real-Time Notification to Admin Panel via Socket.IO
+      const io = req.app.get('io');
+      if (io) {
+        io.to('admin_room').emit('new_direct_booking', {
+          message: `New paid direct booking: ${newBooking.bookingNumber} (${newBooking.subServiceName})`,
+          booking: newBooking
+        });
+      }
+
+      createdBookings.push(newBooking);
     }
 
-    // Real-Time Notification to Admin Panel via Socket.IO (targeted to admin room only)
-    const io = req.app.get('io');
-    if (io) {
-      io.to('admin_room').emit('new_direct_booking', {
-        message: `New paid direct booking: ${newBooking.bookingNumber} (${newBooking.subServiceName})`,
-        booking: newBooking
-      });
+    if (createdBookings.length === 0) {
+      return res.status(404).json({ success: false, message: 'No valid sub-services found for direct booking' });
     }
 
     res.status(201).json({
       success: true,
       message: 'Direct booking confirmed successfully',
-      booking: newBooking
+      booking: createdBookings[0],
+      bookings: createdBookings,
+      bookingNumber: createdBookings.map(b => b.bookingNumber).join(', ')
     });
   } catch (error) {
     console.error('Direct booking creation error:', error);

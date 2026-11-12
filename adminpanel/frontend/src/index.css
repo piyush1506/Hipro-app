@@ -486,3 +486,58 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.6);
 }
+
+/* ============================================================
+   Staff Console - Black & White Theme
+   Scoped to AdminApp so vendor/customer portals keep their
+   existing colors.
+   ============================================================ */
+
+.staff-mono-theme {
+  font-weight: 400;
+}
+
+/* Lighter typography across every staff panel */
+.staff-mono-theme .font-black,
+.staff-mono-theme .font-extrabold {
+  font-weight: 600 !important;
+}
+
+.staff-mono-theme .font-bold,
+.staff-mono-theme .font-semibold {
+  font-weight: 500 !important;
+}
+
+/* Render every semantic/accent color in grayscale while leaving
+   neutral slate/white/black surfaces untouched. This also covers
+   hover/responsive variants because the selector matches the
+   complete class token, e.g. hover:bg-primary-700. */
+.staff-mono-theme [class*="-primary-"],
+.staff-mono-theme [class*="-accent-"],
+.staff-mono-theme [class*="-success-"],
+.staff-mono-theme [class*="-warning-"],
+.staff-mono-theme [class*="-danger-"],
+.staff-mono-theme [class*="-blue-"],
+.staff-mono-theme [class*="-sky-"],
+.staff-mono-theme [class*="-cyan-"],
+.staff-mono-theme [class*="-teal-"],
+.staff-mono-theme [class*="-emerald-"],
+.staff-mono-theme [class*="-green-"],
+.staff-mono-theme [class*="-lime-"],
+.staff-mono-theme [class*="-yellow-"],
+.staff-mono-theme [class*="-amber-"],
+.staff-mono-theme [class*="-orange-"],
+.staff-mono-theme [class*="-red-"],
+.staff-mono-theme [class*="-rose-"],
+.staff-mono-theme [class*="-pink-"],
+.staff-mono-theme [class*="-fuchsia-"],
+.staff-mono-theme [class*="-purple-"],
+.staff-mono-theme [class*="-violet-"],
+.staff-mono-theme [class*="-indigo-"],
+.staff-mono-theme [class*="-gold-"],
+.staff-mono-theme [style*="background-color"],
+.staff-mono-theme [style*="color:"],
+.staff-mono-theme [style*="border-color"],
+.staff-mono-theme [style*="border-top"] {
+  filter: grayscale(1);
+}
