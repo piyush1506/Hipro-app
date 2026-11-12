@@ -5,6 +5,14 @@ import VendorPanel from './VendorPanel.jsx';
 import LoginPage from './LoginPage.jsx';
 import AdminLoginPage from './AdminLoginPage.jsx';
 import VendorRegisterPage from './VendorRegisterPage.jsx';
+import {
+  clearLegacyRoleCache,
+  clearStoredSession,
+  getStaffPermissions,
+  getStaffRoleName,
+  isStaffRole,
+  normalizeRoleName
+} from './authUtils.js';
 import './index.css';
 
 // Intercept all API calls to attach JWT Bearer authorization header automatically
@@ -44,51 +52,96 @@ const isAdminRouteMatch = (pathname, hash, search) => {
 
 function AppRoot() {
   const [authState, setAuthState] = useState(() => {
-    if (typeof window === 'undefined') return { isAuthenticated: false, role: null };
-    
-    const token = localStorage.getItem('hipro_auth_token');
-    const savedRole = localStorage.getItem('hipro_user_role');
-
-    if (token && savedRole) {
-      return { isAuthenticated: true, role: savedRole };
+    if (typeof window === 'undefined') {
+      return { isAuthenticated: false, role: null, permissions: [], staff: null, isVerifying: false };
     }
 
-    return { isAuthenticated: false, role: null };
+    const token = localStorage.getItem('hipro_auth_token');
+    return {
+      isAuthenticated: false,
+      role: null,
+      permissions: [],
+      staff: null,
+      isVerifying: Boolean(token)
+    };
   });
 
-  // Zero-trust cryptographic session check on boot
+  // Production session verification: the server decides the role and permissions.
+  // A cached role in localStorage is never trusted for authentication or routing.
   React.useEffect(() => {
     const token = localStorage.getItem('hipro_auth_token');
-    const role = localStorage.getItem('hipro_user_role');
-    if (!token) return;
+    if (!token) {
+      setAuthState({ isAuthenticated: false, role: null, permissions: [], staff: null, isVerifying: false });
+      return;
+    }
+
+    let cancelled = false;
 
     const verifyServerSession = async () => {
-      try {
-        const isVendor = role === 'VENDOR';
-        const verifyEndpoint = isVendor
-          ? '/api/v1/vendors/my-jobs'
-          : '/api/v1/staff/me';
+      const authHeaders = { Authorization: `Bearer ${token}` };
 
-        const res = await fetch(verifyEndpoint, {
-          headers: { 'Authorization': `Bearer ${token}` }
+      try {
+        const staffRes = await fetch('/api/v1/staff/me', {
+          headers: authHeaders,
+          cache: 'no-store'
         });
 
-        if (res.status === 401 || res.status === 403) {
-          console.warn('⛔ Invalid or expired authentication token. Resetting session.');
-          localStorage.removeItem('hipro_auth_token');
-          localStorage.removeItem('hipro_user_role');
-          localStorage.removeItem('hipro_user_role_display');
-          localStorage.removeItem('hipro_permissions');
-          localStorage.removeItem('hipro_user');
-          localStorage.removeItem('hipro_vendor');
-          setAuthState({ isAuthenticated: false, role: null });
+        if (staffRes.ok) {
+          const data = await staffRes.json();
+          const staff = data?.staff;
+          const role = getStaffRoleName(staff);
+
+          if (role) {
+            clearLegacyRoleCache();
+            if (!cancelled) {
+              setAuthState({
+                isAuthenticated: true,
+                role,
+                permissions: getStaffPermissions(staff),
+                staff,
+                isVerifying: false
+              });
+            }
+            return;
+          }
+        }
+
+        // A staff token is rejected by /staff/me. Check whether this is a valid vendor session.
+        const vendorRes = await fetch('/api/v1/vendors/my-jobs', {
+          headers: authHeaders,
+          cache: 'no-store'
+        });
+
+        if (vendorRes.ok) {
+          clearLegacyRoleCache();
+          if (!cancelled) {
+            setAuthState({
+              isAuthenticated: true,
+              role: 'VENDOR',
+              permissions: [],
+              staff: null,
+              isVerifying: false
+            });
+          }
+          return;
+        }
+
+        console.warn('Invalid, expired, or deactivated session. Resetting authentication.');
+        clearStoredSession();
+        if (!cancelled) {
+          setAuthState({ isAuthenticated: false, role: null, permissions: [], staff: null, isVerifying: false });
         }
       } catch (err) {
-        // Network offline, retain offline state
+        // Fail closed for the UI. Keep the token so a later reload can retry when the server is reachable.
+        console.error('Session verification failed:', err);
+        if (!cancelled) {
+          setAuthState({ isAuthenticated: false, role: null, permissions: [], staff: null, isVerifying: false });
+        }
       }
     };
 
     verifyServerSession();
+    return () => { cancelled = true; };
   }, []);
 
   // Determine portal by URL: `/` -> Vendor Portal (Default), `/register` -> Vendor Onboarding, `/master-console` -> Dedicated Admin Terminal
@@ -148,17 +201,37 @@ function AppRoot() {
   };
 
   const handleLoginSuccess = (role, data) => {
+    const staff = data?.staff || null;
+    const normalizedRole = normalizeRoleName(role) || getStaffRoleName(staff);
+
+    if (!normalizedRole) {
+      clearStoredSession();
+      setAuthState({ isAuthenticated: false, role: null, permissions: [], staff: null, isVerifying: false });
+      return;
+    }
+
+    clearLegacyRoleCache();
     setAuthState({
       isAuthenticated: true,
-      role
+      role: normalizedRole,
+      permissions: isStaffRole(normalizedRole) ? getStaffPermissions(staff) : [],
+      staff: isStaffRole(normalizedRole) ? staff : null,
+      isVerifying: false
     });
+
+    // Staff always land in the protected operations console, never in the vendor portal.
+    if (isStaffRole(normalizedRole)) {
+      setTargetPortal('admin');
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.replaceState(null, '', ADMIN_ROUTE);
+        } catch (e) {}
+      }
+    }
   };
 
   const handleLogout = (nextView = 'vendor') => {
-    localStorage.removeItem('hipro_auth_token');
-    localStorage.removeItem('hipro_user_role');
-    localStorage.removeItem('hipro_user');
-    localStorage.removeItem('hipro_vendor');
+    clearStoredSession();
     if (typeof window !== 'undefined') {
       try {
         window.history.replaceState(null, '', nextView === 'admin' ? ADMIN_ROUTE : '/');
@@ -166,16 +239,26 @@ function AppRoot() {
     }
     setAuthState({
       isAuthenticated: false,
-      role: null
+      role: null,
+      permissions: [],
+      staff: null,
+      isVerifying: false
     });
     setTargetPortal(nextView);
   };
 
-  // Dedicated Admin & Staff Route (`/master-console`)
-  const isStaffRole = (role) => {
-    return Boolean(role && role !== 'VENDOR' && role !== 'CUSTOMER' && role !== 'USER');
-  };
+  if (authState.isVerifying) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFD] flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-slate-200 border-t-[#0B63F6] rounded-full animate-spin"></div>
+          <div className="text-xs font-semibold text-slate-500">Verifying production session…</div>
+        </div>
+      </div>
+    );
+  }
 
+  // Dedicated Admin & Staff Route (`/master-console`)
   if (targetPortal === 'admin') {
     if (!authState.isAuthenticated || !isStaffRole(authState.role)) {
       return <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
@@ -183,6 +266,8 @@ function AppRoot() {
     return (
       <AdminApp
         currentUserRole={authState.role}
+        initialPermissions={authState.permissions}
+        initialStaff={authState.staff}
         onSwitchToCustomerApp={() => {
           window.location.href = '/';
         }}

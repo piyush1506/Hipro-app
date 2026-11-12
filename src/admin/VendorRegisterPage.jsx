@@ -66,8 +66,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   const [district, setDistrict] = useState('');
   const [city, setCity] = useState('');
   const [addressState, setAddressState] = useState('');
-  const [country] = useState('India');
-  const [selectedState, setSelectedState] = useState('');
+  const [resolvedLocation, setResolvedLocation] = useState(null);
 
   // Interactive states
   const [fetchingPin, setFetchingPin] = useState(false);
@@ -75,7 +74,45 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Fetch dynamic catalog (live database services, sub-services, and material categories)
+  // Auto-resolve Indian location in background when 6-digit PIN code is typed
+  const resolvePincode = async (code) => {
+    const cleanPin = code.trim().replace(/\D/g, '');
+    if (cleanPin.length !== 6) return;
+
+    setFetchingPin(true);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`);
+      const data = await res.json();
+      if (data && data[0] && data[0].Status === 'Success' && data[0].PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0];
+        const distName = po.District || '';
+        const cityName = (po.Block && po.Block !== 'NA') ? po.Block : (po.District || po.Name || '');
+        const stateName = po.State || '';
+
+        setDistrict(distName);
+        setCity(cityName);
+        setAddressState(stateName);
+        setResolvedLocation(`${distName || cityName}, ${stateName}`);
+        setError(null);
+      } else {
+        setResolvedLocation(null);
+      }
+    } catch (err) {
+      console.warn('PIN fetch error:', err);
+    } finally {
+      setFetchingPin(false);
+    }
+  };
+
+  const handlePincodeChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setPincode(val);
+    if (val.length === 6) {
+      resolvePincode(val);
+    } else {
+      setResolvedLocation(null);
+    }
+  };
   useEffect(() => {
     let isCancelled = false;
     const fetchCatalog = async () => {
@@ -180,45 +217,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     }
   };
 
-  // Auto-fetch Indian address via postal PIN code
-  const handleFetchAddress = async () => {
-    const cleanPin = pincode.trim().replace(/\D/g, '');
-    if (cleanPin.length !== 6) {
-      setError('Please enter a valid 6-digit Indian PIN code to auto-fetch address.');
-      return;
-    }
-
-    setFetchingPin(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`);
-      const data = await res.json();
-
-      if (data && data[0] && data[0].Status === 'Success' && data[0].PostOffice?.length > 0) {
-        const po = data[0].PostOffice[0];
-        const distName = po.District || '';
-        const cityName = (po.Block && po.Block !== 'NA') ? po.Block : (po.District || po.Name || '');
-        const stateName = po.State || '';
-
-        setDistrict(distName);
-        setCity(cityName);
-        setAddressState(stateName);
-        if (!selectedState) setSelectedState(stateName);
-
-        setSuccessMsg(`Address verified: ${distName}, ${stateName}`);
-        setTimeout(() => setSuccessMsg(null), 3000);
-      } else {
-        setError('PIN code not found in postal registry. Please enter District & City manually.');
-      }
-    } catch (err) {
-      console.warn('PIN fetch network error:', err);
-      setError('Could not connect to postal directory. You may fill city and district manually.');
-    } finally {
-      setFetchingPin(false);
-    }
-  };
-
+  // Form submission handler
   const handleRegisterSubmit = async (e) => {
     if (e) e.preventDefault();
     setError(null);
@@ -255,6 +254,16 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match. Please verify both fields.');
+      return;
+    }
+
+    if (!pincode.trim() || pincode.trim().length !== 6) {
+      setError('Please enter a valid 6-digit postal PIN code.');
+      return;
+    }
+
+    if (!addressLine1.trim()) {
+      setError('Please enter your address in Address Line 1.');
       return;
     }
 
@@ -301,7 +310,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         specialization,
         experience,
         gstinNumber: hasBusiness && gstinNumber.trim() ? gstinNumber.trim().toUpperCase() : undefined,
-        state: addressState || selectedState || 'Rajasthan',
+        state: addressState || 'Rajasthan',
         city: city.trim() || district.trim() || 'Bhilwara',
         passcode: password.trim(),
         password: password.trim(),
@@ -1049,49 +1058,49 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
 
               {/* ======================================================== */}
-              {/* SECTION 5: Address Details */}
+              {/* SECTION 5: Address Details (Streamlined: PIN Code & Address Line) */}
               {/* ======================================================== */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                  <MapPin className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                  <span>{hasBusiness ? 'Business Address Details' : 'Operational Address Details'}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <MapPin className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>{hasBusiness ? 'Business Address' : 'Address Details'}</span>
+                  </div>
+                  {fetchingPin && (
+                    <span className="text-[11px] text-[#0B63F6] font-medium flex items-center gap-1.5 animate-pulse">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#0B63F6] animate-ping"></span>
+                      Auto-fetching location...
+                    </span>
+                  )}
                 </div>
 
-                {/* PIN Code + Fetch Address Button */}
+                {/* PIN Code Field */}
                 <div>
                   <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
                     PIN Code *
                   </label>
-                  <div className="flex items-center gap-2.5">
-                    <div className="relative flex-1">
-                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <MapPin className="w-4 h-4" strokeWidth={1.8} />
-                      </div>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        value={pincode}
-                        onChange={(e) => setPincode(e.target.value)}
-                        placeholder="Enter 6 digit PIN code"
-                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                      />
+                  <div className="relative">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <MapPin className="w-4 h-4" strokeWidth={1.8} />
                     </div>
-                    
-                    <button
-                      type="button"
-                      disabled={fetchingPin}
-                      onClick={handleFetchAddress}
-                      className="h-10.5 px-4.5 bg-[#0B63F6] hover:bg-[#0954D8] active:bg-[#0848B8] text-white text-[12.5px] font-medium rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0 disabled:opacity-50"
-                    >
-                      <Search className="w-3.5 h-3.5" strokeWidth={2.2} />
-                      <span>{fetchingPin ? 'Fetching...' : 'Fetch Address'}</span>
-                    </button>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      value={pincode}
+                      onChange={handlePincodeChange}
+                      placeholder="Enter 6 digit postal PIN code"
+                      className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                    />
                   </div>
-                  
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-[#2563EB]">
-                    <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                    <span>Enter PIN code and click 'Fetch Address' to auto-fill your address</span>
-                  </div>
+
+                  {/* Auto-resolved location indicator */}
+                  {resolvedLocation && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-200/70 px-2.5 py-1 rounded-lg">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Auto-detected: {resolvedLocation}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Address Line 1 & Line 2 */}
@@ -1106,9 +1115,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       </div>
                       <input
                         type="text"
+                        required
                         value={addressLine1}
                         onChange={(e) => setAddressLine1(e.target.value)}
-                        placeholder="Shop / House No., Landmark, Area"
+                        placeholder="House / Shop / Building No., Street, Area"
                         className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
@@ -1126,93 +1136,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                         type="text"
                         value={addressLine2}
                         onChange={(e) => setAddressLine2(e.target.value)}
-                        placeholder="Street, Colony, Landmark"
+                        placeholder="Landmark, Colony, Road"
                         className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
-                  </div>
-                </div>
-
-                {/* 4-Columns: District, City, State, Country */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
-                      District *
-                    </label>
-                    <input
-                      type="text"
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      placeholder="District"
-                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="City"
-                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
-                      State *
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={addressState}
-                        onChange={(e) => setAddressState(e.target.value)}
-                        className="w-full h-10 pl-2.5 pr-7 bg-white border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
-                      >
-                        <option value="">Select State</option>
-                        {INDIAN_STATES.map((st) => (
-                          <option key={st} value={st}>{st}</option>
-                        ))}
-                      </select>
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
-                      Country *
-                    </label>
-                    <div className="relative">
-                      <select
-                        disabled
-                        value={country}
-                        className="w-full h-10 pl-2.5 pr-7 bg-slate-50 border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-slate-700 appearance-none cursor-not-allowed"
-                      >
-                        <option value="India">India</option>
-                      </select>
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Auto-fill Info Banner */}
-                <div className="p-3 bg-[#EBF3FE] border border-blue-100 rounded-xl flex items-center gap-3 mt-2">
-                  <div className="w-7 h-7 rounded-full bg-[#0B63F6] flex items-center justify-center shrink-0 text-white font-bold text-xs">
-                    i
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-[12px] text-[#0F172A] leading-none">
-                      Auto-fill in one step!
-                    </h4>
-                    <p className="text-[11px] text-slate-600 font-normal mt-0.5">
-                      Enter your PIN code to automatically fetch your district and city.
-                    </p>
                   </div>
                 </div>
               </div>

@@ -18,6 +18,14 @@ import RequirementBuilderView from './components/pipeline/RequirementBuilderView
 import ProcurementRFQView from './components/pipeline/ProcurementRFQView.jsx';
 import ProjectsExecutionView from './components/pipeline/ProjectsExecutionView.jsx';
 import StaffRoleManagerView from './components/pipeline/StaffRoleManagerView.jsx';
+import {
+  clearLegacyRoleCache,
+  clearStoredSession,
+  getRoleDisplayName,
+  getStaffPermissions,
+  getStaffRoleName,
+  normalizeRoleName
+} from './authUtils.js';
 
 const API_BASE = (typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || 
@@ -29,42 +37,135 @@ const API_BASE = (typeof window !== 'undefined' && (
   ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000')
   : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
-export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
-  const [currentUserRole, setCurrentUserRole] = useState(() => {
-    return propUserRole || localStorage.getItem('hipro_user_role') || '';
-  });
+const INITIAL_TAB_PRIORITY = [
+  'leads',
+  'procurement',
+  'builder',
+  'projects',
+  'customer-activity',
+  'direct-bookings',
+  'requests',
+  'vendors',
+  'quotations',
+  'chat',
+  'users',
+  'overview',
+  'services',
+  'adventure',
+  'slides',
+  'offers',
+  'diagnostics',
+  'staff-roles'
+];
+
+function hasRoleAccess(roleValue, permissionsValue, tabKey) {
+  const role = normalizeRoleName(roleValue);
+  if (!role) return false;
+
+  const perms = Array.isArray(permissionsValue)
+    ? permissionsValue.filter((permission) => typeof permission === 'string' && permission)
+    : [];
+
+  // Super Admin / Admin and wildcard roles have full clearance.
+  if (role === 'SUPER_ADMIN' || role === 'ADMIN' || perms.includes('*')) {
+    return true;
+  }
+
+  if (tabKey === 'staff-roles') {
+    return (
+      perms.includes('rbac.manage') ||
+      perms.includes('manage_roles') ||
+      perms.includes('manage_staff')
+    );
+  }
+
+  const hasPerm = (permission) => perms.includes(permission);
+  const hasPrefix = (prefix) => perms.some((permission) => permission.startsWith(prefix));
+
+  switch (tabKey) {
+    case 'overview':
+      return hasPerm('overview.view') || hasPerm('reports.view');
+    case 'leads':
+      return hasPerm('leads.view') || hasPrefix('leads.');
+    case 'builder':
+      return (
+        hasPerm('requirements.create') ||
+        hasPerm('requirements.view') ||
+        hasPerm('quotations.create') ||
+        hasPrefix('requirements.')
+      );
+    case 'procurement':
+      return (
+        hasPerm('procurement.view') ||
+        hasPerm('labor.view') ||
+        hasPrefix('procurement.') ||
+        hasPrefix('labor.')
+      );
+    case 'projects':
+      return hasPerm('projects.view') || hasPrefix('projects.');
+    case 'requests':
+      return hasPerm('requests.view') || hasPerm('leads.view') || hasPrefix('requests.');
+    case 'direct-bookings':
+      return hasPerm('bookings.view');
+    case 'customer-activity':
+      return hasPerm('activity.view') || hasPerm('leads.view');
+    case 'vendors':
+      return hasPerm('vendors.view') || hasPrefix('vendors.');
+    case 'quotations':
+      return hasPerm('quotations.view') || hasPrefix('quotations.');
+    case 'chat':
+      return hasPerm('chat.view');
+    case 'users':
+      return hasPerm('users.view');
+    case 'services':
+      return hasPerm('services.view') || hasPerm('services.edit');
+    case 'adventure':
+      return hasPerm('adventure.view');
+    case 'slides':
+      return hasPerm('slides.view');
+    case 'offers':
+      return hasPerm('offers.view');
+    case 'diagnostics':
+      return hasPerm('diagnostics.view');
+    default:
+      return hasPerm(tabKey);
+  }
+}
+
+function findInitialTab(roleValue, permissionsValue) {
+  const role = normalizeRoleName(roleValue);
+  if ((role === 'SUPER_ADMIN' || role === 'ADMIN') && hasRoleAccess(role, permissionsValue, 'overview')) {
+    return 'overview';
+  }
+
+  for (const tab of INITIAL_TAB_PRIORITY) {
+    if (hasRoleAccess(role, permissionsValue, tab)) return tab;
+  }
+
+  return 'overview';
+}
+
+export default function AdminApp({ currentUserRole: propUserRole, initialPermissions, initialStaff, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
+  const [currentUserRole, setCurrentUserRole] = useState(() => normalizeRoleName(propUserRole));
 
   const [userPermissions, setUserPermissions] = useState(() => {
-    try {
-      const saved = localStorage.getItem('hipro_permissions');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+    return Array.isArray(initialPermissions) ? initialPermissions : [];
   });
 
   const [roleDisplayName, setRoleDisplayName] = useState(() => {
-    return localStorage.getItem('hipro_user_role_display') || '';
+    return getRoleDisplayName(initialStaff) || '';
   });
 
-  const [currentUserStaff, setCurrentUserStaff] = useState(() => {
-    try {
-      const saved = localStorage.getItem('hipro_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [currentUserStaff, setCurrentUserStaff] = useState(initialStaff || null);
 
-  // Cryptographic Server-Side Session Verification
-  // Strictly verifies token with backend PostgreSQL to prevent DevTools / LocalStorage bypass
-  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
-
+  // Production session verification against PostgreSQL.
+  // Permissions are always read from the current Role row, never from localStorage.
   useEffect(() => {
     let isMounted = true;
     const verifySession = async () => {
       const token = localStorage.getItem('hipro_auth_token');
       if (!token) {
+        clearStoredSession();
         if (onLogout) onLogout();
         else window.location.href = '/';
         return;
@@ -72,16 +173,13 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
 
       try {
         const res = await fetch(`${API_BASE}/api/v1/staff/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          cache: 'no-store'
         });
 
-        if (res.status === 401 || res.status === 403) {
-          console.warn('⛔ Cryptographic Verification: Tampered or invalid session detected.');
-          localStorage.removeItem('hipro_auth_token');
-          localStorage.removeItem('hipro_user_role');
-          localStorage.removeItem('hipro_user_role_display');
-          localStorage.removeItem('hipro_permissions');
-          localStorage.removeItem('hipro_user');
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          console.warn('Production verification rejected the staff session.');
+          clearStoredSession();
           if (onLogout) onLogout();
           else window.location.href = '/';
           return;
@@ -89,48 +187,33 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
 
         const data = await res.json();
         if (data.success && data.staff && isMounted) {
-          const verifiedRole = (data.staff.role?.name || data.staff.role || '').toUpperCase();
-          const verifiedDisplay = data.staff.role?.displayName || data.staff.roleDisplayName || verifiedRole;
-          const verifiedPerms = Array.isArray(data.staff.role?.permissions)
-            ? data.staff.role.permissions
-            : (verifiedRole === 'ADMIN' || verifiedRole === 'SUPER_ADMIN' ? ['*'] : []);
+          const verifiedRole = getStaffRoleName(data.staff);
+          if (!verifiedRole) {
+            clearStoredSession();
+            if (onLogout) onLogout();
+            else window.location.href = '/';
+            return;
+          }
+
+          const verifiedDisplay = getRoleDisplayName(data.staff);
+          const verifiedPerms = getStaffPermissions(data.staff);
 
           setCurrentUserRole(verifiedRole);
           setRoleDisplayName(verifiedDisplay);
           setUserPermissions(verifiedPerms);
           setCurrentUserStaff(data.staff);
+          setActiveTab(findInitialTab(verifiedRole, verifiedPerms));
 
-          // Overwrite localStorage with verified database state
-          localStorage.setItem('hipro_user_role', verifiedRole);
-          localStorage.setItem('hipro_user_role_display', verifiedDisplay);
-          localStorage.setItem('hipro_permissions', JSON.stringify(verifiedPerms));
+          // Remove any legacy client-side role cache left by older builds.
+          clearLegacyRoleCache();
         }
       } catch (err) {
         console.error('Session verification network error:', err);
-      } finally {
-        if (isMounted) setIsVerifyingSession(false);
       }
     };
 
     verifySession();
     return () => { isMounted = false; };
-  }, []);
-
-  const [availableRoles, setAvailableRoles] = useState([]);
-
-  useEffect(() => {
-    const fetchRoles = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/v1/roles`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.roles)) {
-          setAvailableRoles(data.roles);
-        }
-      } catch (e) {
-        console.error('Fetch roles error:', e);
-      }
-    };
-    fetchRoles();
   }, []);
 
   const [selectedLeadForReq, setSelectedLeadForReq] = useState(null);

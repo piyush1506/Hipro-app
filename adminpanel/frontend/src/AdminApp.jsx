@@ -18,6 +18,14 @@ import RequirementBuilderView from './components/pipeline/RequirementBuilderView
 import ProcurementRFQView from './components/pipeline/ProcurementRFQView.jsx';
 import ProjectsExecutionView from './components/pipeline/ProjectsExecutionView.jsx';
 import StaffRoleManagerView from './components/pipeline/StaffRoleManagerView.jsx';
+import {
+  clearLegacyRoleCache,
+  clearStoredSession,
+  getRoleDisplayName,
+  getStaffPermissions,
+  getStaffRoleName,
+  normalizeRoleName
+} from './authUtils.js';
 
 const API_BASE = (typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || 
@@ -29,42 +37,135 @@ const API_BASE = (typeof window !== 'undefined' && (
   ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000')
   : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
-export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
-  const [currentUserRole, setCurrentUserRole] = useState(() => {
-    return propUserRole || localStorage.getItem('hipro_user_role') || '';
-  });
+const INITIAL_TAB_PRIORITY = [
+  'leads',
+  'procurement',
+  'builder',
+  'projects',
+  'customer-activity',
+  'direct-bookings',
+  'requests',
+  'vendors',
+  'quotations',
+  'chat',
+  'users',
+  'overview',
+  'services',
+  'adventure',
+  'slides',
+  'offers',
+  'diagnostics',
+  'staff-roles'
+];
+
+function hasRoleAccess(roleValue, permissionsValue, tabKey) {
+  const role = normalizeRoleName(roleValue);
+  if (!role) return false;
+
+  const perms = Array.isArray(permissionsValue)
+    ? permissionsValue.filter((permission) => typeof permission === 'string' && permission)
+    : [];
+
+  // Super Admin / Admin and wildcard roles have full clearance.
+  if (role === 'SUPER_ADMIN' || role === 'ADMIN' || perms.includes('*')) {
+    return true;
+  }
+
+  if (tabKey === 'staff-roles') {
+    return (
+      perms.includes('rbac.manage') ||
+      perms.includes('manage_roles') ||
+      perms.includes('manage_staff')
+    );
+  }
+
+  const hasPerm = (permission) => perms.includes(permission);
+  const hasPrefix = (prefix) => perms.some((permission) => permission.startsWith(prefix));
+
+  switch (tabKey) {
+    case 'overview':
+      return hasPerm('overview.view') || hasPerm('reports.view');
+    case 'leads':
+      return hasPerm('leads.view') || hasPrefix('leads.');
+    case 'builder':
+      return (
+        hasPerm('requirements.create') ||
+        hasPerm('requirements.view') ||
+        hasPerm('quotations.create') ||
+        hasPrefix('requirements.')
+      );
+    case 'procurement':
+      return (
+        hasPerm('procurement.view') ||
+        hasPerm('labor.view') ||
+        hasPrefix('procurement.') ||
+        hasPrefix('labor.')
+      );
+    case 'projects':
+      return hasPerm('projects.view') || hasPrefix('projects.');
+    case 'requests':
+      return hasPerm('requests.view') || hasPerm('leads.view') || hasPrefix('requests.');
+    case 'direct-bookings':
+      return hasPerm('bookings.view');
+    case 'customer-activity':
+      return hasPerm('activity.view') || hasPerm('leads.view');
+    case 'vendors':
+      return hasPerm('vendors.view') || hasPrefix('vendors.');
+    case 'quotations':
+      return hasPerm('quotations.view') || hasPrefix('quotations.');
+    case 'chat':
+      return hasPerm('chat.view');
+    case 'users':
+      return hasPerm('users.view');
+    case 'services':
+      return hasPerm('services.view') || hasPerm('services.edit');
+    case 'adventure':
+      return hasPerm('adventure.view');
+    case 'slides':
+      return hasPerm('slides.view');
+    case 'offers':
+      return hasPerm('offers.view');
+    case 'diagnostics':
+      return hasPerm('diagnostics.view');
+    default:
+      return hasPerm(tabKey);
+  }
+}
+
+function findInitialTab(roleValue, permissionsValue) {
+  const role = normalizeRoleName(roleValue);
+  if ((role === 'SUPER_ADMIN' || role === 'ADMIN') && hasRoleAccess(role, permissionsValue, 'overview')) {
+    return 'overview';
+  }
+
+  for (const tab of INITIAL_TAB_PRIORITY) {
+    if (hasRoleAccess(role, permissionsValue, tab)) return tab;
+  }
+
+  return 'overview';
+}
+
+export default function AdminApp({ currentUserRole: propUserRole, initialPermissions, initialStaff, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
+  const [currentUserRole, setCurrentUserRole] = useState(() => normalizeRoleName(propUserRole));
 
   const [userPermissions, setUserPermissions] = useState(() => {
-    try {
-      const saved = localStorage.getItem('hipro_permissions');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+    return Array.isArray(initialPermissions) ? initialPermissions : [];
   });
 
   const [roleDisplayName, setRoleDisplayName] = useState(() => {
-    return localStorage.getItem('hipro_user_role_display') || '';
+    return getRoleDisplayName(initialStaff) || '';
   });
 
-  const [currentUserStaff, setCurrentUserStaff] = useState(() => {
-    try {
-      const saved = localStorage.getItem('hipro_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [currentUserStaff, setCurrentUserStaff] = useState(initialStaff || null);
 
-  // Cryptographic Server-Side Session Verification
-  // Strictly verifies token with backend PostgreSQL to prevent DevTools / LocalStorage bypass
-  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
-
+  // Production session verification against PostgreSQL.
+  // Permissions are always read from the current Role row, never from localStorage.
   useEffect(() => {
     let isMounted = true;
     const verifySession = async () => {
       const token = localStorage.getItem('hipro_auth_token');
       if (!token) {
+        clearStoredSession();
         if (onLogout) onLogout();
         else window.location.href = '/';
         return;
@@ -72,16 +173,13 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
 
       try {
         const res = await fetch(`${API_BASE}/api/v1/staff/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          cache: 'no-store'
         });
 
-        if (res.status === 401 || res.status === 403) {
-          console.warn('⛔ Cryptographic Verification: Tampered or invalid session detected.');
-          localStorage.removeItem('hipro_auth_token');
-          localStorage.removeItem('hipro_user_role');
-          localStorage.removeItem('hipro_user_role_display');
-          localStorage.removeItem('hipro_permissions');
-          localStorage.removeItem('hipro_user');
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          console.warn('Production verification rejected the staff session.');
+          clearStoredSession();
           if (onLogout) onLogout();
           else window.location.href = '/';
           return;
@@ -89,26 +187,28 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
 
         const data = await res.json();
         if (data.success && data.staff && isMounted) {
-          const verifiedRole = (data.staff.role?.name || data.staff.role || '').toUpperCase();
-          const verifiedDisplay = data.staff.role?.displayName || data.staff.roleDisplayName || verifiedRole;
-          const verifiedPerms = Array.isArray(data.staff.role?.permissions)
-            ? data.staff.role.permissions
-            : (verifiedRole === 'ADMIN' || verifiedRole === 'SUPER_ADMIN' ? ['*'] : []);
+          const verifiedRole = getStaffRoleName(data.staff);
+          if (!verifiedRole) {
+            clearStoredSession();
+            if (onLogout) onLogout();
+            else window.location.href = '/';
+            return;
+          }
+
+          const verifiedDisplay = getRoleDisplayName(data.staff);
+          const verifiedPerms = getStaffPermissions(data.staff);
 
           setCurrentUserRole(verifiedRole);
           setRoleDisplayName(verifiedDisplay);
           setUserPermissions(verifiedPerms);
           setCurrentUserStaff(data.staff);
+          setActiveTab(findInitialTab(verifiedRole, verifiedPerms));
 
-          // Overwrite localStorage with verified database state
-          localStorage.setItem('hipro_user_role', verifiedRole);
-          localStorage.setItem('hipro_user_role_display', verifiedDisplay);
-          localStorage.setItem('hipro_permissions', JSON.stringify(verifiedPerms));
+          // Remove any legacy client-side role cache left by older builds.
+          clearLegacyRoleCache();
         }
       } catch (err) {
         console.error('Session verification network error:', err);
-      } finally {
-        if (isMounted) setIsVerifyingSession(false);
       }
     };
 
@@ -116,166 +216,12 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
     return () => { isMounted = false; };
   }, []);
 
-  const [availableRoles, setAvailableRoles] = useState([]);
-
-  useEffect(() => {
-    const fetchRoles = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/v1/roles`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.roles)) {
-          setAvailableRoles(data.roles);
-        }
-      } catch (e) {
-        console.error('Fetch roles error:', e);
-      }
-    };
-    fetchRoles();
-  }, []);
-
   const [selectedLeadForReq, setSelectedLeadForReq] = useState(null);
   const [selectedLeadForProc, setSelectedLeadForProc] = useState(null);
 
-  const canAccess = (tabKey) => {
-    if (!currentUserRole) return false;
-    const role = (currentUserRole || '').toUpperCase();
-    const perms = Array.isArray(userPermissions) ? userPermissions : [];
+  const canAccess = (tabKey) => hasRoleAccess(currentUserRole, userPermissions, tabKey);
 
-    // 1. Super Admin or wildcard access always has full clearance
-    if (role === 'SUPER_ADMIN' || role === 'ADMIN' || perms.includes('*')) {
-      return true;
-    }
-
-    // 2. Staff Roles & RBAC Management (Super Admin only or explicit rbac.manage permission)
-    if (tabKey === 'staff-roles') {
-      return (
-        perms.includes('rbac.manage') ||
-        perms.includes('manage_roles') ||
-        perms.includes('manage_staff')
-      );
-    }
-
-    const hasPerm = (p) => perms.includes(p);
-    const hasPrefix = (prefix) => perms.some((p) => typeof p === 'string' && p.startsWith(prefix));
-
-    // 3. Dynamic check against the permissions assigned to this role by the Admin
-    let hasGranularAccess = false;
-    switch (tabKey) {
-      case 'overview':
-        hasGranularAccess = hasPerm('overview.view') || hasPerm('reports.view');
-        break;
-      case 'leads':
-        hasGranularAccess = hasPerm('leads.view') || hasPrefix('leads.');
-        break;
-      case 'builder':
-        hasGranularAccess = (
-          hasPerm('requirements.create') ||
-          hasPerm('requirements.view') ||
-          hasPerm('quotations.create') ||
-          hasPrefix('requirements.')
-        );
-        break;
-      case 'procurement':
-        hasGranularAccess = (
-          hasPerm('procurement.view') ||
-          hasPerm('labor.view') ||
-          hasPrefix('procurement.') ||
-          hasPrefix('labor.')
-        );
-        break;
-      case 'projects':
-        hasGranularAccess = hasPerm('projects.view') || hasPrefix('projects.');
-        break;
-      case 'requests':
-        hasGranularAccess = hasPerm('requests.view') || hasPerm('leads.view') || hasPrefix('requests.');
-        break;
-      case 'direct-bookings':
-        hasGranularAccess = hasPerm('bookings.view');
-        break;
-      case 'customer-activity':
-        hasGranularAccess = hasPerm('activity.view') || hasPerm('leads.view');
-        break;
-      case 'vendors':
-        hasGranularAccess = hasPerm('vendors.view') || hasPrefix('vendors.');
-        break;
-      case 'quotations':
-        hasGranularAccess = hasPerm('quotations.view') || hasPrefix('quotations.');
-        break;
-      case 'chat':
-        hasGranularAccess = hasPerm('chat.view');
-        break;
-      case 'users':
-        hasGranularAccess = hasPerm('users.view');
-        break;
-      case 'services':
-        hasGranularAccess = hasPerm('services.view') || hasPerm('services.edit');
-        break;
-      case 'adventure':
-        hasGranularAccess = hasPerm('adventure.view');
-        break;
-      case 'slides':
-        hasGranularAccess = hasPerm('slides.view');
-        break;
-      case 'offers':
-        hasGranularAccess = hasPerm('offers.view');
-        break;
-      case 'diagnostics':
-        hasGranularAccess = hasPerm('diagnostics.view');
-        break;
-      default:
-        hasGranularAccess = hasPerm(tabKey);
-        break;
-    }
-
-    if (hasGranularAccess) return true;
-
-    // 4. Fallback defaults for legacy predefined roles if specific permissions array is empty
-    if (perms.length === 0 || perms.every(p => p === '')) {
-      if (role === 'TELECALLER') {
-        return ['leads', 'customer-activity', 'chat', 'users'].includes(tabKey);
-      }
-      if (role === 'CIVIL_ENGINEER') {
-        return ['leads', 'builder', 'procurement', 'projects', 'vendors', 'quotations'].includes(tabKey);
-      }
-      if (role === 'PURCHASE_PERSON') {
-        return ['procurement', 'vendors', 'quotations', 'overview'].includes(tabKey);
-      }
-    }
-
-    return false;
-  };
-
-  const getInitialTab = () => {
-    const role = (currentUserRole || 'SUPER_ADMIN').toUpperCase();
-    if ((role === 'SUPER_ADMIN' || role === 'ADMIN') && canAccess('overview')) return 'overview';
-
-    // Priority order to find the first section accessible to this role
-    const candidateTabs = [
-      'leads',
-      'procurement',
-      'builder',
-      'projects',
-      'customer-activity',
-      'direct-bookings',
-      'requests',
-      'vendors',
-      'quotations',
-      'chat',
-      'users',
-      'overview',
-      'services',
-      'adventure',
-      'slides',
-      'offers',
-      'diagnostics',
-      'staff-roles'
-    ];
-
-    for (const tab of candidateTabs) {
-      if (canAccess(tab)) return tab;
-    }
-    return 'leads';
-  };
+  const getInitialTab = () => findInitialTab(currentUserRole, userPermissions);
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [stats, setStats] = useState(null);
@@ -4056,63 +4002,11 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Quick Role Switcher for Super Admin or Role Badge for Staff */}
-            {canAccess('staff-roles') ? (
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                <span className="text-[10px] font-bold text-slate-500 pl-2 hidden lg:inline uppercase tracking-wider">Preview Role:</span>
-                <select
-                  value={currentUserRole}
-                  onChange={(e) => {
-                    const newRoleName = e.target.value;
-                    const match = availableRoles.find(r => r.name === newRoleName);
-                    setCurrentUserRole(newRoleName);
-                    const disp = match?.displayName || newRoleName;
-                    setRoleDisplayName(disp);
-                    localStorage.setItem('hipro_user_role', newRoleName);
-                    localStorage.setItem('hipro_user_role_display', disp);
-
-                    const newPerms = match?.permissions || (newRoleName === 'SUPER_ADMIN' ? ['*'] : []);
-                    setUserPermissions(newPerms);
-                    localStorage.setItem('hipro_permissions', JSON.stringify(newPerms));
-
-                    // Pick candidate tab for this role
-                    const candidate = [
-                      'leads', 'procurement', 'builder', 'projects', 'customer-activity',
-                      'direct-bookings', 'requests', 'vendors', 'quotations', 'chat',
-                      'users', 'overview', 'services'
-                    ].find(t => {
-                      if (newRoleName === 'SUPER_ADMIN') return t === 'overview';
-                      if (newRoleName === 'TELECALLER') return t === 'leads';
-                      if (newRoleName === 'CIVIL_ENGINEER') return t === 'leads';
-                      if (newRoleName === 'PURCHASE_PERSON') return t === 'procurement';
-                      return newPerms.includes('*') || newPerms.includes(`${t}.view`);
-                    });
-                    setActiveTab(candidate || 'leads');
-                  }}
-                  className="text-xs font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary-500 shadow-xs cursor-pointer"
-                  title="Switch role dashboard preview"
-                >
-                  <option value="SUPER_ADMIN">👑 Super Admin (Full Master)</option>
-                  {availableRoles.filter(r => r.name !== 'SUPER_ADMIN').map(r => (
-                    <option key={r.id || r.name} value={r.name}>
-                      {r.displayName}
-                    </option>
-                  ))}
-                  {availableRoles.length === 0 && (
-                    <>
-                      <option value="TELECALLER">📞 Telecaller</option>
-                      <option value="CIVIL_ENGINEER">📐 Civil Engineer</option>
-                      <option value="PURCHASE_PERSON">📦 Purchase Person</option>
-                    </>
-                  )}
-                </select>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-50 border border-primary-200 text-primary-800 rounded-xl text-xs font-bold shadow-xs">
-                <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
-                <span>{roleDisplayName || currentUserRole}</span>
-              </div>
-            )}
+            {/* Read-only role badge. Role changes happen only in Staff & Roles and take effect on the next request. */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-50 border border-primary-200 text-primary-800 rounded-xl text-xs font-bold shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
+              <span>{roleDisplayName || currentUserRole}</span>
+            </div>
 
             <div className="relative hidden sm:block w-72">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />

@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import {
-  Briefcase, Lock, Mail, ArrowRight, Eye, EyeOff,
-  ShieldCheck, AlertCircle, CheckCircle2, ChevronDown, Store, UserPlus
+  Briefcase, Lock, Mail, Eye, EyeOff,
+  AlertCircle, CheckCircle2
 } from 'lucide-react';
+import { getRoleDisplayName, getStaffRoleName } from './authUtils.js';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
   ? ''
   : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
 export default function AdminLoginPage({ onLoginSuccess }) {
-  const [operatorCategory, setOperatorCategory] = useState('Staff');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
