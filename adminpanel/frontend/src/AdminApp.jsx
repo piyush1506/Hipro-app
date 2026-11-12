@@ -31,15 +31,15 @@ const API_BASE = (typeof window !== 'undefined' && (
 
 export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
   const [currentUserRole, setCurrentUserRole] = useState(() => {
-    return propUserRole || localStorage.getItem('hipro_user_role') || 'SUPER_ADMIN';
+    return propUserRole || localStorage.getItem('hipro_user_role') || '';
   });
 
   const [userPermissions, setUserPermissions] = useState(() => {
     try {
       const saved = localStorage.getItem('hipro_permissions');
-      return saved ? JSON.parse(saved) : ['*'];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ['*'];
+      return [];
     }
   });
 
@@ -55,6 +55,66 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
       return null;
     }
   });
+
+  // Cryptographic Server-Side Session Verification
+  // Strictly verifies token with backend PostgreSQL to prevent DevTools / LocalStorage bypass
+  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const verifySession = async () => {
+      const token = localStorage.getItem('hipro_auth_token');
+      if (!token) {
+        if (onLogout) onLogout();
+        else window.location.href = '/';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/staff/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          console.warn('⛔ Cryptographic Verification: Tampered or invalid session detected.');
+          localStorage.removeItem('hipro_auth_token');
+          localStorage.removeItem('hipro_user_role');
+          localStorage.removeItem('hipro_user_role_display');
+          localStorage.removeItem('hipro_permissions');
+          localStorage.removeItem('hipro_user');
+          if (onLogout) onLogout();
+          else window.location.href = '/';
+          return;
+        }
+
+        const data = await res.json();
+        if (data.success && data.staff && isMounted) {
+          const verifiedRole = (data.staff.role?.name || data.staff.role || '').toUpperCase();
+          const verifiedDisplay = data.staff.role?.displayName || data.staff.roleDisplayName || verifiedRole;
+          const verifiedPerms = Array.isArray(data.staff.role?.permissions)
+            ? data.staff.role.permissions
+            : (verifiedRole === 'ADMIN' || verifiedRole === 'SUPER_ADMIN' ? ['*'] : []);
+
+          setCurrentUserRole(verifiedRole);
+          setRoleDisplayName(verifiedDisplay);
+          setUserPermissions(verifiedPerms);
+          setCurrentUserStaff(data.staff);
+
+          // Overwrite localStorage with verified database state
+          localStorage.setItem('hipro_user_role', verifiedRole);
+          localStorage.setItem('hipro_user_role_display', verifiedDisplay);
+          localStorage.setItem('hipro_permissions', JSON.stringify(verifiedPerms));
+        }
+      } catch (err) {
+        console.error('Session verification network error:', err);
+      } finally {
+        if (isMounted) setIsVerifyingSession(false);
+      }
+    };
+
+    verifySession();
+    return () => { isMounted = false; };
+  }, []);
 
   const [availableRoles, setAvailableRoles] = useState([]);
 
@@ -77,7 +137,8 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
   const [selectedLeadForProc, setSelectedLeadForProc] = useState(null);
 
   const canAccess = (tabKey) => {
-    const role = (currentUserRole || 'SUPER_ADMIN').toUpperCase();
+    if (!currentUserRole) return false;
+    const role = (currentUserRole || '').toUpperCase();
     const perms = Array.isArray(userPermissions) ? userPermissions : [];
 
     // 1. Super Admin or wildcard access always has full clearance

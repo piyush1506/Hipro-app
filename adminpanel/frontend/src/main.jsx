@@ -56,6 +56,41 @@ function AppRoot() {
     return { isAuthenticated: false, role: null };
   });
 
+  // Zero-trust cryptographic session check on boot
+  React.useEffect(() => {
+    const token = localStorage.getItem('hipro_auth_token');
+    const role = localStorage.getItem('hipro_user_role');
+    if (!token) return;
+
+    const verifyServerSession = async () => {
+      try {
+        const isVendor = role === 'VENDOR';
+        const verifyEndpoint = isVendor
+          ? '/api/v1/vendors/my-jobs'
+          : '/api/v1/staff/me';
+
+        const res = await fetch(verifyEndpoint, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          console.warn('⛔ Invalid or expired authentication token. Resetting session.');
+          localStorage.removeItem('hipro_auth_token');
+          localStorage.removeItem('hipro_user_role');
+          localStorage.removeItem('hipro_user_role_display');
+          localStorage.removeItem('hipro_permissions');
+          localStorage.removeItem('hipro_user');
+          localStorage.removeItem('hipro_vendor');
+          setAuthState({ isAuthenticated: false, role: null });
+        }
+      } catch (err) {
+        // Network offline, retain offline state
+      }
+    };
+
+    verifyServerSession();
+  }, []);
+
   // Determine portal by URL: `/` -> Vendor Portal (Default), `/register` -> Vendor Onboarding, `/master-console` -> Dedicated Admin Terminal
   const [targetPortal, setTargetPortal] = useState(() => {
     if (typeof window !== 'undefined') {
