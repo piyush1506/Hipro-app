@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Briefcase, Building2, Landmark, User, Users,
   Mail, Phone, Lock, Eye, EyeOff, MapPin, Home,
   Search, Info, UserPlus, ChevronDown, Rocket,
   ShieldCheck, Headphones, AlertCircle, CheckCircle2,
   Check, Receipt, Wrench, Zap, Droplets, Hammer,
-  Paintbrush, Package, HardHat, Sparkles
+  Paintbrush, Package, HardHat, Sparkles, Plus, X
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
@@ -20,28 +20,14 @@ const INDIAN_STATES = [
   'Himachal Pradesh', 'Goa', 'Jammu and Kashmir', 'Chandigarh'
 ];
 
-// Skilled Labor & Service trades
-const LABOR_TRADES = [
-  { id: 'Electrician', label: 'Electrician', icon: Zap, desc: 'Wiring, fixtures, inverters & switchboards' },
-  { id: 'Plumber', label: 'Plumber', icon: Wrench, desc: 'Pipes, sanitaryware, pumps & leakage fixes' },
-  { id: 'Waterproofing', label: 'Waterproofing', icon: Droplets, desc: 'Terrace, bathroom & basement waterproofing' },
-  { id: 'Mason', label: 'Mason / Masonry', icon: Building2, desc: 'Brickwork, plastering, concrete & tiles' },
-  { id: 'Carpenter', label: 'Carpenter', icon: Hammer, desc: 'Wooden furniture, doors, kitchens & repairs' },
-  { id: 'Painter', label: 'Painter', icon: Paintbrush, desc: 'Interior & exterior wall coating, textures' },
-  { id: 'Helper', label: 'Helper / Labor', icon: HardHat, desc: 'General assistance, site shifting & support' },
-  { id: 'AC_Appliances', label: 'AC & Appliances', icon: Sparkles, desc: 'HVAC repair, installation & appliance servicing' }
-];
-
-// Material Supply Categories
-const MATERIAL_CATEGORIES = [
-  'Cement & Aggregate', 'TMT Steel & Iron Rods', 'Plywood, Timber & Laminates',
-  'Pipes & Plumbing Hardware', 'Electrical Hardware & Wires', 'Paints, Putty & Waterproofing Chemicals',
-  'Tiles, Marbles & Sanitaryware', 'Bricks, Stone & AAC Blocks'
-];
-
 export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin }) {
   // Business Ownership Toggle: False = Individual / Freelancer, True = Registered Business
   const [hasBusiness, setHasBusiness] = useState(false);
+
+  // Dynamic Catalog State from Backend PostgreSQL
+  const [dbServices, setDbServices] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [materialCatalog, setMaterialCatalog] = useState([]);
 
   // Common Identity
   const [fullName, setFullName] = useState('');
@@ -54,9 +40,17 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
 
   // Classification: LABOR, MATERIAL, or BOTH
   const [vendorType, setVendorType] = useState('LABOR'); // 'LABOR' | 'MATERIAL' | 'BOTH'
-  const [primaryTrade, setPrimaryTrade] = useState('Electrician');
-  const [selectedLaborTrades, setSelectedLaborTrades] = useState(['Electrician']);
+  
+  // Dynamic Service & Sub-service Selection
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [selectedSubServices, setSelectedSubServices] = useState([]);
+  const [customTradeInput, setCustomTradeInput] = useState('');
+  const [additionalSkills, setAdditionalSkills] = useState([]);
+
+  // Dynamic Material Selection
   const [selectedMaterials, setSelectedMaterials] = useState([]);
+  const [customMaterialInput, setCustomMaterialInput] = useState('');
+  
   const [experience, setExperience] = useState('3-5 Years');
 
   // Security Credentials
@@ -81,17 +75,87 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Toggle trade in list
-  const toggleLaborTrade = (tradeId) => {
-    setSelectedLaborTrades((prev) => {
-      if (prev.includes(tradeId)) {
-        if (prev.length === 1) return prev; // keep at least 1
-        return prev.filter((t) => t !== tradeId);
+  // Fetch dynamic catalog (live database services, sub-services, and material categories)
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchCatalog = async () => {
+      try {
+        setCatalogLoading(true);
+        // Try unified catalog endpoint
+        let res = await fetch(`${API_BASE}/api/v1/vendors/catalog`);
+        if (!res.ok) {
+          // Fallback to standard services endpoint
+          res = await fetch(`${API_BASE}/api/v1/services`);
+        }
+        const data = await res.json();
+        if (data.success && !isCancelled) {
+          const servicesList = data.services || [];
+          setDbServices(servicesList);
+          if (data.materialCategories) {
+            setMaterialCatalog(data.materialCategories);
+          } else {
+            setMaterialCatalog([
+              'Cement & Aggregate', 'TMT Steel & Iron Rods', 'Plywood, Timber & Laminates',
+              'Pipes & Plumbing Hardware', 'Electrical Hardware & Wires', 'Paints, Putty & Waterproofing Chemicals',
+              'Tiles, Marbles & Sanitaryware', 'Bricks, Stone & AAC Blocks', 'Glass, Aluminum & Hardware'
+            ]);
+          }
+
+          // Default to first service and its subservices
+          if (servicesList.length > 0) {
+            const first = servicesList[0];
+            setSelectedServiceId(first.id);
+            if (first.subServices && first.subServices.length > 0) {
+              setSelectedSubServices([first.subServices[0].titleEn || first.subServices[0].name]);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch dynamic catalog:', err);
+      } finally {
+        if (!isCancelled) setCatalogLoading(false);
+      }
+    };
+
+    fetchCatalog();
+    return () => { isCancelled = true; };
+  }, []);
+
+  // When selected service changes, refresh the active subservices
+  const handleServiceChange = (serviceId) => {
+    setSelectedServiceId(serviceId);
+    const matchedService = dbServices.find((s) => s.id === serviceId);
+    if (matchedService && matchedService.subServices && matchedService.subServices.length > 0) {
+      setSelectedSubServices([matchedService.subServices[0].titleEn || matchedService.subServices[0].name]);
+    } else {
+      setSelectedSubServices([]);
+    }
+  };
+
+  // Toggle subservice in list
+  const toggleSubService = (subTitle) => {
+    setSelectedSubServices((prev) => {
+      if (prev.includes(subTitle)) {
+        if (prev.length === 1 && additionalSkills.length === 0) return prev; // keep at least 1
+        return prev.filter((s) => s !== subTitle);
       } else {
-        return [...prev, tradeId];
+        return [...prev, subTitle];
       }
     });
-    setPrimaryTrade(tradeId);
+  };
+
+  // Add custom trade skill
+  const handleAddCustomSkill = (e) => {
+    if (e) e.preventDefault();
+    const clean = customTradeInput.trim();
+    if (clean && !additionalSkills.includes(clean)) {
+      setAdditionalSkills((prev) => [...prev, clean]);
+      setCustomTradeInput('');
+    }
+  };
+
+  const handleRemoveCustomSkill = (skill) => {
+    setAdditionalSkills((prev) => prev.filter((s) => s !== skill));
   };
 
   // Toggle material in list
@@ -103,6 +167,17 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         return [...prev, mat];
       }
     });
+  };
+
+  // Add custom material
+  const handleAddCustomMaterial = (e) => {
+    if (e) e.preventDefault();
+    const clean = customMaterialInput.trim();
+    if (clean && !materialCatalog.includes(clean)) {
+      setMaterialCatalog((prev) => [...prev, clean]);
+      setSelectedMaterials((prev) => [...prev, clean]);
+      setCustomMaterialInput('');
+    }
   };
 
   // Auto-fetch Indian address via postal PIN code
@@ -151,7 +226,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     // Validation
     const resolvedName = fullName.trim() || (hasBusiness ? businessName.trim() : '');
     if (!resolvedName) {
-      setError(hasBusiness ? 'Please enter authorized contact person or business name.' : 'Please enter your full name.');
+      setError(hasBusiness ? 'Please enter contact person or enterprise name.' : 'Please enter your full legal name.');
       return;
     }
 
@@ -189,17 +264,27 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
       return;
     }
 
+    // Service validation if user selected labor
+    const allLaborTrades = [...selectedSubServices, ...additionalSkills];
+    if ((vendorType === 'LABOR' || vendorType === 'BOTH') && allLaborTrades.length === 0) {
+      setError('Please select at least one service trade or work section.');
+      return;
+    }
+
     setLoading(true);
 
     try {
+      const activeServiceObj = dbServices.find((s) => s.id === selectedServiceId);
+      const serviceName = activeServiceObj?.name || 'General Construction Services';
+
       // Build specialization string
-      let specialization = primaryTrade;
+      let specialization = serviceName;
       if (vendorType === 'MATERIAL') {
-        specialization = selectedMaterials.join(', ') || 'Material Supplier';
+        specialization = selectedMaterials.join(', ') || 'Material Trader & Supplier';
       } else if (vendorType === 'BOTH') {
-        specialization = `${primaryTrade} & Material Supply`;
+        specialization = `${serviceName} & Material Supply`;
       } else {
-        specialization = selectedLaborTrades.join(', ') || primaryTrade;
+        specialization = allLaborTrades.slice(0, 3).join(', ') || serviceName;
       }
 
       const payload = {
@@ -207,9 +292,11 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         businessName: hasBusiness ? businessName.trim() : resolvedName,
         phone: cleanPhone,
         email: email.trim() || undefined,
-        category: 'Services',
+        category: (serviceName.toLowerCase().includes('adventure')) ? 'Adventure' : 'Services',
         vendorType,
-        laborCategories: (vendorType === 'LABOR' || vendorType === 'BOTH') ? selectedLaborTrades : [],
+        serviceId: selectedServiceId || undefined,
+        serviceName,
+        laborCategories: (vendorType === 'LABOR' || vendorType === 'BOTH') ? allLaborTrades : [],
         materialCategories: (vendorType === 'MATERIAL' || vendorType === 'BOTH') ? selectedMaterials : [],
         specialization,
         experience,
@@ -269,10 +356,13 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     }
   };
 
+  // Find currently selected service object
+  const currentService = dbServices.find((s) => s.id === selectedServiceId) || dbServices[0];
+
   return (
     <div className="min-h-screen bg-[#F8FAFD] text-slate-800 flex flex-col justify-between font-sans antialiased relative overflow-hidden select-none">
       
-      {/* Background Soft Lighting Gradients */}
+      {/* Background Soft Ambient Gradients */}
       <div className="absolute -top-32 -right-32 w-[540px] h-[540px] rounded-full bg-[#EBF3FE]/75 blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full bg-[#EEF5FF]/85 blur-3xl pointer-events-none"></div>
 
@@ -291,7 +381,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               <span className="text-[13.5px] font-semibold text-[#1E293B]">Partner Onboarding</span>
             </div>
             <p className="text-[10.5px] text-slate-400 font-normal mt-0.5 tracking-tight">
-              Service, Trade & Contractor Gateway
+              Dynamic Service & Trade Gateway
             </p>
           </div>
         </div>
@@ -373,7 +463,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               Grow Together<br />with Hipro
             </h1>
             <p className="text-[14px] text-slate-500 font-normal mt-1 leading-snug">
-              Partner with us for<br />better business growth.
+              Connect to 100+ live civil projects & service requests daily.
             </p>
           </div>
 
@@ -385,10 +475,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Expand Your Business
+                  Direct Work Dispatch
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Get daily leads & RFQ jobs
+                  Assigned directly by Civil Engineers
                 </p>
               </div>
             </div>
@@ -399,10 +489,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Trusted Platform
+                  Guaranteed Settlements
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Guaranteed safe payouts
+                  100% Milestone-based escrow security
                 </p>
               </div>
             </div>
@@ -413,10 +503,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Dedicated Support
+                  Procurement Support
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Engineer & purchase assistance
+                  Transparent RFQ quotations
                 </p>
               </div>
             </div>
@@ -425,7 +515,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         </div>
 
         {/* Right Side: Registration Form Card */}
-        <div className="w-full max-w-[640px]">
+        <div className="w-full max-w-[650px]">
           <div className="bg-white rounded-[28px] px-7 sm:px-9 py-8 sm:py-9 shadow-[0_15px_45px_rgba(15,23,42,0.06)] border border-slate-100">
             
             {/* Top Briefcase Icon */}
@@ -439,7 +529,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                 Register as a Hipro Partner
               </h2>
               <p className="text-[12.5px] text-slate-500 font-normal mt-0.5">
-                Fill in the details below to become an onboarded service partner with Hipro.
+                Onboard your skilled services or material inventory onto Hipro.
               </p>
             </div>
 
@@ -467,7 +557,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   </div>
                   <p className="text-[11.5px] text-slate-500 font-normal mt-1 leading-none">
                     {hasBusiness 
-                      ? 'Enterprise Account: Enter Business Name, Category & optional GST' 
+                      ? 'Enterprise Account: Enter Business Name & optional GST' 
                       : 'Individual Account: Only your name, trade skill & address required'}
                   </p>
                 </div>
@@ -572,24 +662,25 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
 
               {/* ======================================================== */}
-              {/* SECTION 2: Work Classification & Trade / Skills Selection */}
+              {/* SECTION 2: Work Classification & DYNAMIC CATEGORIES FROM DB */}
               {/* ======================================================== */}
-              <div className="space-y-3.5 pt-3 border-t border-slate-100">
+              <div className="space-y-4 pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
                     <HardHat className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
                     <span>Work Classification & Trade Skills *</span>
                   </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Select your capability</span>
+                  {catalogLoading && (
+                    <span className="text-[11px] text-[#0B63F6] font-medium animate-pulse">Loading live catalog...</span>
+                  )}
                 </div>
 
-                {/* 3 Type Pills: Labor vs Material vs Both */}
+                {/* 3 Type Selector: Labor vs Material vs Both */}
                 <div>
                   <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
-                    What type of services or products do you provide? *
+                    What type of services or materials do you provide? *
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    {/* Labor / Services */}
                     <button
                       type="button"
                       onClick={() => setVendorType('LABOR')}
@@ -603,7 +694,6 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       <span>Labor & Services</span>
                     </button>
 
-                    {/* Material */}
                     <button
                       type="button"
                       onClick={() => setVendorType('MATERIAL')}
@@ -617,7 +707,6 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       <span>Material Supply</span>
                     </button>
 
-                    {/* Both */}
                     <button
                       type="button"
                       onClick={() => setVendorType('BOTH')}
@@ -633,61 +722,154 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   </div>
                 </div>
 
-                {/* CONDITIONAL: Show Skilled Labor Trades when LABOR or BOTH is active */}
+                {/* ======================================================== */}
+                {/* DYNAMIC SERVICE CATEGORY & WORK SECTIONS (When LABOR or BOTH) */}
+                {/* ======================================================== */}
                 {(vendorType === 'LABOR' || vendorType === 'BOTH') && (
-                  <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
-                    <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                      Service & Maintenance Trades <span className="text-slate-400 font-normal">(Click all that apply)</span>:
-                    </label>
-
-                    {/* Grid of Trade Cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {LABOR_TRADES.map((t) => {
-                        const Icon = t.icon;
-                        const isSelected = selectedLaborTrades.includes(t.id);
-                        return (
-                          <div
-                            key={t.id}
-                            onClick={() => toggleLaborTrade(t.id)}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                              isSelected
-                                ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
-                                : 'bg-white border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                                <Icon className="w-3.5 h-3.5" />
-                              </div>
-                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'}`}>
-                                {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                              </div>
-                            </div>
-                            <div>
-                              <div className={`text-[12px] font-semibold leading-tight ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                                {t.label}
-                              </div>
-                              <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
-                                {t.desc}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                  <div className="space-y-3.5 pt-1 animate-in fade-in duration-200">
+                    
+                    {/* Dynamic Primary Category Dropdown from DB */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                          Service Domain / Work Category * <span className="text-[#0B63F6] font-normal">(Live from Catalog)</span>
+                        </label>
+                        <span className="text-[10.5px] text-slate-400">
+                          {dbServices.length} categories available
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                          <Landmark className="w-4 h-4" strokeWidth={1.8} />
+                        </div>
+                        <select
+                          value={selectedServiceId}
+                          onChange={(e) => handleServiceChange(e.target.value)}
+                          className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                        >
+                          {dbServices.map((srv) => (
+                            <option key={srv.id} value={srv.id}>
+                              {srv.name} ({srv.subServices?.length || 0} work sections)
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                          <ChevronDown className="w-4 h-4" />
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Dynamic Sub-services / Work Sections belonging to this Service */}
+                    {currentService && currentService.subServices && currentService.subServices.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                            Work Sections in <span className="text-[#0B63F6] font-bold">"{currentService.name}"</span>:
+                          </label>
+                          <span className="text-[10.5px] text-slate-400">Select what you do</span>
+                        </div>
+
+                        {/* Interactive dynamic sub-service cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {currentService.subServices.map((sub) => {
+                            const title = sub.titleEn || sub.name;
+                            const isSelected = selectedSubServices.includes(title);
+                            return (
+                              <div
+                                key={sub.id}
+                                onClick={() => toggleSubService(title)}
+                                className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
+                                  isSelected
+                                    ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
+                                    : 'bg-white border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="space-y-0.5">
+                                  <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                                    {title}
+                                  </div>
+                                  {sub.desc && (
+                                    <p className="text-[10.5px] text-slate-400 line-clamp-1">
+                                      {sub.desc}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
+                                  isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
+                                }`}>
+                                  {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Custom Trade / Skill Addition */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="block text-[11px] font-medium text-slate-600">
+                        Have other specialized skills or trade tools?
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={customTradeInput}
+                          onChange={(e) => setCustomTradeInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
+                          placeholder="e.g. Copper Gas Piping, Core Cutting, Epoxy Grouting"
+                          className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomSkill}
+                          className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Skill</span>
+                        </button>
+                      </div>
+
+                      {/* Display Custom Added Skills */}
+                      {additionalSkills.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1.5">
+                          {additionalSkills.map((sk) => (
+                            <span
+                              key={sk}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium"
+                            >
+                              <span>{sk}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCustomSkill(sk)}
+                                className="hover:text-red-600 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 )}
 
-                {/* CONDITIONAL: Show Material Supply Categories when MATERIAL or BOTH is active */}
+                {/* ======================================================== */}
+                {/* DYNAMIC MATERIAL SUPPLY CATEGORIES (When MATERIAL or BOTH) */}
+                {/* ======================================================== */}
                 {(vendorType === 'MATERIAL' || vendorType === 'BOTH') && (
-                  <div className="space-y-2 pt-1 animate-in fade-in duration-200">
-                    <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                      Material Categories Supplied <span className="text-slate-400 font-normal">(Click all you stock / supply)</span>:
-                    </label>
+                  <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                        Material Categories Supplied <span className="text-slate-400 font-normal">(Click all that you stock)</span>:
+                      </label>
+                      <span className="text-[10.5px] text-slate-400">{selectedMaterials.length} selected</span>
+                    </div>
 
                     {/* Badges of Material Categories */}
                     <div className="flex flex-wrap gap-2">
-                      {MATERIAL_CATEGORIES.map((cat) => {
+                      {materialCatalog.map((cat) => {
                         const isSelected = selectedMaterials.includes(cat);
                         return (
                           <button
@@ -696,7 +878,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                             onClick={() => toggleMaterial(cat)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 ${
                               isSelected
-                                ? 'bg-[#0B63F6] text-white border-[#0B63F6]'
+                                ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-2xs'
                                 : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                             }`}
                           >
@@ -705,6 +887,26 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                           </button>
                         );
                       })}
+                    </div>
+
+                    {/* Add Custom Material Option */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        value={customMaterialInput}
+                        onChange={(e) => setCustomMaterialInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomMaterial(e); }}
+                        placeholder="Add other material or product line..."
+                        className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomMaterial}
+                        className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add</span>
+                      </button>
                     </div>
                   </div>
                 )}

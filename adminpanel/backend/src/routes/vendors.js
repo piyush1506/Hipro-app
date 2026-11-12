@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const prisma = require('../prisma');
 const {
   getVendors,
   getVendorCategories,
@@ -30,6 +31,36 @@ const {
 // ==========================================
 // 1. SPECIFIC SUB-ROUTES (Must be before /:id)
 // ==========================================
+
+// Dynamic Vendor Onboarding Catalog (Live Services, Sub-services & Material Categories)
+router.get('/catalog', async (req, res) => {
+  try {
+    const services = await prisma.service.findMany({
+      where: { isActive: true },
+      include: {
+        subServices: {
+          where: { isActive: true },
+          select: { id: true, titleEn: true, titleHi: true, desc: true }
+        }
+      },
+      orderBy: { created_at: 'asc' }
+    });
+
+    const materialCategories = [
+      'Cement & Aggregate', 'TMT Steel & Iron Rods', 'Plywood, Timber & Laminates',
+      'Pipes & Plumbing Hardware', 'Electrical Hardware & Wires', 'Paints, Putty & Waterproofing Chemicals',
+      'Tiles, Marbles & Sanitaryware', 'Bricks, Stone & AAC Blocks', 'Glass, Aluminum & Hardware'
+    ];
+
+    res.json({
+      success: true,
+      services,
+      materialCategories
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Vendor categories list with live count
 router.get('/categories', getVendorCategories);
