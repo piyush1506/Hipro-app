@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { io } from 'socket.io-client';
 import {
   LayoutDashboard, ClipboardList, Briefcase, FileText, Share2, CheckSquare, Square, Receipt, Calculator,
@@ -18,6 +18,8 @@ import RequirementBuilderView from './components/pipeline/RequirementBuilderView
 import ProcurementRFQView from './components/pipeline/ProcurementRFQView.jsx';
 import ProjectsExecutionView from './components/pipeline/ProjectsExecutionView.jsx';
 import StaffRoleManagerView from './components/pipeline/StaffRoleManagerView.jsx';
+import AnimatedNumber from './components/ui/AnimatedNumber.jsx';
+import { downloadQuotationPdf } from './utils/quotationPdf.js';
 import {
   clearLegacyRoleCache,
   clearStoredSession,
@@ -145,6 +147,61 @@ function findInitialTab(roleValue, permissionsValue) {
   return null;
 }
 
+const URGENT_LEVELS = ['URGENT', 'HIGH', 'CRITICAL'];
+
+/**
+ * Urgency flags arrive from the API with inconsistent casing (and sometimes
+ * as `Normal` / `high`), so every comparison must be case-insensitive.
+ */
+function isUrgentRequest(request) {
+  return URGENT_LEVELS.includes(String(request?.urgency || '').trim().toUpperCase());
+}
+
+/**
+ * Resolves the quotation/BOQ linked to an inspection request.
+ *
+ * The API exposes the link under three different keys depending on the
+ * endpoint that produced the request (`requestId`, `requestNumber`, or an
+ * embedded `quotations` array), so we check all of them before giving up.
+ *
+ * When several quotations match, the accepted one wins; otherwise the most
+ * recently created quotation is used so a stale/rejected BOQ never shadows
+ * the current commercial state of the request.
+ */
+function findLinkedQuotation(request, quotations) {
+  if (!request) return null;
+
+  const embedded = request.quotations?.[0];
+  if (embedded) return embedded;
+
+  if (!Array.isArray(quotations) || quotations.length === 0) return null;
+
+  const requestId = request.id;
+  const requestNumber = request.requestNumber;
+
+  const matches = quotations.filter((item) => {
+    if (!item) return false;
+    if (item.requestId != null && requestId != null && String(item.requestId) === String(requestId)) return true;
+    if (item.requestNumber != null && requestNumber != null && String(item.requestNumber) === String(requestNumber)) return true;
+    // Some payloads link a quotation using the request number stored in requestId.
+    if (item.requestId != null && requestNumber != null && String(item.requestId) === String(requestNumber)) return true;
+    return false;
+  });
+
+  if (matches.length === 0) return null;
+
+  const accepted = matches.find(item => String(item.status || '').toUpperCase() === 'ACCEPTED');
+  if (accepted) return accepted;
+
+  const sorted = [...matches].sort((a, b) => {
+    const aTime = new Date(a.created_at || a.createdAt || 0).getTime() || 0;
+    const bTime = new Date(b.created_at || b.createdAt || 0).getTime() || 0;
+    return bTime - aTime;
+  });
+
+  return sorted[0] || null;
+}
+
 export default function AdminApp({ currentUserRole: propUserRole, initialPermissions, initialStaff, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
   const [currentUserRole, setCurrentUserRole] = useState(() => normalizeRoleName(propUserRole));
 
@@ -228,6 +285,8 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
   const [requests, setRequests] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [services, setServices] = useState([]);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [serviceModeFilter, setServiceModeFilter] = useState('ALL'); // 'ALL' | 'BOOK_NOW' | 'QUOTE_ONLY'
   const [users, setUsers] = useState([]);
   const [userDetailModalOpen, setUserDetailModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -1340,6 +1399,41 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
       fetchRequests(true);
     });
 
+    // Real-time quotation lifecycle (issued / accepted / rejected / adjusted)
+    socket.on('quotation_updated', (payload) => {
+      if (!payload) return;
+      if (payload.id) {
+        setQuotations(prev => prev.map(q => (q.id === payload.id ? { ...q, ...payload } : q)));
+      }
+      if (payload.status) {
+        fetchQuotations();
+        fetchRequests(true);
+        fetchStats(true);
+        showToastMsg(`🧾 Quotation ${payload.quoteNumber || ''} → ${payload.status}`, 'info');
+      }
+    });
+
+    socket.on('new_quotation_alert', (item) => {
+      if (!item) return;
+      fetchQuotations();
+      fetchStats(true);
+      showToastMsg(`🧾 ${item.title || 'New quotation dispatched'}`, 'success');
+    });
+
+    socket.on('push_notification', (item) => {
+      if (!item || !item.title) return;
+      showToastMsg(`🔔 ${item.title}`, 'info');
+    });
+
+    // Booking / request status synchronisation performed by the backend
+    socket.on('booking_status_synced', (payload) => {
+      if (!payload) return;
+      fetchDirectBookings();
+      if (payload.requestNumber) {
+        showToastMsg(`🔗 ${payload.requestNumber} synced with booking (${payload.status || 'updated'})`, 'info');
+      }
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
@@ -1910,6 +2004,60 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
     } catch (e) { console.error(e); }
   };
 
+  /**
+   * Services Catalog search / filter.
+   * Matches categories by name, code or description and sub-services by title
+   * (English / Hindi) or description. A matching category keeps all of its
+   * sub-services so the admin still sees the full catalog of that category.
+   */
+  const filteredServices = useMemo(() => {
+    const query = serviceSearch.trim().toLowerCase();
+    const isFiltering = query.length > 0 || serviceModeFilter !== 'ALL';
+
+    return (services || [])
+      .map(svc => {
+        const subs = Array.isArray(svc.subServices) ? svc.subServices : [];
+
+        const categoryMatches = !query || [
+          svc.name,
+          svc.code,
+          svc.description,
+        ].some(field => String(field || '').toLowerCase().includes(query));
+
+        const matchesMode = (sub) => {
+          if (serviceModeFilter === 'ALL') return true;
+          if (serviceModeFilter === 'BOOK_NOW') return sub.bookNowEnabled !== false;
+          if (serviceModeFilter === 'QUOTE_ONLY') return sub.getQuoteEnabled !== false && sub.bookNowEnabled === false;
+          return true;
+        };
+
+        const matchesQuery = (sub) => !query || [
+          sub.titleEn,
+          sub.titleHi,
+          sub.desc,
+          sub.code,
+        ].some(field => String(field || '').toLowerCase().includes(query));
+
+        const visibleSubs = categoryMatches
+          ? subs.filter(matchesMode)
+          : subs.filter(sub => matchesMode(sub) && matchesQuery(sub));
+
+        return { ...svc, subServices: visibleSubs, categoryMatches };
+      })
+      .filter(svc => !isFiltering || svc.categoryMatches || svc.subServices.length > 0);
+  }, [services, serviceSearch, serviceModeFilter]);
+
+  const servicesCatalogStats = useMemo(() => {
+    const totalSubs = (services || []).reduce((sum, svc) => sum + (Array.isArray(svc.subServices) ? svc.subServices.length : 0), 0);
+    const visibleSubs = filteredServices.reduce((sum, svc) => sum + (svc.subServices?.length || 0), 0);
+    return {
+      categories: (services || []).length,
+      totalSubs,
+      visibleCategories: filteredServices.length,
+      visibleSubs,
+    };
+  }, [services, filteredServices]);
+
   const fetchEntCategories = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/ent/categories`);
@@ -2322,6 +2470,12 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
         }
         fetchDirectBookings();
         fetchDirectBookingStats();
+        // The backend mirrors the booking lifecycle onto the linked inspection request
+        if (data.syncedRequestStatus) {
+          fetchRequests(true);
+          fetchStats(true);
+          showToastMsg(`Linked request synced → ${data.syncedRequestStatus}`, 'info');
+        }
       } else {
         showToastMsg(data.message || 'Failed to update status', 'error');
       }
@@ -3177,9 +3331,30 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
         fetchQuotations();
         fetchRequests();
         fetchStats();
+        // The backend mirrors the decision onto the linked inspection request
+        if (data.requestStatus) {
+          showToastMsg(`Linked request synced → ${data.requestStatus}`, 'info');
+        }
       }
     } catch (e) {
       showToastMsg('Failed to update decision', 'error');
+    }
+  };
+
+  const handleDownloadQuotationPdf = (quote, options = {}) => {
+    if (!quote) return;
+    try {
+      const outcome = downloadQuotationPdf(quote, options);
+      if (outcome === 'opened') {
+        showToastMsg(`PDF ready for ${quote.quoteNumber || 'quotation'} — choose "Save as PDF"`, 'success');
+      } else if (outcome === 'downloaded') {
+        showToastMsg('Popup blocked — the printable document was downloaded instead', 'info');
+      } else {
+        showToastMsg('Could not generate the PDF document', 'error');
+      }
+    } catch (error) {
+      console.error('Quotation PDF export failed:', error);
+      showToastMsg('Could not generate the PDF document', 'error');
     }
   };
 
@@ -4134,11 +4309,11 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
 
             // Inspection Requests breakdown (synchronized with quotations desk)
             const readyRequests = filteredByCityRequests.filter(r => {
-              const q = r.quotations?.[0] || quotations.find(item => item.requestId === r.id || item.requestNumber === r.requestNumber || item.requestId === r.requestNumber);
+              const q = findLinkedQuotation(r, quotations);
               return (r.status || '').toUpperCase() === 'ACCEPTED' || (q && (q.status || '').toUpperCase() === 'ACCEPTED');
             });
             const needsQuoteRequests = filteredByCityRequests.filter(r => {
-              const q = r.quotations?.[0] || quotations.find(item => item.requestId === r.id || item.requestNumber === r.requestNumber || item.requestId === r.requestNumber);
+              const q = findLinkedQuotation(r, quotations);
               return ['SUBMITTED', 'ESTIMATING'].includes((r.status || '').toUpperCase()) && (!q || !['QUOTED', 'ACCEPTED'].includes((q.status || '').toUpperCase()));
             });
             const auditScheduledRequests = filteredByCityRequests.filter(r =>
@@ -4188,7 +4363,7 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
             // Filtered lists for active section
             const searchLower = overviewSearch.toLowerCase().trim();
             const displayRequests = filteredByCityRequests.filter(req => {
-              const q = req.quotations?.[0] || quotations.find(item => item.requestId === req.id || item.requestNumber === req.requestNumber || item.requestId === req.requestNumber);
+              const q = findLinkedQuotation(req, quotations);
               const isReady = (req.status || '').toUpperCase() === 'ACCEPTED' || (q && (q.status || '').toUpperCase() === 'ACCEPTED');
               const isNeedsQuote = ['SUBMITTED', 'ESTIMATING'].includes((req.status || '').toUpperCase()) && (!q || !['QUOTED', 'ACCEPTED'].includes((q.status || '').toUpperCase()));
               const isAudit = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
@@ -4345,17 +4520,17 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                       </div>
                     </div>
                     <div className="font-heading font-bold text-3xl text-slate-900 mt-2">
-                      {filteredByCityRequests.length}
+                      <AnimatedNumber value={filteredByCityRequests.length} />
                     </div>
                     <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-warning-50 text-warning-800 border border-warning-200">
-                        {needsQuoteRequests.length} Needs BOQ
+                        <AnimatedNumber value={needsQuoteRequests.length} /> Needs BOQ
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {readyRequests.length} Ready
+                        <AnimatedNumber value={readyRequests.length} /> Ready
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                        {auditScheduledRequests.length} Audit
+                        <AnimatedNumber value={auditScheduledRequests.length} /> Audit
                       </span>
                     </div>
                     <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
@@ -4380,17 +4555,17 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                       </div>
                     </div>
                     <div className="font-heading font-bold text-3xl text-slate-900 mt-2">
-                      {filteredByCityBookings.length}
+                      <AnimatedNumber value={filteredByCityBookings.length} />
                     </div>
                     <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {confirmedBookings.length} Confirmed
+                        <AnimatedNumber value={confirmedBookings.length} /> Confirmed
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                        {assignedBookings.length} Assigned
+                        <AnimatedNumber value={assignedBookings.length} /> Assigned
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
-                        {completedBookings.length} Done
+                        <AnimatedNumber value={completedBookings.length} /> Done
                       </span>
                     </div>
                     <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
@@ -4415,12 +4590,14 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                       </div>
                     </div>
                     <div className="font-heading font-bold text-3xl text-slate-900 mt-2 flex items-baseline gap-2">
-                      <span>{filteredByCityQuotes.length}</span>
-                      <span className="text-xs font-bold text-emerald-600">({conversionRatePct}% Accepted)</span>
+                      <span><AnimatedNumber value={filteredByCityQuotes.length} /></span>
+                      <span className="text-xs font-bold text-emerald-600">
+                        (<AnimatedNumber value={conversionRatePct} />% Accepted)
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900">
-                        {acceptedQuotes.length} Deals Won
+                        <AnimatedNumber value={acceptedQuotes.length} /> Deals Won
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
                         Avg Ticket: ₹{avgQuoteTicket.toLocaleString('en-IN')}
@@ -4448,17 +4625,17 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                       </div>
                     </div>
                     <div className="font-heading font-bold text-3xl text-slate-900 mt-2">
-                      {filteredByCityVendors.length}
+                      <AnimatedNumber value={filteredByCityVendors.length} />
                     </div>
                     <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {activeVendors.length} Active
+                        <AnimatedNumber value={activeVendors.length} /> Active
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                        {serviceVendors.length} Services
+                        <AnimatedNumber value={serviceVendors.length} /> Services
                       </span>
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                        {adventureVendors.length} Adventure
+                        <AnimatedNumber value={adventureVendors.length} /> Adventure
                       </span>
                     </div>
                     <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
@@ -4692,7 +4869,7 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                             className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
                               overviewFilter === flt.id
                                 ? (flt.highlight ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-900 text-white border-slate-900 shadow-xs')
-                                : (flt.highlight ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100')
+                                : (flt.highlight ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100')
                             }`}
                           >
                             <span>{flt.label}</span>
@@ -4705,6 +4882,73 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                         ))}
                       </div>
                     )}
+
+                    {/* Active filter chips (removable) */}
+                    {(() => {
+                      const chips = [];
+
+                      if (overviewCityFilter !== 'ALL') {
+                        chips.push({
+                          key: 'city',
+                          label: `Hub: ${overviewCityFilter}`,
+                          onRemove: () => setOverviewCityFilter('ALL'),
+                        });
+                      }
+
+                      if (overviewActiveSection === 'requests' && overviewFilter !== 'ALL') {
+                        const labels = {
+                          READY: 'Ready for execution',
+                          NEEDS_QUOTE: 'Needs BOQ',
+                          AUDIT: 'Audit scheduled',
+                        };
+                        chips.push({
+                          key: 'status',
+                          label: labels[overviewFilter] || overviewFilter,
+                          onRemove: () => setOverviewFilter('ALL'),
+                        });
+                      }
+
+                      if (overviewSearch.trim()) {
+                        chips.push({
+                          key: 'search',
+                          label: `Search: "${overviewSearch.trim()}"`,
+                          onRemove: () => setOverviewSearch(''),
+                        });
+                      }
+
+                      if (chips.length === 0) return null;
+
+                      return (
+                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active filters</span>
+                          {chips.map(chip => (
+                            <span
+                              key={chip.key}
+                              className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-[11px] font-bold"
+                            >
+                              {chip.label}
+                              <button
+                                onClick={chip.onRemove}
+                                title="Remove filter"
+                                className="w-4 h-4 rounded-full bg-white/70 hover:bg-white text-brand-600 flex items-center justify-center transition-all"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </span>
+                          ))}
+                          <button
+                            onClick={() => {
+                              setOverviewCityFilter('ALL');
+                              setOverviewFilter('ALL');
+                              setOverviewSearch('');
+                            }}
+                            className="px-2 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold transition-all"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Dynamic Table Content Based On Active Section */}
@@ -4734,11 +4978,11 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                           ) : (
                             displayRequests.map(req => {
                               const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
-                              const q = req.quotations?.[0] || quotations.find(item => item.requestId === req.id);
+                              const q = findLinkedQuotation(req, quotations);
                               const isAccepted = (req.status || '').toUpperCase() === 'ACCEPTED' || (q && (q.status || '').toUpperCase() === 'ACCEPTED');
                               const isQuoted = (req.status || '').toUpperCase() === 'QUOTED' || (q && (q.status || '').toUpperCase() === 'QUOTED');
                               const isNeedsQuote = ['SUBMITTED', 'ESTIMATING'].includes((req.status || '').toUpperCase()) && !q;
-                              const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
+                              const isUrgent = isUrgentRequest(req);
                               const assignedEngName = req.assignedVendorName || (req.vendorId && vendors.find(v => v.id === req.vendorId)?.name) || req.technicianName || null;
                               const isAssigningThis = assigningEngineerReqId === req.id;
 
@@ -4958,6 +5202,15 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                                         >
                                           <Eye className="w-3 h-3 text-slate-700" />
                                         </button>
+                                        {q && (
+                                          <button
+                                            onClick={() => handleDownloadQuotationPdf({ ...q, request: q.request || req })}
+                                            className="p-1 rounded-md bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 transition-all"
+                                            title="Generate PDF for the linked quotation"
+                                          >
+                                            <FileText className="w-3 h-3" />
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => openChatForRequest(req)}
                                           className="p-1 rounded-md bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 transition-all"
@@ -5321,11 +5574,11 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
               const media = Array.isArray(req.mediaUrl) 
                 ? req.mediaUrl 
                 : (req.mediaUrl ? [req.mediaUrl] : (Array.isArray(req.damageImages) ? req.damageImages : []));
-              const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
+              const isUrgent = isUrgentRequest(req);
               const isAuditScheduled = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
-              const hasQuote = (req.quotations || []).length > 0 || quotations.some(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+              const hasQuote = !!findLinkedQuotation(req, quotations);
               const assignedVendor = vendors.find(v => v.id === req.vendorId || v.name === req.assignedVendorName || v.businessName === req.assignedVendorName);
-              const linkedBOQ = req.quotations?.[0] || quotations.find(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+              const linkedBOQ = findLinkedQuotation(req, quotations);
               const vendorQuotesList = req.vendorQuotes || [];
               const lowestVendorQuote = vendorQuotesList.length > 0 ? Math.min(...vendorQuotesList.map(q => q.quotePrice)) : null;
               const highestVendorQuote = vendorQuotesList.length > 0 ? Math.max(...vendorQuotesList.map(q => q.quotePrice)) : null;
@@ -6433,9 +6686,9 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                   <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
                     {displayRequests.map(req => {
                       const media = Array.isArray(req.mediaUrl) ? req.mediaUrl : (req.mediaUrl ? [req.mediaUrl] : []);
-                      const isUrgent = ['URGENT', 'HIGH', 'CRITICAL'].includes((req.urgency || '').toUpperCase());
+                      const isUrgent = isUrgentRequest(req);
                       const isAuditScheduled = (req.status || '').toUpperCase() === 'AUDIT_SCHEDULED' || (req.status || '').toUpperCase() === 'SITE_AUDIT' || req.requiresSiteAudit;
-                      const hasQuote = (req.quotations || []).length > 0 || quotations.some(q => q.requestId === req.id || q.requestNumber === req.requestNumber);
+                      const hasQuote = !!findLinkedQuotation(req, quotations);
                       const assignedVendor = vendors.find(v => v.id === req.vendorId);
 
                       return (
@@ -7177,6 +7430,13 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                                 title="View Quotation Details"
                               >
                                 <Eye className="w-3.5 h-3.5 text-brand-600" /> Details
+                              </button>
+                              <button
+                                onClick={() => handleDownloadQuotationPdf(q)}
+                                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs"
+                                title="Generate PDF document"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-slate-600" /> PDF
                               </button>
                               {q.status !== 'ACCEPTED' && (
                                 <button
@@ -10163,8 +10423,77 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                 </div>
               </div>
 
+              {/* Catalog search & filters */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="relative w-full lg:w-96">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={serviceSearch}
+                      onChange={(e) => setServiceSearch(e.target.value)}
+                      placeholder="Search services by code, name or description..."
+                      className="w-full pl-9 pr-9 py-2 text-xs bg-slate-50 focus:bg-white text-slate-700 placeholder-slate-400 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500/20 focus:border-brand-500 font-semibold"
+                    />
+                    {serviceSearch && (
+                      <button
+                        onClick={() => setServiceSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        title="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { id: 'ALL', label: 'All Sub-Services' },
+                      { id: 'BOOK_NOW', label: 'Book Now Enabled' },
+                      { id: 'QUOTE_ONLY', label: 'Get Quote Only' },
+                    ].map(mode => (
+                      <button
+                        key={mode.id}
+                        onClick={() => setServiceModeFilter(mode.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                          serviceModeFilter === mode.id
+                            ? 'bg-brand-600 text-white border-brand-600 shadow-xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap text-[11px] font-semibold text-slate-500">
+                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                    Showing {servicesCatalogStats.visibleCategories} / {servicesCatalogStats.categories} categories
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                    {servicesCatalogStats.visibleSubs} / {servicesCatalogStats.totalSubs} sub-services
+                  </span>
+                  {(serviceSearch || serviceModeFilter !== 'ALL') && (
+                    <button
+                      onClick={() => { setServiceSearch(''); setServiceModeFilter('ALL'); }}
+                      className="px-2 py-0.5 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all"
+                    >
+                      Reset filters
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-4">
-                {services.map(svc => (
+                {filteredServices.length === 0 ? (
+                  <div className="p-10 rounded-2xl bg-white border border-slate-200/80 shadow-xs text-center space-y-2">
+                    <Search className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="font-bold text-sm text-slate-700">No services matched your search</p>
+                    <p className="text-xs text-slate-400">Try a different keyword or reset the filters to see the full catalog.</p>
+                  </div>
+                ) : (
+                filteredServices.map(svc => (
                   <div key={svc.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                       <div className="flex items-center gap-2.5">
@@ -10299,7 +10628,8 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                       ))}
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
           )}
@@ -11071,8 +11401,8 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-[10px] text-brand-600">{req.requestNumber}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${req.urgency === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                              {req.urgency || 'NORMAL'}
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isUrgentRequest(req) ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                              {(req.urgency || 'NORMAL').toString().toUpperCase()}
                             </span>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${req.status === 'COMPLETED' ? 'bg-success-50 text-success-700 border border-success-200' : req.status === 'ASSIGNED' ? 'bg-brand-50 text-brand-700 border border-brand-200' : req.status === 'QUOTE_REQUESTED' ? 'bg-accent-50 text-accent-700 border border-accent-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
@@ -12359,6 +12689,13 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                 </button>
                 <button onClick={() => window.print()} className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition-all">
                   <Printer className="w-3 h-3" /> Print / PDF
+                </button>
+                <button
+                  onClick={() => handleDownloadQuotationPdf(activeQuoteModal)}
+                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg shadow-xs transition-all"
+                  title="Open a standalone PDF-ready document"
+                >
+                  <FileText className="w-3 h-3" /> Download PDF
                 </button>
                 <button onClick={() => setActiveQuoteModal(null)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200">
                   <X className="w-4 h-4" />
@@ -14647,8 +14984,8 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-[10px] text-brand-600">{req.requestNumber}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${req.urgency === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                              {req.urgency || 'NORMAL'}
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isUrgentRequest(req) ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                              {(req.urgency || 'NORMAL').toString().toUpperCase()}
                             </span>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${req.status === 'COMPLETED' ? 'bg-success-50 text-success-700 border border-success-200' : req.status === 'ASSIGNED' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>

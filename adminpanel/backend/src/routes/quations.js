@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const {
+  syncRequestStatusFromQuotation,
+  emitStatusSync,
+} = require('../services/statusSync.service');
 
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -267,15 +271,22 @@ router.post('/:id/decision', authenticate, async (req, res) => {
       include: { request: true }
     });
 
-    if (quote.requestId) {
-      await prisma.serviceRequest.update({
-        where: { id: quote.requestId },
-        data: { status: decision }
-      });
-    }
+    // Unified status sync: the decision is mirrored onto the inspection request
+    const sync = await syncRequestStatusFromQuotation(prisma, quote, { actor: req.user?.name || 'CUSTOMER' });
 
-    res.json({ success: true, message: `Quotation ${decision}`, data: quote });
+    try {
+      const io = req.app.get('io');
+      emitStatusSync(io, { quotation: quote, request: sync?.request || null, action: 'QUOTATION_DECISION' });
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: `Quotation ${decision}`,
+      data: quote,
+      requestStatus: sync?.request?.status || null,
+    });
   } catch (error) {
+    console.error('Update quotation decision error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update quotation decision'
@@ -294,14 +305,22 @@ router.post('/:id/accept', authenticate, async (req, res) => {
       data: { status: 'ACCEPTED' },
       include: { request: true }
     });
-    if (quote && quote.requestId) {
-      await prisma.serviceRequest.update({
-        where: { id: quote.requestId },
-        data: { status: 'ACCEPTED' }
-      });
-    }
-    res.json({ success: true, message: 'Quotation ACCEPTED', data: quote });
+
+    const sync = await syncRequestStatusFromQuotation(prisma, quote, { actor: req.user?.name || 'CUSTOMER' });
+
+    try {
+      const io = req.app.get('io');
+      emitStatusSync(io, { quotation: quote, request: sync?.request || null, action: 'QUOTATION_ACCEPTED' });
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: 'Quotation ACCEPTED',
+      data: quote,
+      requestStatus: sync?.request?.status || null,
+    });
   } catch (error) {
+    console.error('Accept quotation error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to accept quotation' });
   }
 });
@@ -317,14 +336,22 @@ router.post('/:id/reject', authenticate, async (req, res) => {
       data: { status: 'REJECTED' },
       include: { request: true }
     });
-    if (quote && quote.requestId) {
-      await prisma.serviceRequest.update({
-        where: { id: quote.requestId },
-        data: { status: 'REJECTED' }
-      });
-    }
-    res.json({ success: true, message: 'Quotation REJECTED', data: quote });
+
+    const sync = await syncRequestStatusFromQuotation(prisma, quote, { actor: req.user?.name || 'CUSTOMER' });
+
+    try {
+      const io = req.app.get('io');
+      emitStatusSync(io, { quotation: quote, request: sync?.request || null, action: 'QUOTATION_REJECTED' });
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: 'Quotation REJECTED',
+      data: quote,
+      requestStatus: sync?.request?.status || null,
+    });
   } catch (error) {
+    console.error('Reject quotation error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to reject quotation' });
   }
 });

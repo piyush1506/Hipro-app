@@ -595,7 +595,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         setVendorType('LABOR');
                       }
                     }}
-                    className="w-full h-10 pl-10 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
+                    className="w-full h-11 pl-10 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
                   >
                     <option value="Services">Maintenance & Services (Electrician, Plumber, Waterproofing, Civil & Materials)</option>
                     <option value="Adventure">Adventure & Tourism (Paragliding, Trekking, Camping, Desert Safari & Sports)</option>
@@ -686,7 +686,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                             <select
                               value={selectedServiceId}
                               onChange={(e) => handleServiceChange(e.target.value)}
-                              className="w-full h-10 pl-10 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                              className="w-full h-11 pl-10 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
                             >
                               {dbServices.map((srv) => (
                                 <option key={srv.id} value={srv.id}>
@@ -906,14 +906,14 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                     <select
                       value={experience}
                       onChange={(e) => setExperience(e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
+                      className="w-full h-11 px-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
                     >
                       <option value="1-3 Years">Experience: 1 to 3 Years</option>
                       <option value="3-5 Years">Experience: 3 to 5 Years (Standard)</option>
                       <option value="5-10 Years">Experience: 5 to 10 Years (Experienced)</option>
                       <option value="10+ Years">Experience: 10+ Years (Master Contractor)</option>
                     </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                       <ChevronDown className="w-4 h-4" />
                     </div>
                   </div>
@@ -975,7 +975,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder={hasBusiness ? 'Authorized Contact Person Name *' : 'Full Legal Name *'}
-                      className="w-full h-10 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
@@ -993,7 +993,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         value={businessName}
                         onChange={(e) => setBusinessName(e.target.value)}
                         placeholder="Business / Enterprise Name *"
-                        className="w-full h-10 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                        className="w-full h-11 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
 
@@ -1007,7 +1007,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         value={gstinNumber}
                         onChange={(e) => setGstinNumber(e.target.value.toUpperCase())}
                         placeholder="GST Number / GSTIN (Optional)"
-                        className="w-full h-10 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-mono text-[#1E293B] placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300 uppercase"
+                        className="w-full h-11 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-mono text-[#1E293B] placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300 uppercase"
                       />
                     </div>
                   </div>
@@ -1024,7 +1024,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="Email (Optional)"
-                      className="w-full h-10 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
 
@@ -1038,7 +1038,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="Mobile Number *"
-                      className="w-full h-10 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
@@ -1077,14 +1077,14 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         value={pincode}
                         onChange={handlePincodeChange}
                         placeholder="Enter 6 digit PIN code *"
-                        className="w-full h-10 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                        className="w-full h-11 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={() => { if (pincode.length === 6) resolvePincode(pincode); }}
                       disabled={pincode.length !== 6 || fetchingPin}
-                      className="h-10 px-4 bg-[#0B63F6] hover:bg-[#0954D8] text-white text-[11.5px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                      className="h-11 px-4 bg-[#0B63F6] hover:bg-[#0954D8] text-white text-[12px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
                       <Search className="w-3.5 h-3.5" />
                       <span>Fetch</span>
@@ -1111,7 +1111,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={addressLine1}
                       onChange={(e) => setAddressLine1(e.target.value)}
                       placeholder="Address Line 1 *"
-                      className="w-full h-10 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
 
@@ -1124,7 +1124,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={addressLine2}
                       onChange={(e) => setAddressLine2(e.target.value)}
                       placeholder="Address Line 2 (Optional)"
-                      className="w-full h-10 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
@@ -1153,7 +1153,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Password *"
-                      className="w-full h-10 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                     <button
                       type="button"
@@ -1174,7 +1174,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm Password *"
-                      className="w-full h-10 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[13px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                     <button
                       type="button"
@@ -1191,7 +1191,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full h-10.5 mt-1 rounded-xl font-semibold text-[13.5px] text-white bg-[#DC2626] hover:bg-[#B91C1C] active:bg-[#991B1B] flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-red-500/20"
+                className="w-full h-11 mt-1 rounded-xl font-semibold text-[13.5px] text-white bg-[#DC2626] hover:bg-[#B91C1C] active:bg-[#991B1B] flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-red-500/20"
               >
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
