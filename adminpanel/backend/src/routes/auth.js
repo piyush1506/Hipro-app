@@ -666,16 +666,13 @@ router.post('/vendor/register', authLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a valid 10-digit mobile number' });
     }
 
-    // Security passcode is mandatory for vendor account activation
-    if (!passcode || !passcode.trim()) {
-      return res.status(400).json({ success: false, message: 'Security PIN is required' });
+    // Security passcode or password for vendor account activation
+    const cleanPasscode = (passcode || req.body.password || '').trim();
+    if (!cleanPasscode) {
+      return res.status(400).json({ success: false, message: 'Password / Security PIN is required' });
     }
-    const cleanPasscode = passcode.trim();
-    if (cleanPasscode.length < 4 || cleanPasscode.length > 6) {
-      return res.status(400).json({ success: false, message: 'Security PIN must be between 4 and 6 digits' });
-    }
-    if (!/^\d+$/.test(cleanPasscode)) {
-      return res.status(400).json({ success: false, message: 'Security PIN must contain only digits' });
+    if (cleanPasscode.length < 4) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 4 characters' });
     }
 
     // Validate Aadhaar number (12 digits) if provided

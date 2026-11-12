@@ -1,263 +1,148 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  Compass, Wrench, Phone, Mail, Building2, User,
-  Lock, MapPin, Briefcase, ArrowRight, ShieldCheck,
-  AlertCircle, CheckCircle2, ChevronRight, Sparkles,
-  Award, Clock, Check, ChevronDown, Layers
+  Briefcase, Building2, Landmark, User, Users,
+  Mail, Phone, Lock, Eye, EyeOff, MapPin, Home,
+  Search, Info, UserPlus, ChevronDown, Rocket,
+  ShieldCheck, Headphones, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
   ? ''
   : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
 
+const INDIAN_STATES = [
+  'Rajasthan', 'Maharashtra', 'Delhi', 'Gujarat', 'Karnataka',
+  'Uttar Pradesh', 'Tamil Nadu', 'Telangana', 'West Bengal', 'Madhya Pradesh',
+  'Haryana', 'Punjab', 'Bihar', 'Kerala', 'Andhra Pradesh',
+  'Odisha', 'Assam', 'Jharkhand', 'Chhattisgarh', 'Uttarakhand',
+  'Himachal Pradesh', 'Goa', 'Jammu and Kashmir', 'Chandigarh'
+];
+
 export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin }) {
-  // Category Dropdown Selection: 'Adventure' vs 'Services'
-  const [category, setCategory] = useState('Adventure');
-
-  // Dynamic reference data (fetched from backend API — live All-India States & Cities)
-  const [states, setStates] = useState([]);
-  const [statesLoading, setStatesLoading] = useState(true);
-  const [selectedState, setSelectedState] = useState('');
-  const [cities, setCities] = useState([]);
-  const [citiesLoading, setCitiesLoading] = useState(false);
-  const [specializations, setSpecializations] = useState([]);
-
-  // Form Fields
-  const [name, setName] = useState('');
+  // Form fields
   const [businessName, setBusinessName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [businessType, setBusinessType] = useState('');
+  const [selectedState, setSelectedState] = useState('');
+
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Address fields
+  const [pincode, setPincode] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [district, setDistrict] = useState('');
   const [city, setCity] = useState('');
-  const [customCity, setCustomCity] = useState('');
-  const [specialization, setSpecialization] = useState('');
-  const [customSpecialization, setCustomSpecialization] = useState('');
-  const [experience, setExperience] = useState('3-5 Years');
-  const [capacity, setCapacity] = useState('SMALL');
-  const [passcode, setPasscode] = useState('');
-  const [confirmPasscode, setConfirmPasscode] = useState('');
+  const [addressState, setAddressState] = useState('');
+  const [country] = useState('India');
 
-  // Document verification fields
-  const [aadhaarNumber, setAadhaarNumber] = useState('');
-  const [aadhaarFile, setAadhaarFile] = useState(null); // { file, preview, base64 }
-  const [panNumber, setPanNumber] = useState('');
-  const [panFile, setPanFile] = useState(null); // { file, preview, base64 }
-  const [bankPassbookFile, setBankPassbookFile] = useState(null); // { file, preview, base64 }
-
-  // Status
+  // Interactive states
+  const [fetchingPin, setFetchingPin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Fetch dynamic Indian states and specialization suggestions from the backend API
-  useEffect(() => {
-    let cancelled = false;
-    const loadReferenceData = async () => {
-      try {
-        setStatesLoading(true);
-        // Live Indian States & UTs API
-        const statesRes = await fetch(`${API_BASE}/api/v1/locations/india/states`);
-        const statesData = await statesRes.json();
-        if (statesData.success && Array.isArray(statesData.states)) {
-          if (!cancelled) setStates(statesData.states.map(s => s.name || s));
-        }
-      } catch (e) {
-        console.warn('Failed to fetch Indian states from API:', e);
-      } finally {
-        if (!cancelled) setStatesLoading(false);
-      }
-
-      try {
-        // Dynamic specialization suggestions from registered vendors
-        const vendorsRes = await fetch(`${API_BASE}/api/v1/vendors`);
-        const vendorsData = await vendorsRes.json();
-        if (vendorsData.success && Array.isArray(vendorsData.vendors)) {
-          const specs = [...new Set(vendorsData.vendors.map(v => v.specialization).filter(Boolean))];
-          if (!cancelled) setSpecializations(specs);
-        }
-      } catch (e) {
-        console.warn('Failed to fetch specializations:', e);
-      }
-    };
-    loadReferenceData();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Fetch dynamic cities whenever the selected Indian State changes
-  useEffect(() => {
-    if (!selectedState) {
-      setCities([]);
-      setCity('');
-      setCustomCity('');
+  // Auto-fetch Indian address via postal PIN code
+  const handleFetchAddress = async () => {
+    const cleanPin = pincode.trim().replace(/\D/g, '');
+    if (cleanPin.length !== 6) {
+      setError('Please enter a valid 6-digit Indian PIN code to auto-fetch address.');
       return;
     }
 
-    let cancelled = false;
-    const loadCitiesForState = async () => {
-      try {
-        setCitiesLoading(true);
-        const res = await fetch(`${API_BASE}/api/v1/locations/india/cities?state=${encodeURIComponent(selectedState)}`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.cities)) {
-          if (!cancelled) {
-            setCities(data.cities);
-            setCity('');
-            setCustomCity('');
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to fetch cities for state:', selectedState, e);
-      } finally {
-        if (!cancelled) setCitiesLoading(false);
-      }
-    };
-
-    loadCitiesForState();
-    return () => { cancelled = true; };
-  }, [selectedState]);
-
-  const handleCategoryChange = (newCat) => {
-    setCategory(newCat);
-    setSpecialization('');
-    setCustomSpecialization('');
-  };
-
-  // Convert a file to base64 data URL
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  const handleDocumentChange = async (e, field) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Validate file type (images and PDF)
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!allowed.includes(file.type)) {
-      setError('Only JPG, PNG, WebP images and PDF files are allowed for documents.');
-      return;
-    }
-    // Max 5 MB per document
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Each document must be under 5 MB.');
-      return;
-    }
-    const base64 = await fileToBase64(file);
-    const preview = URL.createObjectURL(file);
+    setFetchingPin(true);
     setError(null);
-    if (field === 'aadhaar') {
-      setAadhaarFile({ file, preview, base64 });
-    } else if (field === 'pan') {
-      setPanFile({ file, preview, base64 });
-    } else if (field === 'bank') {
-      setBankPassbookFile({ file, preview, base64 });
+
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`);
+      const data = await res.json();
+
+      if (data && data[0] && data[0].Status === 'Success' && data[0].PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0];
+        const distName = po.District || '';
+        const cityName = (po.Block && po.Block !== 'NA') ? po.Block : (po.District || po.Name || '');
+        const stateName = po.State || '';
+
+        setDistrict(distName);
+        setCity(cityName);
+        setAddressState(stateName);
+        if (!selectedState) setSelectedState(stateName);
+
+        setSuccessMsg(`Address verified: ${distName}, ${stateName}`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setError('PIN code not found in postal registry. Please enter District & City manually.');
+      }
+    } catch (err) {
+      console.warn('PIN fetch network error:', err);
+      setError('Could not connect to postal directory. You may fill city and district manually.');
+    } finally {
+      setFetchingPin(false);
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleRegisterSubmit = async (e) => {
     if (e) e.preventDefault();
     setError(null);
 
     // Validation
-    if (!name.trim()) {
-      setError('Please enter contact person name');
-      return;
-    }
     if (!businessName.trim()) {
-      setError('Please enter your registered agency or business name');
+      setError('Please enter your business or organization name.');
       return;
     }
     if (!phone.trim()) {
-      setError('Please enter your mobile phone number');
+      setError('Please enter your registered mobile number.');
       return;
     }
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = phone.trim().replace(/\D/g, '');
     if (cleanPhone.length < 10) {
-      setError('Please provide a valid 10-digit mobile number');
+      setError('Please enter a valid 10-digit mobile number.');
       return;
     }
-
-    // State: must be selected from All-India states
-    if (!selectedState.trim()) {
-      setError('Please select your state in India');
+    if (!password.trim()) {
+      setError('Please create a secure password or PIN.');
       return;
     }
-
-    // City: must be selected from state cities or entered as custom
-    const finalCity = customCity.trim() || city.trim();
-    if (!finalCity) {
-      setError('Please select or specify your operational city');
+    if (password.length < 4) {
+      setError('Password must be at least 4 characters long.');
       return;
     }
-
-    // Specialization: selected from dynamic suggestions or custom free text
-    const finalSpecialization = customSpecialization.trim() || specialization.trim();
-    if (!finalSpecialization) {
-      setError('Please select or enter your specialization');
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please verify both fields.');
       return;
     }
-
-    // Security PIN is mandatory: 4-6 digits
-    if (!passcode.trim()) {
-      setError('Security PIN is required');
-      return;
-    }
-    if (passcode.trim().length < 4 || passcode.trim().length > 6) {
-      setError('Security PIN must be between 4 and 6 digits');
-      return;
-    }
-    if (!/^\d+$/.test(passcode.trim())) {
-      setError('Security PIN must contain only digits');
-      return;
-    }
-    if (confirmPasscode.trim() && passcode.trim() !== confirmPasscode.trim()) {
-      setError('Security PIN and Confirm PIN do not match');
-      return;
-    }
-
-    // Aadhaar validation (12 digits) if provided
-    const cleanAadhaar = aadhaarNumber.replace(/\s/g, '');
-    if (cleanAadhaar && !/^\d{12}$/.test(cleanAadhaar)) {
-      setError('Aadhaar number must be exactly 12 digits');
-      return;
-    }
-
-    // PAN validation if provided
-    const cleanPan = panNumber.trim().toUpperCase();
-    if (cleanPan && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
-      setError('Invalid PAN number format');
-      return;
-    }
-
-    // Document uploads are optional — no validation required
 
     setLoading(true);
 
     try {
+      const category = (businessType.toLowerCase().includes('adventure')) ? 'Adventure' : 'Services';
+
+      const payload = {
+        name: businessName.trim(),
+        businessName: businessName.trim(),
+        phone: cleanPhone,
+        email: email.trim() || undefined,
+        category,
+        businessType: businessType || 'Civil & Home Services Contractor',
+        state: addressState || selectedState || 'Rajasthan',
+        city: city.trim() || district.trim() || 'Bhilwara',
+        specialization: businessType || 'General Contracting & Services',
+        passcode: password.trim(),
+        password: password.trim(),
+        pincode: pincode.trim(),
+        addressLine1: addressLine1.trim(),
+        addressLine2: addressLine2.trim()
+      };
+
       const res = await fetch(`${API_BASE}/api/v1/auth/vendor/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          businessName: businessName.trim(),
-          phone: phone.trim(),
-          email: email.trim() || undefined,
-          state: selectedState.trim(),
-          city: finalCity,
-          category,
-          specialization: finalSpecialization,
-          experience,
-          capacity,
-          passcode: passcode.trim(),
-          aadhaarNumber: cleanAadhaar || undefined,
-          panNumber: cleanPan || undefined,
-          aadhaarFile: aadhaarFile?.base64 || undefined,
-          panFile: panFile?.base64 || undefined,
-          bankPassbookFile: bankPassbookFile?.base64 || undefined
-        }),
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
@@ -265,588 +150,678 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
       if (data.success && data.token) {
         localStorage.setItem('hipro_auth_token', data.token);
         localStorage.setItem('hipro_user_role', 'VENDOR');
-        localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
-        setSuccessMsg(`Welcome to Hipro! ${data.vendor?.businessName} registered successfully. Opening your dashboard...`);
+        if (data.vendor) {
+          localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
+        }
+
+        setSuccessMsg('Registration successful! Redirecting to partner dashboard...');
         setTimeout(() => {
           if (onRegisterSuccess) {
-            onRegisterSuccess('VENDOR', data);
+            onRegisterSuccess(data);
+          } else if (onSwitchToLogin) {
+            onSwitchToLogin();
           } else if (typeof window !== 'undefined') {
-            window.location.hash = '#vendor';
+            window.location.href = '/';
           }
-        }, 800);
+        }, 600);
       } else {
-        setError(data.message || 'Registration failed. Please review your details and try again.');
+        setError(data.message || 'Registration failed. Please check the entered details.');
       }
     } catch (err) {
-      console.error('Registration network error:', err);
-      setError('Unable to reach server. Please ensure the backend is running.');
+      console.error('Registration error:', err);
+      setError('Server unreachable. Please ensure the backend server is running on port 5000.');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans antialiased relative selection:bg-red-500/30 selection:text-white">
-      {/* Subtle Background Lighting */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+  const handleGoToLogin = () => {
+    if (onSwitchToLogin) {
+      onSwitchToLogin();
+    } else if (typeof window !== 'undefined') {
+      window.location.hash = '';
+      window.location.href = '/';
+    }
+  };
 
-      {/* Header */}
-      <header className="relative z-10 flex items-center justify-between max-w-4xl mx-auto w-full pb-6 border-b border-slate-800/80">
-        <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-500 flex items-center justify-center font-bold text-xl text-white shadow-lg shadow-red-500/25 border border-white/10">
+  return (
+    <div className="min-h-screen bg-[#F8FAFD] text-slate-800 flex flex-col justify-between font-sans antialiased relative overflow-hidden select-none">
+      
+      {/* Background Ambient Soft Lighting */}
+      <div className="absolute -top-32 -right-32 w-[540px] h-[540px] rounded-full bg-[#EBF3FE]/75 blur-3xl pointer-events-none"></div>
+      <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full bg-[#EEF5FF]/85 blur-3xl pointer-events-none"></div>
+
+      {/* Top Navigation Bar matching reference image */}
+      <header className="relative z-10 w-full px-6 sm:px-12 py-5 flex items-center justify-between">
+        
+        {/* Left: Brand Icon + Hipro | Partner Onboarding */}
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-[10px] bg-[#0B63F6] flex items-center justify-center font-bold text-white text-[18px] shadow-sm tracking-tight">
             H
           </div>
           <div>
-            <h1 className="font-heading font-extrabold text-lg sm:text-xl text-white tracking-tight flex items-center gap-2">
-              Hipro Partner Onboarding
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 font-semibold border border-red-500/20">
-                Partner Network
-              </span>
-            </h1>
-            <p className="text-xs text-slate-400 font-medium">Verified Vendor & Adventure Operator Registration</p>
+            <div className="flex items-center leading-none">
+              <span className="font-heading font-bold text-[19px] text-[#0F172A] tracking-tight">Hipro</span>
+              <span className="text-slate-300 font-light text-base mx-2.5">|</span>
+              <span className="text-[13.5px] font-semibold text-[#1E293B]">Partner Onboarding</span>
+            </div>
+            <p className="text-[10.5px] text-slate-400 font-normal mt-0.5 tracking-tight">
+              Service & Adventure Operator Gateway
+            </p>
           </div>
         </div>
 
+        {/* Center: Partner Portal Pill Button */}
         <button
           type="button"
-          onClick={onSwitchToLogin}
-          className="text-xs font-semibold text-slate-300 hover:text-white px-3.5 py-2 rounded-xl bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/60 transition-all flex items-center gap-1.5"
+          onClick={handleGoToLogin}
+          className="hidden md:inline-flex items-center px-4 py-1.5 rounded-full bg-[#EBF3FE] hover:bg-blue-100/80 text-[#0B63F6] font-medium text-[12px] border border-blue-100 transition-colors cursor-pointer shadow-2xs"
         >
-          <span>Existing Partner? Login</span>
-          <ChevronRight className="w-3.5 h-3.5" />
+          Partner Portal
         </button>
+
+        {/* Right: Secure & Trusted */}
+        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+          <svg className="w-4 h-4 text-[#10B981]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+          <span className="text-[12px] text-slate-700 font-medium">Secure & Trusted</span>
+        </div>
       </header>
 
-      {/* Main Registration Card */}
-      <main className="relative z-10 max-w-3xl mx-auto w-full my-8">
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-10 shadow-2xl shadow-black/50">
+      {/* Main Content Area */}
+      <main className="relative z-10 flex-1 max-w-6xl mx-auto w-full px-5 sm:px-8 py-4 sm:py-6 flex flex-col lg:flex-row items-start justify-center gap-10 lg:gap-14">
+        
+        {/* Left Side: Illustration + Grow Together + Value Props */}
+        <div className="hidden lg:flex flex-col items-start text-left max-w-[340px] pt-4 sticky top-6">
+          
+          {/* City Skyline & Handshake Graphic */}
+          <div className="relative w-full h-[180px] flex items-center justify-center mb-4">
+            
+            {/* Skyline Buildings Vector */}
+            <svg className="absolute top-1 left-4 w-[280px] h-[130px] text-slate-200/90 pointer-events-none" viewBox="0 0 240 120" fill="currentColor">
+              <rect x="18" y="45" width="22" height="75" rx="2" opacity="0.45" />
+              <rect x="44" y="25" width="26" height="95" rx="2.5" opacity="0.65" />
+              <rect x="74" y="38" width="22" height="82" rx="2" opacity="0.55" />
+              <rect x="100" y="10" width="32" height="110" rx="3" opacity="0.8" />
+              <rect x="136" y="32" width="24" height="88" rx="2" opacity="0.6" />
+              <rect x="164" y="20" width="26" height="100" rx="2.5" opacity="0.7" />
+              <rect x="194" y="50" width="20" height="70" rx="2" opacity="0.45" />
+              {/* Windows */}
+              <circle cx="57" cy="36" r="1.5" fill="#FFFFFF" opacity="0.85" />
+              <circle cx="57" cy="48" r="1.5" fill="#FFFFFF" opacity="0.85" />
+              <circle cx="116" cy="22" r="1.8" fill="#FFFFFF" opacity="0.9" />
+              <circle cx="116" cy="34" r="1.8" fill="#FFFFFF" opacity="0.9" />
+              <circle cx="116" cy="46" r="1.8" fill="#FFFFFF" opacity="0.9" />
+              <circle cx="177" cy="32" r="1.5" fill="#FFFFFF" opacity="0.85" />
+              <circle cx="177" cy="44" r="1.5" fill="#FFFFFF" opacity="0.85" />
+            </svg>
+
+            {/* Location Pin over Skyline */}
+            <div className="absolute top-2 left-32 text-[#60A5FA] pointer-events-none drop-shadow-xs">
+              <MapPin className="w-5 h-5 fill-[#EBF3FE] text-[#3B82F6]" />
+            </div>
+
+            {/* Handshake Vector Icon */}
+            <div className="relative z-10 w-[110px] h-[110px] flex items-center justify-center">
+              <svg className="w-[100px] h-[100px] drop-shadow-[0_4px_12px_rgba(37,99,235,0.18)]" viewBox="0 0 100 100" fill="none">
+                <path d="M8 50 L26 34 L36 45 L18 61 Z" fill="#2563EB" />
+                <path d="M24 32 L29 28 L39 39 L34 43 Z" fill="#93C5FD" />
+                <path d="M92 50 L74 34 L64 45 L82 61 Z" fill="#3B82F6" />
+                <path d="M76 32 L71 28 L61 39 L66 43 Z" fill="#93C5FD" />
+                <path
+                  d="M30 42 C32 40 37 40 40 43 L54 53 C57 55 57 59 54 62 C51 65 47 65 44 62 L30 51 C28 49 28 45 30 42 Z"
+                  fill="#1D4ED8"
+                />
+                <path
+                  d="M70 42 C68 40 63 40 60 43 L46 53 C43 55 43 59 46 62 C49 65 53 65 56 62 L70 51 C72 49 72 45 70 42 Z"
+                  fill="#60A5FA"
+                />
+                <path d="M38 39 C41 36 46 38 47 42 L44 47 L37 42 Z" fill="#2563EB" />
+                <path d="M62 39 C59 36 54 38 53 42 L56 47 L63 42 Z" fill="#93C5FD" />
+                <path d="M48 57 C50 59 53 60 55 58" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                <path d="M51 53 C53 55 56 56 58 54" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                <path d="M54 49 C56 51 59 52 61 50" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
 
           {/* Heading */}
-          <div className="mb-8 text-center sm:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-semibold mb-3">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Grow Your Bookings & Revenue with Hipro</span>
-            </div>
-            <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight">
-              Register as a Hipro Partner
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-              Select your category from the dropdown, fill in your business details, and receive verified customer leads and direct bookings.
+          <div className="mb-8">
+            <h1 className="font-heading font-bold text-[28px] text-[#0F172A] tracking-tight leading-tight">
+              Grow Together<br />with Hipro
+            </h1>
+            <p className="text-[14px] text-slate-500 font-normal mt-1 leading-snug">
+              Partner with us for<br />better business growth.
             </p>
           </div>
 
-          {/* Alert Banners */}
-          {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs flex items-center gap-2.5 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span className="font-medium">{error}</span>
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2.5 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span className="font-medium">{successMsg}</span>
-            </div>
-          )}
-
-          {/* REGISTRATION FORM */}
-          <form onSubmit={handleSubmit} noValidate className="space-y-6">
-
-            {/* STEP 1: CATEGORY SELECTION DROPDOWN */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
-                Step 1: Partner Category (Select from Dropdown) *
-              </label>
-
-              <div className="relative">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                  {category === 'Adventure' ? (
-                    <Compass className="w-5 h-5 text-red-500" />
-                  ) : (
-                    <Wrench className="w-5 h-5 text-blue-500" />
-                  )}
-                </div>
-                <select
-                  value={category}
-                  onChange={(e) => handleCategoryChange(e.target.value)}
-                  className="w-full pl-11 pr-10 py-3 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-bold transition-all appearance-none cursor-pointer shadow-xs"
-                >
-                  <option value="Adventure">🏔️ Adventure & Tourism Operator (Paragliding, Safari, River Rafting, Trekking)</option>
-                  <option value="Services">🛠️ Home & Construction Contractor (Civil Work, Waterproofing, Painting, Interior)</option>
-                </select>
-                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                  <ChevronDown className="w-5 h-5" />
-                </div>
+          {/* 3 Value Proposition Bullets */}
+          <div className="space-y-5 w-full">
+            
+            {/* Prop 1: Expand Your Business */}
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-full bg-[#EBF3FE] flex items-center justify-center shrink-0">
+                <Rocket className="w-5 h-5 text-[#0B63F6]" strokeWidth={2} />
               </div>
-
-              <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span className={`w-2 h-2 rounded-full ${category === 'Adventure' ? 'bg-red-500' : 'bg-blue-500'}`}></span>
-                <span>
-                  {category === 'Adventure'
-                    ? 'Targeted for adventure sports, flight operators, desert camps, and trekking expedition leaders.'
-                    : 'Targeted for civil builders, waterproofing specialists, painters, and interior remodeling contractors.'}
-                </span>
+              <div>
+                <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
+                  Expand Your Business
+                </h3>
+                <p className="text-[12px] text-slate-500 font-normal mt-1">
+                  Get more opportunities
+                </p>
               </div>
             </div>
 
-            {/* STEP 2: BUSINESS & CONTACT DETAILS */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
-                Step 2: Business & Contact Details
-              </label>
+            {/* Prop 2: Trusted Platform */}
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-full bg-[#EBF3FE] flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-[#0B63F6]" strokeWidth={2} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
+                  Trusted Platform
+                </h3>
+                <p className="text-[12px] text-slate-500 font-normal mt-1">
+                  Safe & Secure
+                </p>
+              </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Contact Person Name */}
+            {/* Prop 3: Professional Support */}
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-full bg-[#EBF3FE] flex items-center justify-center shrink-0">
+                <Headphones className="w-5 h-5 text-[#0B63F6]" strokeWidth={2} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
+                  Professional Support
+                </h3>
+                <p className="text-[12px] text-slate-500 font-normal mt-1">
+                  Dedicated Support
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* Right Side: Registration Form Card */}
+        <div className="w-full max-w-[620px]">
+          <div className="bg-white rounded-[28px] px-7 sm:px-9 py-8 sm:py-9 shadow-[0_15px_45px_rgba(15,23,42,0.06)] border border-slate-100">
+            
+            {/* Top Briefcase Icon */}
+            <div className="w-13 h-13 rounded-full bg-[#EBF3FE] flex items-center justify-center mb-3">
+              <Briefcase className="w-6 h-6 text-[#0B63F6]" strokeWidth={2} />
+            </div>
+
+            {/* Title & Subtitle */}
+            <div className="mb-6">
+              <h2 className="font-heading font-bold text-[22px] sm:text-[23px] text-[#0F172A] tracking-tight">
+                Register as a Hipro Partner
+              </h2>
+              <p className="text-[12.5px] text-slate-500 font-normal mt-0.5">
+                Fill in the details below to become a registered partner with Hipro.
+              </p>
+            </div>
+
+            {/* Alerts */}
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs flex items-center gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterSubmit} className="space-y-6">
+              
+              {/* ======================================================== */}
+              {/* SECTION 1: Business Information */}
+              {/* ======================================================== */}
+              <div className="space-y-3 pt-1 border-t border-slate-100 first:border-0 first:pt-0">
+                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                  <Users className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                  <span>Business Information</span>
+                </div>
+
+                {/* Business Name */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Contact Person Name *
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                    Business Name / Organization Name *
                   </label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <User className="w-4 h-4" strokeWidth={1.8} />
+                    </div>
                     <input
                       type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Captain Arvind Negi"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
                       required
-                    />
-                  </div>
-                </div>
-
-                {/* Business / Operator Name */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Business / Agency Name *
-                  </label>
-                  <div className="relative">
-                    <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder={category === 'Adventure' ? 'e.g. Himalayan Sky Gliders' : 'e.g. Shree Ram Waterproofing & Civil'}
-                      className="w-full pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
-                      required
+                      placeholder="Enter your business name"
+                      className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
 
-                {/* Mobile Phone */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Mobile Phone Number *
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+91 98290 88801"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
-                      required
-                    />
-                  </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">Used as your partner login ID.</span>
-                </div>
-
-                {/* Business Email */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Email Address (Optional)
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="contact@agency.com"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
-                    />
-                  </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">For receiving quotation updates.</span>
-                </div>
-              </div>
-            </div>
-
-            {/* STEP 3: OPERATING LOCATION (ALL-INDIA STATE & CITY API) & SPECIALIZATION */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Step 3: Operating Location (All-India Coverage) & Trade Specialization
-                </label>
-                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                  <Check className="w-3 h-3" />
-                  <span>Pan-India Vendor Network</span>
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Indian State Selection (Dynamic API) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    State (India) *
-                  </label>
-                  <div className="relative">
-                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <select
-                      value={selectedState}
-                      onChange={(e) => setSelectedState(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="">Select Indian State...</option>
-                      {statesLoading ? (
-                        <option disabled>Loading states from API...</option>
-                      ) : (
-                        states.map((st) => (
-                          <option key={st} value={st}>{st}</option>
-                        ))
-                      )}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    {states.length > 0 ? `${states.length} States & UTs available` : 'Select your home state'}
-                  </p>
-                </div>
-
-                {/* 2. City Selection in Selected State (Dynamic API) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Operating City *
-                  </label>
-                  <div className="relative">
-                    <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <select
-                      value={city}
-                      onChange={(e) => { setCity(e.target.value); setCustomCity(''); }}
-                      disabled={!selectedState || citiesLoading}
-                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {!selectedState ? (
-                        <option value="">First select State...</option>
-                      ) : citiesLoading ? (
-                        <option value="">Fetching cities from API...</option>
-                      ) : cities.length === 0 ? (
-                        <option value="">No cities found for {selectedState}</option>
-                      ) : (
-                        <>
-                          <option value="">Select City ({cities.length} in {selectedState})...</option>
-                          {cities.map((c) => {
-                            const cName = c.name || c;
-                            const isLive = c.isOperationalHub;
-                            return (
-                              <option key={cName} value={cName}>
-                                {cName} {isLive ? '⭐ (Active Hub)' : ''}
-                              </option>
-                            );
-                          })}
-                        </>
-                      )}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    value={customCity}
-                    onChange={(e) => { setCustomCity(e.target.value); if (e.target.value) setCity(''); }}
-                    placeholder="Or type city/town name (if not in list)"
-                    className="w-full mt-2 px-3 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium"
-                  />
-                </div>
-
-                {/* 3. Specialization Dropdown */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Specialization Trade *
-                  </label>
-                  <div className="relative">
-                    <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <select
-                      value={specialization}
-                      onChange={(e) => setSpecialization(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="">Select a specialization...</option>
-                      {specializations.length === 0 ? (
-                        <option disabled>Loading specializations...</option>
-                      ) : (
-                        specializations.map((spec) => (
-                          <option key={spec} value={spec}>{spec}</option>
-                        ))
-                      )}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    value={customSpecialization}
-                    onChange={(e) => setCustomSpecialization(e.target.value)}
-                    placeholder="Or enter your specific trade / activity"
-                    className="w-full mt-2 px-3 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium"
-                  />
-                </div>
-
-                {/* 4. Experience & Work Capacity */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Years of Experience
-                  </label>
-                  <div className="relative">
-                    <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <select
-                      value={experience}
-                      onChange={(e) => setExperience(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="1-2 Years">1 - 2 Years</option>
-                      <option value="3-5 Years">3 - 5 Years</option>
-                      <option value="5-10 Years">5 - 10 Years</option>
-                      <option value="10+ Years">10+ Years</option>
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-
-                  <div className="mt-2">
+                {/* 2-Columns: Business Type & State */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Business Type *
+                    </label>
                     <div className="relative">
-                      <Layers className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Landmark className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
                       <select
-                        value={capacity}
-                        onChange={(e) => setCapacity(e.target.value)}
-                        className="w-full pl-9 pr-8 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all appearance-none cursor-pointer"
+                        value={businessType}
+                        onChange={(e) => setBusinessType(e.target.value)}
+                        className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
                       >
-                        <option value="SMALL">Capacity: Small (up to 3 jobs)</option>
-                        <option value="MEDIUM">Capacity: Medium (up to 8 jobs)</option>
-                        <option value="LARGE">Capacity: Large (up to 20 jobs)</option>
+                        <option value="">Select Business Type</option>
+                        <option value="Adventure & Tourism Operator">Adventure & Tourism Operator</option>
+                        <option value="Civil & Home Services Contractor">Civil & Home Services Contractor</option>
+                        <option value="Material Supplier & Trader">Material Supplier & Trader</option>
+                        <option value="Labor Contractor & Manpower">Labor Contractor & Manpower</option>
+                        <option value="Other Commercial Partner">Other Commercial Partner</option>
                       </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      State *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <MapPin className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <select
+                        value={selectedState}
+                        onChange={(e) => {
+                          setSelectedState(e.target.value);
+                          if (!addressState) setAddressState(e.target.value);
+                        }}
+                        className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                      >
+                        <option value="">Select State</option>
+                        {INDIAN_STATES.map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ======================================================== */}
+              {/* SECTION 2: Contact Details */}
+              {/* ======================================================== */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                  <Mail className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                  <span>Contact Details</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Email Address *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Mail className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter your email address"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Mobile Number *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Phone className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="Enter mobile number"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ======================================================== */}
+              {/* SECTION 3: Security Information */}
+              {/* ======================================================== */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                  <Lock className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                  <span>Security Information</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Password *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Lock className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Create a password"
+                        className="w-full h-10.5 pl-10 pr-10 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      >
+                        {showPassword ? <Eye className="w-4 h-4" strokeWidth={1.8} /> : <EyeOff className="w-4 h-4" strokeWidth={1.8} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Confirm Password *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Lock className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirm password"
+                        className="w-full h-10.5 pl-10 pr-10 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      >
+                        {showConfirmPassword ? <Eye className="w-4 h-4" strokeWidth={1.8} /> : <EyeOff className="w-4 h-4" strokeWidth={1.8} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ======================================================== */}
+              {/* SECTION 4: Address Details */}
+              {/* ======================================================== */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                  <MapPin className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                  <span>Address Details</span>
+                </div>
+
+                {/* PIN Code + Fetch Address Button */}
+                <div>
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                    PIN Code *
+                  </label>
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative flex-1">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <MapPin className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={pincode}
+                        onChange={(e) => setPincode(e.target.value)}
+                        placeholder="Enter 6 digit PIN code"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                    
+                    {/* Fetch Address Button */}
+                    <button
+                      type="button"
+                      disabled={fetchingPin}
+                      onClick={handleFetchAddress}
+                      className="h-10.5 px-4.5 bg-[#0B63F6] hover:bg-[#0954D8] active:bg-[#0848B8] text-white text-[12.5px] font-medium rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0 disabled:opacity-50"
+                    >
+                      <Search className="w-3.5 h-3.5" strokeWidth={2.2} />
+                      <span>{fetchingPin ? 'Fetching...' : 'Fetch Address'}</span>
+                    </button>
+                  </div>
+                  
+                  {/* Explanatory subtext */}
+                  <div className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-[#2563EB]">
+                    <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                    <span>Enter PIN code and click 'Fetch Address' to auto-fill your address</span>
+                  </div>
+                </div>
+
+                {/* Address Line 1 & Line 2 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Address Line 1 *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Home className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="text"
+                        value={addressLine1}
+                        onChange={(e) => setAddressLine1(e.target.value)}
+                        placeholder="House/Flat No., Building Name, Area"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Address Line 2 (Optional)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Home className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="text"
+                        value={addressLine2}
+                        onChange={(e) => setAddressLine2(e.target.value)}
+                        placeholder="Landmark, Street, Area"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4-Columns: District, City, State, Country */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                  
+                  {/* District */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
+                      District *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={district}
+                        onChange={(e) => setDistrict(e.target.value)}
+                        placeholder="District"
+                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  {/* City */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
+                      City *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="City"
+                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  {/* State */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
+                      State *
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={addressState}
+                        onChange={(e) => setAddressState(e.target.value)}
+                        className="w-full h-10 pl-2.5 pr-7 bg-white border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                      >
+                        <option value="">Select State</option>
+                        {INDIAN_STATES.map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                         <ChevronDown className="w-3.5 h-3.5" />
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
 
-            {/* STEP 3.5: DOCUMENT VERIFICATION */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
-                Step 3.5: Document Verification (Optional)
-              </label>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-4">
-                Upload clear copies of your identity and bank documents (optional). These are verified by the Super Admin before your account is activated.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Aadhaar Number */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Aadhaar Number
-                  </label>
-                  <input
-                    type="text"
-                    value={aadhaarNumber}
-                    onChange={(e) => setAadhaarNumber(e.target.value)}
-                    placeholder="1234 5678 9012"
-                    maxLength="14"
-                    className="w-full pl-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
-                  />
-                </div>
-
-                {/* PAN Number */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    PAN Number
-                  </label>
-                  <input
-                    type="text"
-                    value={panNumber}
-                    onChange={(e) => setPanNumber(e.target.value)}
-                    placeholder="ABCDE1234F"
-                    maxLength="10"
-                    className="w-full pl-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium uppercase transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                {/* Aadhaar Document Upload */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Aadhaar Document
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
-                      onChange={(e) => handleDocumentChange(e, 'aadhaar')}
-                      className="w-full pl-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all cursor-pointer"
-                    />
-                    {aadhaarFile && (
-                      <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
-                        <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{aadhaarFile.file.name}</span>
-                        <button
-                          onClick={() => setAadhaarFile(null)}
-                          className="text-[10px] text-red-500 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
+                  {/* Country */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
+                      Country *
+                    </label>
+                    <div className="relative">
+                      <select
+                        disabled
+                        value={country}
+                        className="w-full h-10 pl-2.5 pr-7 bg-slate-50 border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-slate-700 appearance-none cursor-not-allowed"
+                      >
+                        <option value="India">India</option>
+                      </select>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-3.5 h-3.5" />
                       </div>
-                    )}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Auto-fill in one step! Blue Banner */}
+                <div className="p-3 bg-[#EBF3FE] border border-blue-100 rounded-xl flex items-center gap-3 mt-2">
+                  <div className="w-7 h-7 rounded-full bg-[#0B63F6] flex items-center justify-center shrink-0 text-white font-bold text-xs">
+                    i
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-[12px] text-[#0F172A] leading-none">
+                      Auto-fill in one step!
+                    </h4>
+                    <p className="text-[11px] text-slate-600 font-normal mt-0.5">
+                      Enter your PIN code to automatically fetch your address details.
+                    </p>
                   </div>
                 </div>
 
-                {/* PAN Document Upload */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    PAN Document
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
-                      onChange={(e) => handleDocumentChange(e, 'pan')}
-                      className="w-full pl-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all cursor-pointer"
-                    />
-                    {panFile && (
-                      <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
-                        <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{panFile.file.name}</span>
-                        <button
-                          onClick={() => setPanFile(null)}
-                          className="text-[10px] text-red-500 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Bank Passbook Upload */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Bank Passbook
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
-                      onChange={(e) => handleDocumentChange(e, 'bank')}
-                      className="w-full pl-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all cursor-pointer"
-                    />
-                    {bankPassbookFile && (
-                      <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
-                        <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">{bankPassbookFile.file.name}</span>
-                        <button
-                          onClick={() => setBankPassbookFile(null)}
-                          className="text-[10px] text-red-500 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* STEP 4: ACCESS PIN */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3">
-                Step 4: Create Security PIN / Passcode
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Security PIN (4-6 digits) *
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="password"
-                      value={passcode}
-                      onChange={(e) => setPasscode(e.target.value)}
-                      placeholder="e.g. 123456"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
-                    />
-                  </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">Used to sign in to your vendor console.</span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Confirm PIN *
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="password"
-                      value={confirmPasscode}
-                      onChange={(e) => setConfirmPasscode(e.target.value)}
-                      placeholder="Re-enter PIN"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 font-medium transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Terms & Action */}
-            <div className="pt-2">
-              <div className="flex items-start gap-2.5 text-[11px] text-slate-500 dark:text-slate-400 mb-4">
-                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>
-                  By registering, you agree to Hipro's Partner Terms of Service and Service Level Agreement. Your credentials are encrypted via TLS 1.3.
-                </span>
               </div>
 
+              {/* ======================================================== */}
+              {/* Crimson Red Action Button: Register Now → */}
+              {/* ======================================================== */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-                style={{ background: 'linear-gradient(135deg, #DC2626 0%, #BE123C 100%)', boxShadow: '0 4px 14px rgba(220, 38, 38, 0.35)' }}
+                className="w-full h-11.5 mt-2 rounded-xl font-semibold text-[14px] text-white bg-[#DC2626] hover:bg-[#B91C1C] active:bg-[#991B1B] flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-red-500/20"
               >
                 {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <span>Submit & Activate {category} Partner Account</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <UserPlus className="w-4 h-4" strokeWidth={2.2} />
+                    <span>Register Now →</span>
                   </>
                 )}
               </button>
 
-              <div className="text-center mt-4">
+              {/* OR Divider */}
+              <div className="relative my-4 flex items-center justify-center before:content-[''] before:flex-1 before:border-t before:border-slate-100 after:content-[''] after:flex-1 after:border-t after:border-slate-100">
+                <span className="px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+                  OR
+                </span>
+              </div>
+
+              {/* Bottom Login Link */}
+              <div className="text-center pt-0.5">
                 <button
                   type="button"
-                  onClick={onSwitchToLogin}
-                  className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                  onClick={handleGoToLogin}
+                  className="text-[12.5px] text-[#0B63F6] hover:text-[#0954D8] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  Already have an active partner account? <span className="text-red-600 dark:text-red-400 font-bold underline">Sign in to Console →</span>
+                  <User className="w-3.5 h-3.5" strokeWidth={2} />
+                  <span>Already have an account? Login here →</span>
                 </button>
               </div>
-            </div>
-          </form>
+
+            </form>
+          </div>
         </div>
+
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 max-w-4xl mx-auto w-full text-center text-xs text-slate-500 pt-4 border-t border-slate-800/60">
-        <p>&copy; {new Date().getFullYear()} Hindustan Projects (Hipro). Verified Vendor & Adventure Operator Gateway.</p>
+      <footer className="relative z-10 w-full text-center py-4 text-[12px] text-slate-500 flex items-center justify-center gap-2.5">
+        <div className="flex items-center gap-1.5 font-normal text-slate-600">
+          <svg className="w-3.5 h-3.5 text-[#10B981]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+          <span>TLS 1.3 / Secure Connection</span>
+        </div>
+        <span className="text-slate-300 font-light">|</span>
+        <span className="font-normal text-slate-500">Hipro Partner Portal</span>
       </footer>
+
     </div>
   );
 }
