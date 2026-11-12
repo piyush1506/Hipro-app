@@ -4,7 +4,8 @@ import {
   Mail, Phone, Lock, Eye, EyeOff, MapPin, Home,
   Search, Info, UserPlus, ChevronDown, Rocket,
   ShieldCheck, Headphones, AlertCircle, CheckCircle2,
-  Check, Receipt
+  Check, Receipt, Wrench, Zap, Droplets, Hammer,
+  Paintbrush, Package, HardHat, Sparkles
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
@@ -19,22 +20,46 @@ const INDIAN_STATES = [
   'Himachal Pradesh', 'Goa', 'Jammu and Kashmir', 'Chandigarh'
 ];
 
+// Skilled Labor & Service trades
+const LABOR_TRADES = [
+  { id: 'Electrician', label: 'Electrician', icon: Zap, desc: 'Wiring, fixtures, inverters & switchboards' },
+  { id: 'Plumber', label: 'Plumber', icon: Wrench, desc: 'Pipes, sanitaryware, pumps & leakage fixes' },
+  { id: 'Waterproofing', label: 'Waterproofing', icon: Droplets, desc: 'Terrace, bathroom & basement waterproofing' },
+  { id: 'Mason', label: 'Mason / Masonry', icon: Building2, desc: 'Brickwork, plastering, concrete & tiles' },
+  { id: 'Carpenter', label: 'Carpenter', icon: Hammer, desc: 'Wooden furniture, doors, kitchens & repairs' },
+  { id: 'Painter', label: 'Painter', icon: Paintbrush, desc: 'Interior & exterior wall coating, textures' },
+  { id: 'Helper', label: 'Helper / Labor', icon: HardHat, desc: 'General assistance, site shifting & support' },
+  { id: 'AC_Appliances', label: 'AC & Appliances', icon: Sparkles, desc: 'HVAC repair, installation & appliance servicing' }
+];
+
+// Material Supply Categories
+const MATERIAL_CATEGORIES = [
+  'Cement & Aggregate', 'TMT Steel & Iron Rods', 'Plywood, Timber & Laminates',
+  'Pipes & Plumbing Hardware', 'Electrical Hardware & Wires', 'Paints, Putty & Waterproofing Chemicals',
+  'Tiles, Marbles & Sanitaryware', 'Bricks, Stone & AAC Blocks'
+];
+
 export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin }) {
-  // Business Ownership Checkbox: False = Individual / Freelancer, True = Registered Business
+  // Business Ownership Toggle: False = Individual / Freelancer, True = Registered Business
   const [hasBusiness, setHasBusiness] = useState(false);
 
-  // Common identity fields
+  // Common Identity
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
-  // Business-specific fields (Conditional)
+  // Business-specific fields (Conditional on hasBusiness)
   const [businessName, setBusinessName] = useState('');
-  const [businessType, setBusinessType] = useState('');
   const [gstinNumber, setGstinNumber] = useState('');
-  const [selectedState, setSelectedState] = useState('');
 
-  // Security credentials
+  // Classification: LABOR, MATERIAL, or BOTH
+  const [vendorType, setVendorType] = useState('LABOR'); // 'LABOR' | 'MATERIAL' | 'BOTH'
+  const [primaryTrade, setPrimaryTrade] = useState('Electrician');
+  const [selectedLaborTrades, setSelectedLaborTrades] = useState(['Electrician']);
+  const [selectedMaterials, setSelectedMaterials] = useState([]);
+  const [experience, setExperience] = useState('3-5 Years');
+
+  // Security Credentials
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -48,12 +73,37 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   const [city, setCity] = useState('');
   const [addressState, setAddressState] = useState('');
   const [country] = useState('India');
+  const [selectedState, setSelectedState] = useState('');
 
   // Interactive states
   const [fetchingPin, setFetchingPin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
+
+  // Toggle trade in list
+  const toggleLaborTrade = (tradeId) => {
+    setSelectedLaborTrades((prev) => {
+      if (prev.includes(tradeId)) {
+        if (prev.length === 1) return prev; // keep at least 1
+        return prev.filter((t) => t !== tradeId);
+      } else {
+        return [...prev, tradeId];
+      }
+    });
+    setPrimaryTrade(tradeId);
+  };
+
+  // Toggle material in list
+  const toggleMaterial = (mat) => {
+    setSelectedMaterials((prev) => {
+      if (prev.includes(mat)) {
+        return prev.filter((m) => m !== mat);
+      } else {
+        return [...prev, mat];
+      }
+    });
+  };
 
   // Auto-fetch Indian address via postal PIN code
   const handleFetchAddress = async () => {
@@ -101,12 +151,12 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     // Validation
     const resolvedName = fullName.trim() || (hasBusiness ? businessName.trim() : '');
     if (!resolvedName) {
-      setError(hasBusiness ? 'Please enter your contact person or business name.' : 'Please enter your full name.');
+      setError(hasBusiness ? 'Please enter authorized contact person or business name.' : 'Please enter your full name.');
       return;
     }
 
     if (hasBusiness && !businessName.trim()) {
-      setError('Please enter your registered business or organization name.');
+      setError('Please enter your registered business or enterprise name.');
       return;
     }
 
@@ -133,22 +183,39 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
       return;
     }
 
+    // Material validation if user selected material
+    if (vendorType === 'MATERIAL' && selectedMaterials.length === 0) {
+      setError('Please select at least one material category you supply.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const category = (hasBusiness && businessType.toLowerCase().includes('adventure')) ? 'Adventure' : 'Services';
+      // Build specialization string
+      let specialization = primaryTrade;
+      if (vendorType === 'MATERIAL') {
+        specialization = selectedMaterials.join(', ') || 'Material Supplier';
+      } else if (vendorType === 'BOTH') {
+        specialization = `${primaryTrade} & Material Supply`;
+      } else {
+        specialization = selectedLaborTrades.join(', ') || primaryTrade;
+      }
 
       const payload = {
         name: resolvedName,
         businessName: hasBusiness ? businessName.trim() : resolvedName,
         phone: cleanPhone,
         email: email.trim() || undefined,
-        category,
-        businessType: hasBusiness ? (businessType || 'Registered Business') : 'Individual Professional / Contractor',
+        category: 'Services',
+        vendorType,
+        laborCategories: (vendorType === 'LABOR' || vendorType === 'BOTH') ? selectedLaborTrades : [],
+        materialCategories: (vendorType === 'MATERIAL' || vendorType === 'BOTH') ? selectedMaterials : [],
+        specialization,
+        experience,
         gstinNumber: hasBusiness && gstinNumber.trim() ? gstinNumber.trim().toUpperCase() : undefined,
         state: addressState || selectedState || 'Rajasthan',
         city: city.trim() || district.trim() || 'Bhilwara',
-        specialization: hasBusiness ? (businessType || 'General Enterprise Services') : 'Independent Contractor',
         passcode: password.trim(),
         password: password.trim(),
         pincode: pincode.trim(),
@@ -172,7 +239,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
           localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
         }
 
-        setSuccessMsg('Registration successful! Redirecting to partner dashboard...');
+        setSuccessMsg('Registration successful! Opening partner dashboard...');
         setTimeout(() => {
           if (onRegisterSuccess) {
             onRegisterSuccess(data);
@@ -187,7 +254,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
       }
     } catch (err) {
       console.error('Registration error:', err);
-      setError('Server unreachable. Please ensure the backend server is running on port 5000.');
+      setError('Server unreachable. Please verify backend is running on port 5000.');
     } finally {
       setLoading(false);
     }
@@ -205,14 +272,14 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   return (
     <div className="min-h-screen bg-[#F8FAFD] text-slate-800 flex flex-col justify-between font-sans antialiased relative overflow-hidden select-none">
       
-      {/* Background Ambient Soft Lighting */}
+      {/* Background Soft Lighting Gradients */}
       <div className="absolute -top-32 -right-32 w-[540px] h-[540px] rounded-full bg-[#EBF3FE]/75 blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full bg-[#EEF5FF]/85 blur-3xl pointer-events-none"></div>
 
-      {/* Top Navigation Bar matching reference image */}
+      {/* Top Navigation Bar */}
       <header className="relative z-10 w-full px-6 sm:px-12 py-5 flex items-center justify-between">
         
-        {/* Left: Brand Icon + Hipro | Partner Onboarding */}
+        {/* Left: Brand + Hipro | Partner Onboarding */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-[10px] bg-[#0B63F6] flex items-center justify-center font-bold text-white text-[18px] shadow-sm tracking-tight">
             H
@@ -224,12 +291,12 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               <span className="text-[13.5px] font-semibold text-[#1E293B]">Partner Onboarding</span>
             </div>
             <p className="text-[10.5px] text-slate-400 font-normal mt-0.5 tracking-tight">
-              Service & Adventure Operator Gateway
+              Service, Trade & Contractor Gateway
             </p>
           </div>
         </div>
 
-        {/* Center: Partner Portal Pill Button */}
+        {/* Center: Partner Portal Button */}
         <button
           type="button"
           onClick={handleGoToLogin}
@@ -254,10 +321,8 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         {/* Left Side: Illustration + Grow Together + Value Props */}
         <div className="hidden lg:flex flex-col items-start text-left max-w-[340px] pt-4 sticky top-6">
           
-          {/* City Skyline & Handshake Graphic */}
+          {/* Skyline & Handshake Graphic */}
           <div className="relative w-full h-[180px] flex items-center justify-center mb-4">
-            
-            {/* Skyline Buildings Vector */}
             <svg className="absolute top-1 left-4 w-[280px] h-[130px] text-slate-200/90 pointer-events-none" viewBox="0 0 240 120" fill="currentColor">
               <rect x="18" y="45" width="22" height="75" rx="2" opacity="0.45" />
               <rect x="44" y="25" width="26" height="95" rx="2.5" opacity="0.65" />
@@ -275,12 +340,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               <circle cx="177" cy="44" r="1.5" fill="#FFFFFF" opacity="0.85" />
             </svg>
 
-            {/* Location Pin over Skyline */}
             <div className="absolute top-2 left-32 text-[#60A5FA] pointer-events-none drop-shadow-xs">
               <MapPin className="w-5 h-5 fill-[#EBF3FE] text-[#3B82F6]" />
             </div>
 
-            {/* Handshake Vector Icon */}
             <div className="relative z-10 w-[110px] h-[110px] flex items-center justify-center">
               <svg className="w-[100px] h-[100px] drop-shadow-[0_4px_12px_rgba(37,99,235,0.18)]" viewBox="0 0 100 100" fill="none">
                 <path d="M8 50 L26 34 L36 45 L18 61 Z" fill="#2563EB" />
@@ -314,7 +377,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
             </p>
           </div>
 
-          {/* 3 Value Proposition Bullets */}
+          {/* 3 Value Pillars */}
           <div className="space-y-5 w-full">
             <div className="flex items-center gap-3.5">
               <div className="w-11 h-11 rounded-full bg-[#EBF3FE] flex items-center justify-center shrink-0">
@@ -325,7 +388,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   Expand Your Business
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Get more opportunities
+                  Get daily leads & RFQ jobs
                 </p>
               </div>
             </div>
@@ -339,7 +402,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   Trusted Platform
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Safe & Secure
+                  Guaranteed safe payouts
                 </p>
               </div>
             </div>
@@ -350,10 +413,10 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Professional Support
+                  Dedicated Support
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Dedicated Support
+                  Engineer & purchase assistance
                 </p>
               </div>
             </div>
@@ -362,7 +425,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         </div>
 
         {/* Right Side: Registration Form Card */}
-        <div className="w-full max-w-[620px]">
+        <div className="w-full max-w-[640px]">
           <div className="bg-white rounded-[28px] px-7 sm:px-9 py-8 sm:py-9 shadow-[0_15px_45px_rgba(15,23,42,0.06)] border border-slate-100">
             
             {/* Top Briefcase Icon */}
@@ -376,14 +439,14 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                 Register as a Hipro Partner
               </h2>
               <p className="text-[12.5px] text-slate-500 font-normal mt-0.5">
-                Fill in the details below to become a registered partner with Hipro.
+                Fill in the details below to become an onboarded service partner with Hipro.
               </p>
             </div>
 
-            {/* Checkbox: I own a business / enterprise */}
+            {/* Business Ownership Toggle Checkbox */}
             <div 
               onClick={() => setHasBusiness(!hasBusiness)}
-              className={`mb-6 p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+              className={`mb-5 p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
                 hasBusiness 
                   ? 'bg-[#EBF3FE]/70 border-[#0B63F6]/40 shadow-xs' 
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
@@ -404,8 +467,8 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                   </div>
                   <p className="text-[11.5px] text-slate-500 font-normal mt-1 leading-none">
                     {hasBusiness 
-                      ? 'Registered entity: Provide Business Name, Category & GSTIN' 
-                      : 'Unchecked: Registering as an individual contractor / professional (only name & address required)'}
+                      ? 'Enterprise Account: Enter Business Name, Category & optional GST' 
+                      : 'Individual Account: Only your name, trade skill & address required'}
                   </p>
                 </div>
               </div>
@@ -436,12 +499,12 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
             <form onSubmit={handleRegisterSubmit} className="space-y-5">
               
               {/* ======================================================== */}
-              {/* SECTION: Identity / Name Information */}
+              {/* SECTION 1: Identity & Name */}
               {/* ======================================================== */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
                   <User className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                  <span>{hasBusiness ? 'Contact Person & Business Identity' : 'Personal Information'}</span>
+                  <span>{hasBusiness ? 'Contact Person & Enterprise Identity' : 'Personal Details'}</span>
                 </div>
 
                 {/* Individual Full Name */}
@@ -458,19 +521,15 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder={hasBusiness ? 'Enter authorized person name' : 'Enter your full legal name'}
+                      placeholder={hasBusiness ? 'e.g. Ramesh Kumar Sharma' : 'e.g. Mukesh Sen (Electrician / Contractor)'}
                       className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
 
-                {/* ======================================================== */}
-                {/* CONDITIONAL: Business Name, Category & GSTIN (Shown ONLY if hasBusiness is checked) */}
-                {/* ======================================================== */}
+                {/* CONDITIONAL: Business Name & GSTIN (Shown ONLY when hasBusiness is true) */}
                 {hasBusiness && (
-                  <div className="space-y-3 pt-2 animate-in fade-in duration-300">
-                    
-                    {/* Business Name */}
+                  <div className="space-y-3 pt-1 animate-in fade-in duration-300">
                     <div>
                       <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
                         Business Name / Organization Name *
@@ -484,70 +543,198 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                           required={hasBusiness}
                           value={businessName}
                           onChange={(e) => setBusinessName(e.target.value)}
-                          placeholder="Enter registered business or trade name"
+                          placeholder="e.g. Shree Ram Electricals & Hardware"
                           className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                         />
                       </div>
                     </div>
 
-                    {/* 2-Columns: Business Category & GST Number */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      
-                      {/* Business Category / Type */}
-                      <div>
-                        <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                          Business Category / Type *
-                        </label>
-                        <div className="relative">
-                          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                            <Landmark className="w-4 h-4" strokeWidth={1.8} />
-                          </div>
-                          <select
-                            value={businessType}
-                            onChange={(e) => setBusinessType(e.target.value)}
-                            className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
-                          >
-                            <option value="">Select Category</option>
-                            <option value="Adventure & Tourism Operator">Adventure & Tourism Operator</option>
-                            <option value="Civil & Home Services Contractor">Civil & Home Services Contractor</option>
-                            <option value="Material Supplier & Trader">Material Supplier & Trader</option>
-                            <option value="Labor Contractor & Manpower">Labor Contractor & Manpower</option>
-                            <option value="Other Commercial Partner">Other Commercial Partner</option>
-                          </select>
-                          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                            <ChevronDown className="w-4 h-4" />
-                          </div>
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                        GST Number (GSTIN) <span className="text-slate-400 font-normal">(Optional)</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                          <Receipt className="w-4 h-4" strokeWidth={1.8} />
                         </div>
+                        <input
+                          type="text"
+                          maxLength={15}
+                          value={gstinNumber}
+                          onChange={(e) => setGstinNumber(e.target.value.toUpperCase())}
+                          placeholder="e.g. 08AAAAA0000A1Z5"
+                          className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-mono text-[#1E293B] placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300 uppercase"
+                        />
                       </div>
-
-                      {/* GST Number (GSTIN) */}
-                      <div>
-                        <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                          GST Number (GSTIN) <span className="text-slate-400 font-normal">(Optional)</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                            <Receipt className="w-4 h-4" strokeWidth={1.8} />
-                          </div>
-                          <input
-                            type="text"
-                            maxLength={15}
-                            value={gstinNumber}
-                            onChange={(e) => setGstinNumber(e.target.value.toUpperCase())}
-                            placeholder="e.g. 08AAAAA0000A1Z5"
-                            className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-mono text-[#1E293B] placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300 uppercase"
-                          />
-                        </div>
-                      </div>
-
                     </div>
-
                   </div>
                 )}
               </div>
 
               {/* ======================================================== */}
-              {/* SECTION: Contact Details */}
+              {/* SECTION 2: Work Classification & Trade / Skills Selection */}
+              {/* ======================================================== */}
+              <div className="space-y-3.5 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <HardHat className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>Work Classification & Trade Skills *</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Select your capability</span>
+                </div>
+
+                {/* 3 Type Pills: Labor vs Material vs Both */}
+                <div>
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
+                    What type of services or products do you provide? *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Labor / Services */}
+                    <button
+                      type="button"
+                      onClick={() => setVendorType('LABOR')}
+                      className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                        vendorType === 'LABOR'
+                          ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Labor & Services</span>
+                    </button>
+
+                    {/* Material */}
+                    <button
+                      type="button"
+                      onClick={() => setVendorType('MATERIAL')}
+                      className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                        vendorType === 'MATERIAL'
+                          ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      <span>Material Supply</span>
+                    </button>
+
+                    {/* Both */}
+                    <button
+                      type="button"
+                      onClick={() => setVendorType('BOTH')}
+                      className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                        vendorType === 'BOTH'
+                          ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>Both (Turnkey)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* CONDITIONAL: Show Skilled Labor Trades when LABOR or BOTH is active */}
+                {(vendorType === 'LABOR' || vendorType === 'BOTH') && (
+                  <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                      Service & Maintenance Trades <span className="text-slate-400 font-normal">(Click all that apply)</span>:
+                    </label>
+
+                    {/* Grid of Trade Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {LABOR_TRADES.map((t) => {
+                        const Icon = t.icon;
+                        const isSelected = selectedLaborTrades.includes(t.id);
+                        return (
+                          <div
+                            key={t.id}
+                            onClick={() => toggleLaborTrade(t.id)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                              isSelected
+                                ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                <Icon className="w-3.5 h-3.5" />
+                              </div>
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'}`}>
+                                {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </div>
+                            </div>
+                            <div>
+                              <div className={`text-[12px] font-semibold leading-tight ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                                {t.label}
+                              </div>
+                              <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                                {t.desc}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* CONDITIONAL: Show Material Supply Categories when MATERIAL or BOTH is active */}
+                {(vendorType === 'MATERIAL' || vendorType === 'BOTH') && (
+                  <div className="space-y-2 pt-1 animate-in fade-in duration-200">
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                      Material Categories Supplied <span className="text-slate-400 font-normal">(Click all you stock / supply)</span>:
+                    </label>
+
+                    {/* Badges of Material Categories */}
+                    <div className="flex flex-wrap gap-2">
+                      {MATERIAL_CATEGORIES.map((cat) => {
+                        const isSelected = selectedMaterials.includes(cat);
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => toggleMaterial(cat)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-[#0B63F6] text-white border-[#0B63F6]'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{cat}</span>
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Experience Level */}
+                <div className="pt-1">
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                    Industry Experience Level
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={experience}
+                      onChange={(e) => setExperience(e.target.value)}
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
+                    >
+                      <option value="1-3 Years">1 to 3 Years</option>
+                      <option value="3-5 Years">3 to 5 Years (Standard)</option>
+                      <option value="5-10 Years">5 to 10 Years (Experienced)</option>
+                      <option value="10+ Years">10+ Years (Master Contractor)</option>
+                    </select>
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* ======================================================== */}
+              {/* SECTION 3: Contact Details */}
               {/* ======================================================== */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
                 <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
@@ -558,7 +745,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                      Email Address <span className="text-slate-400 font-normal">{hasBusiness ? '*' : '(Optional)'}</span>
+                      Email Address <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <div className="relative">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -568,7 +755,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Enter your email address"
+                        placeholder="Enter email address"
                         className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
@@ -587,7 +774,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                         required
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Enter mobile number"
+                        placeholder="10 digit mobile number"
                         className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
@@ -596,7 +783,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
 
               {/* ======================================================== */}
-              {/* SECTION: Security Information */}
+              {/* SECTION 4: Security Information */}
               {/* ======================================================== */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
                 <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
@@ -660,12 +847,12 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
 
               {/* ======================================================== */}
-              {/* SECTION: Address Details */}
+              {/* SECTION 5: Address Details */}
               {/* ======================================================== */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
                 <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
                   <MapPin className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                  <span>{hasBusiness ? 'Business Address Details' : 'Address Details'}</span>
+                  <span>{hasBusiness ? 'Business Address Details' : 'Operational Address Details'}</span>
                 </div>
 
                 {/* PIN Code + Fetch Address Button */}
@@ -688,7 +875,6 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       />
                     </div>
                     
-                    {/* Fetch Address Button */}
                     <button
                       type="button"
                       disabled={fetchingPin}
@@ -700,7 +886,6 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                     </button>
                   </div>
                   
-                  {/* Explanatory subtext */}
                   <div className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-[#2563EB]">
                     <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
                     <span>Enter PIN code and click 'Fetch Address' to auto-fill your address</span>
@@ -711,7 +896,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   <div>
                     <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                      {hasBusiness ? 'Business Address Line 1 *' : 'Address Line 1 *'}
+                      Address Line 1 *
                     </label>
                     <div className="relative">
                       <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -721,7 +906,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                         type="text"
                         value={addressLine1}
                         onChange={(e) => setAddressLine1(e.target.value)}
-                        placeholder={hasBusiness ? 'Office / Shop No., Building Name, Area' : 'House/Flat No., Building Name, Area'}
+                        placeholder="Shop / House No., Landmark, Area"
                         className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
@@ -739,7 +924,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                         type="text"
                         value={addressLine2}
                         onChange={(e) => setAddressLine2(e.target.value)}
-                        placeholder="Landmark, Street, Area"
+                        placeholder="Street, Colony, Landmark"
                         className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
@@ -748,40 +933,32 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
 
                 {/* 4-Columns: District, City, State, Country */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                  
-                  {/* District */}
                   <div>
                     <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
                       District *
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={district}
-                        onChange={(e) => setDistrict(e.target.value)}
-                        placeholder="District"
-                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={district}
+                      onChange={(e) => setDistrict(e.target.value)}
+                      placeholder="District"
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                    />
                   </div>
 
-                  {/* City */}
                   <div>
                     <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
                       City *
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="City"
-                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="City"
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                    />
                   </div>
 
-                  {/* State */}
                   <div>
                     <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
                       State *
@@ -803,7 +980,6 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                     </div>
                   </div>
 
-                  {/* Country */}
                   <div>
                     <label className="block text-[11px] font-semibold text-[#1F2937] mb-1">
                       Country *
@@ -821,10 +997,9 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       </div>
                     </div>
                   </div>
-
                 </div>
 
-                {/* Auto-fill in one step! Blue Banner */}
+                {/* Auto-fill Info Banner */}
                 <div className="p-3 bg-[#EBF3FE] border border-blue-100 rounded-xl flex items-center gap-3 mt-2">
                   <div className="w-7 h-7 rounded-full bg-[#0B63F6] flex items-center justify-center shrink-0 text-white font-bold text-xs">
                     i
@@ -834,16 +1009,13 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                       Auto-fill in one step!
                     </h4>
                     <p className="text-[11px] text-slate-600 font-normal mt-0.5">
-                      Enter your PIN code to automatically fetch your address details.
+                      Enter your PIN code to automatically fetch your district and city.
                     </p>
                   </div>
                 </div>
-
               </div>
 
-              {/* ======================================================== */}
               {/* Crimson Red Action Button: Register Now → */}
-              {/* ======================================================== */}
               <button
                 type="submit"
                 disabled={loading}
@@ -854,7 +1026,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                 ) : (
                   <>
                     <UserPlus className="w-4 h-4" strokeWidth={2.2} />
-                    <span>{hasBusiness ? 'Register Business Entity Now →' : 'Register as Individual Partner →'}</span>
+                    <span>{hasBusiness ? 'Register Business Entity Now →' : 'Register Service Profile Now →'}</span>
                   </>
                 )}
               </button>
