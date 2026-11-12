@@ -167,3 +167,4 @@ if (require.main === module) {
 }
 
 module.exports = { seedRolesAndStaff, PREDEFINED_ROLES };
+

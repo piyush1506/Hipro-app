@@ -29,3 +29,4 @@ router.get('/compare/:requirementId', authenticate, requirePermission('procureme
 router.patch('/:id/assign', authenticate, requirePermission('procurement.assign'), assignVendorRFQ);
 
 module.exports = router;
+

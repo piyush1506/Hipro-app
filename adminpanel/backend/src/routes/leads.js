@@ -32,3 +32,4 @@ router.patch('/:id/reject', authenticate, requirePermission('leads.reject'), rej
 router.patch('/:id/assign', authenticate, requirePermission('leads.assign'), assignLeadToEngineer);
 
 module.exports = router;
+

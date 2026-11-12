@@ -24,3 +24,4 @@ router.get('/:id', authenticate, requirePermission('projects.view'), getProjectB
 router.patch('/:id/status', authenticate, requirePermission('projects.manage'), updateProjectStatus);
 
 module.exports = router;
+

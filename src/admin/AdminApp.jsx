@@ -3849,6 +3849,30 @@ export default function AdminApp({ currentUserRole: propUserRole, onSwitchToCust
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Quick Role Switcher (Preview dashboards for any role) */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <span className="text-[10px] font-bold text-slate-500 pl-2 hidden lg:inline uppercase tracking-wider">Role:</span>
+              <select
+                value={currentUserRole}
+                onChange={(e) => {
+                  const newRole = e.target.value;
+                  setCurrentUserRole(newRole);
+                  localStorage.setItem('hipro_user_role', newRole);
+                  if (newRole === 'TELECALLER') setActiveTab('leads');
+                  else if (newRole === 'CIVIL_ENGINEER') setActiveTab('leads');
+                  else if (newRole === 'PURCHASE_PERSON') setActiveTab('procurement');
+                  else setActiveTab('overview');
+                }}
+                className="text-xs font-bold text-slate-800 bg-white px-2.5 py-1 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary-500 shadow-xs cursor-pointer"
+                title="Switch role dashboard preview"
+              >
+                <option value="SUPER_ADMIN">👑 Super Admin</option>
+                <option value="TELECALLER">📞 Telecaller</option>
+                <option value="CIVIL_ENGINEER">📐 Civil Engineer</option>
+                <option value="PURCHASE_PERSON">📦 Purchase Person</option>
+              </select>
+            </div>
+
             <div className="relative hidden sm:block w-72">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input

@@ -22,3 +22,4 @@ router.post('/:analysisId/materials', authenticate, requirePermission('requireme
 router.post('/:analysisId/labors', authenticate, requirePermission('requirements.edit'), addLaborItem);
 
 module.exports = router;
+

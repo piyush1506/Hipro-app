@@ -21,3 +21,4 @@ router.put('/:id', authenticate, requireAdmin, updateRole);
 router.delete('/:id', authenticate, requireAdmin, deleteRole);
 
 module.exports = router;
+

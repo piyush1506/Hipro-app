@@ -27,3 +27,4 @@ router.put('/:id', authenticate, requireAdmin, updateStaff);
 router.delete('/:id', authenticate, requireAdmin, deleteStaff);
 
 module.exports = router;
+
