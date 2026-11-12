@@ -577,82 +577,40 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
             <form onSubmit={handleRegisterSubmit} className="space-y-5">
 
               {/* ═══════════════════════════════════════════════════════ */}
-              {/* STEP 1: CATEGORY SELECTION (Services vs Adventure)     */}
+              {/* STEP 1: CATEGORY SELECTION (Services vs Adventure Dropdown) */}
               {/* ═══════════════════════════════════════════════════════ */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                    <Briefcase className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                    <span>Select Partner Category *</span>
-                  </div>
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                    Partner Category / Domain *
+                  </label>
                   <span className="text-[11px] text-slate-400">Step 1 of 5</span>
                 </div>
 
-                {/* 2-Option Cards: Services & Maintenance vs Adventure & Tourism */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
-                    onClick={() => {
-                      setPartnerCategory('Services');
-                    }}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start gap-3 ${
-                      partnerCategory === 'Services'
-                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-xs ring-1 ring-[#0B63F6]/20'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                      partnerCategory === 'Services' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      <Wrench className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[13px] font-bold ${partnerCategory === 'Services' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                          Maintenance & Services
-                        </span>
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          partnerCategory === 'Services' ? 'border-[#0B63F6] bg-[#0B63F6] text-white' : 'border-slate-300'
-                        }`}>
-                          {partnerCategory === 'Services' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                        Electrician, Plumber, Waterproofing, Civil & Materials
-                      </p>
-                    </div>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    {partnerCategory === 'Adventure' ? (
+                      <Compass className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
+                    ) : (
+                      <Wrench className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
+                    )}
                   </div>
-
-                  <div
-                    onClick={() => {
-                      setPartnerCategory('Adventure');
-                      setVendorType('LABOR');
+                  <select
+                    value={partnerCategory}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPartnerCategory(val);
+                      if (val === 'Adventure') {
+                        setVendorType('LABOR');
+                      }
                     }}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start gap-3 ${
-                      partnerCategory === 'Adventure'
-                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-xs ring-1 ring-[#0B63F6]/20'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
+                    className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
                   >
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                      partnerCategory === 'Adventure' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      <Compass className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[13px] font-bold ${partnerCategory === 'Adventure' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                          Adventure & Tourism
-                        </span>
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          partnerCategory === 'Adventure' ? 'border-[#0B63F6] bg-[#0B63F6] text-white' : 'border-slate-300'
-                        }`}>
-                          {partnerCategory === 'Adventure' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                        Paragliding, Trekking, Camping, Desert Safari & Sports
-                      </p>
-                    </div>
+                    <option value="Services">Maintenance & Services (Electrician, Plumber, Waterproofing, Civil & Materials)</option>
+                    <option value="Adventure">Adventure & Tourism (Paragliding, Trekking, Camping, Desert Safari & Sports)</option>
+                  </select>
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
                   </div>
                 </div>
               </div>
