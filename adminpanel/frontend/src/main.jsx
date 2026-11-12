@@ -165,6 +165,8 @@ function AppRoot() {
     return 'vendor';
   });
 
+  const [selectedRegisterCategory, setSelectedRegisterCategory] = useState('Services');
+
   // Listen for navigation changes (popstate & hashchange)
   React.useEffect(() => {
     const handleLocationChange = () => {
@@ -289,8 +291,6 @@ function AppRoot() {
       />
     );
   }
-
-  const [selectedRegisterCategory, setSelectedRegisterCategory] = useState('Services');
 
   // Root & Vendor Routes (`/`, `/vendor`, `/login`, `/register`)
   if (!authState.isAuthenticated || authState.role !== 'VENDOR') {
