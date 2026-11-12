@@ -532,7 +532,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
           </div>
         </div>
 
-        {/* ─── Right Column: Compact Form Card ─── */}
+        {/* ─── Right Column: Form Card ─── */}
         <div className="w-full max-w-[530px]">
           <div className="bg-white rounded-2xl px-5 sm:px-7 py-5 sm:py-6 shadow-[0_10px_35px_rgba(15,23,42,0.05)] border border-slate-100">
 
@@ -572,18 +572,18 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               {/* ═══════════════════════════════════════════════════════ */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-semibold text-[#1F2937]">
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937]">
                     Partner Category / Domain *
                   </label>
                   <span className="text-[10px] text-slate-400">Step 1 of 5</span>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     {partnerCategory === 'Adventure' ? (
-                      <Compass className="w-3.5 h-3.5 text-[#0B63F6]" strokeWidth={1.8} />
+                      <Compass className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
                     ) : (
-                      <Wrench className="w-3.5 h-3.5 text-[#0B63F6]" strokeWidth={1.8} />
+                      <Wrench className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
                     )}
                   </div>
                   <select
@@ -595,13 +595,13 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         setVendorType('LABOR');
                       }
                     }}
-                    className="w-full h-9 pl-9 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
+                    className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
                   >
                     <option value="Services">Maintenance & Services (Electrician, Plumber, Waterproofing, Civil & Materials)</option>
                     <option value="Adventure">Adventure & Tourism (Paragliding, Trekking, Camping, Desert Safari & Sports)</option>
                   </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                    <ChevronDown className="w-3.5 h-3.5" />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
                   </div>
                 </div>
               </div>
@@ -628,37 +628,37 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         <button
                           type="button"
                           onClick={() => setVendorType('LABOR')}
-                          className={`h-8 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                          className={`h-9 px-2 rounded-xl text-[11.5px] font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                             vendorType === 'LABOR'
                               ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
                               : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <Wrench className="w-3 h-3" />
+                          <Wrench className="w-3.5 h-3.5" />
                           <span>Labour / Work</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setVendorType('MATERIAL')}
-                          className={`h-8 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                          className={`h-9 px-2 rounded-xl text-[11.5px] font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                             vendorType === 'MATERIAL'
                               ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
                               : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <Package className="w-3 h-3" />
+                          <Package className="w-3.5 h-3.5" />
                           <span>Material Supply</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setVendorType('BOTH')}
-                          className={`h-8 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                          className={`h-9 px-2 rounded-xl text-[11.5px] font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                             vendorType === 'BOTH'
                               ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
                               : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <Building2 className="w-3 h-3" />
+                          <Building2 className="w-3.5 h-3.5" />
                           <span>Both (Turnkey)</span>
                         </button>
                       </div>
@@ -680,13 +680,13 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                             )}
                           </div>
                           <div className="relative">
-                            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                              <Landmark className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <Landmark className="w-4 h-4" strokeWidth={1.8} />
                             </div>
                             <select
                               value={selectedServiceId}
                               onChange={(e) => handleServiceChange(e.target.value)}
-                              className="w-full h-8.5 pl-9 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                              className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
                             >
                               {dbServices.map((srv) => (
                                 <option key={srv.id} value={srv.id}>
@@ -694,8 +694,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                                 </option>
                               ))}
                             </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                              <ChevronDown className="w-3.5 h-3.5" />
+                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <ChevronDown className="w-4 h-4" />
                             </div>
                           </div>
                         </div>
@@ -736,7 +736,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                                     key={sub.id}
                                     onClick={() => toggleSubService(title)}
                                     title={sub.desc || title}
-                                    className={`px-2 py-1.5 rounded-lg border transition-all cursor-pointer select-none flex items-center justify-between gap-1.5 ${
+                                    className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer select-none flex items-center justify-between gap-1.5 ${
                                       isSelected
                                         ? 'bg-blue-50/90 border-[#0B63F6] text-[#0B63F6] shadow-2xs font-semibold'
                                         : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
@@ -766,24 +766,24 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                               onChange={(e) => setCustomTradeInput(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
                               placeholder="Other specialized skill (e.g. Core Cutting, Epoxy Grouting)"
-                              className="flex-1 h-8 px-2.5 bg-white border border-[#E2E8F0] rounded-lg text-[11.5px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                              className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
                             />
                             <button
                               type="button"
                               onClick={handleAddCustomSkill}
-                              className="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                              className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11.5px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                             >
-                              <Plus className="w-3 h-3" />
+                              <Plus className="w-3.5 h-3.5" />
                               <span>Add</span>
                             </button>
                           </div>
                           {additionalSkills.length > 0 && (
                             <div className="flex flex-wrap gap-1 pt-0.5">
                               {additionalSkills.map((sk) => (
-                                <span key={sk} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100/80 text-[#0B63F6] text-[10.5px] font-medium">
+                                <span key={sk} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11px] font-medium">
                                   <span>{sk}</span>
                                   <button type="button" onClick={() => handleRemoveCustomSkill(sk)} className="hover:text-red-600 cursor-pointer">
-                                    <X className="w-2.5 h-2.5" />
+                                    <X className="w-3 h-3" />
                                   </button>
                                 </span>
                               ))}
@@ -810,7 +810,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                                 key={cat}
                                 type="button"
                                 onClick={() => toggleMaterial(cat)}
-                                className={`px-2 py-1 rounded-lg text-[10.5px] font-medium border transition-all cursor-pointer flex items-center gap-1 ${
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all cursor-pointer flex items-center gap-1 ${
                                   isSelected
                                     ? 'bg-[#0B63F6] text-white border-[#0B63F6]'
                                     : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
@@ -829,14 +829,14 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                             onChange={(e) => setCustomMaterialInput(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomMaterial(e); }}
                             placeholder="Add other material..."
-                            className="flex-1 h-8 px-2.5 bg-white border border-[#E2E8F0] rounded-lg text-[11.5px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                            className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
                           />
                           <button
                             type="button"
                             onClick={handleAddCustomMaterial}
-                            className="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                            className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11.5px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" />
                             <span>Add</span>
                           </button>
                         </div>
@@ -862,7 +862,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                           <div
                             key={act.id}
                             onClick={() => toggleAdventure(act.title)}
-                            className={`px-2 py-1.5 rounded-lg border transition-all cursor-pointer select-none flex items-center justify-between gap-1.5 ${
+                            className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer select-none flex items-center justify-between gap-1.5 ${
                               isSelected
                                 ? 'bg-blue-50/90 border-[#0B63F6] text-[#0B63F6] font-semibold'
                                 : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
@@ -886,14 +886,14 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         onChange={(e) => setCustomAdventureInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomAdventure(e); }}
                         placeholder="Other adventure (e.g. Scuba, Bungee)"
-                        className="flex-1 h-8 px-2.5 bg-white border border-[#E2E8F0] rounded-lg text-[11.5px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                        className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
                       />
                       <button
                         type="button"
                         onClick={handleAddCustomAdventure}
-                        className="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                        className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11.5px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Plus className="w-3.5 h-3.5" />
                         <span>Add</span>
                       </button>
                     </div>
@@ -906,15 +906,15 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                     <select
                       value={experience}
                       onChange={(e) => setExperience(e.target.value)}
-                      className="w-full h-8 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
                     >
                       <option value="1-3 Years">Experience: 1 to 3 Years</option>
                       <option value="3-5 Years">Experience: 3 to 5 Years (Standard)</option>
                       <option value="5-10 Years">Experience: 5 to 10 Years (Experienced)</option>
                       <option value="10+ Years">Experience: 10+ Years (Master Contractor)</option>
                     </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-3.5 h-3.5" />
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <ChevronDown className="w-4 h-4" />
                     </div>
                   </div>
                 </div>
@@ -950,7 +950,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       {hasBusiness && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                     </div>
                     <div>
-                      <div className="text-[12px] font-semibold text-[#0F172A] flex items-center gap-1 leading-none">
+                      <div className="text-[12.5px] font-semibold text-[#0F172A] flex items-center gap-1.5 leading-none">
                         <Building2 className={`w-3.5 h-3.5 ${hasBusiness ? 'text-[#0B63F6]' : 'text-slate-400'}`} />
                         <span>I own a business / registered enterprise</span>
                       </div>
@@ -966,8 +966,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 {/* Full Legal Name */}
                 <div>
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <User className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <User className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type="text"
@@ -975,7 +975,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder={hasBusiness ? 'Authorized Contact Person Name *' : 'Full Legal Name *'}
-                      className="w-full h-8.5 pl-9 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
@@ -984,8 +984,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 {hasBusiness && (
                   <div className="space-y-2 pt-0.5 animate-in fade-in duration-200">
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <Building2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Building2 className="w-4 h-4" strokeWidth={1.8} />
                       </div>
                       <input
                         type="text"
@@ -993,13 +993,13 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         value={businessName}
                         onChange={(e) => setBusinessName(e.target.value)}
                         placeholder="Business / Enterprise Name *"
-                        className="w-full h-8.5 pl-9 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                        className="w-full h-10.5 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
 
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <Receipt className="w-3.5 h-3.5" strokeWidth={1.8} />
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Receipt className="w-4 h-4" strokeWidth={1.8} />
                       </div>
                       <input
                         type="text"
@@ -1007,7 +1007,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         value={gstinNumber}
                         onChange={(e) => setGstinNumber(e.target.value.toUpperCase())}
                         placeholder="GST Number / GSTIN (Optional)"
-                        className="w-full h-8.5 pl-9 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-mono text-[#1E293B] placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300 uppercase"
+                        className="w-full h-10.5 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-mono text-[#1E293B] placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300 uppercase"
                       />
                     </div>
                   </div>
@@ -1016,21 +1016,21 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 {/* Email & Mobile Number Side by Side */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <Mail className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Mail className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="Email (Optional)"
-                      className="w-full h-8.5 pl-9 pr-2.5 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
 
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <Phone className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Phone className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type="tel"
@@ -1038,7 +1038,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="Mobile Number *"
-                      className="w-full h-8.5 pl-9 pr-2.5 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
@@ -1067,8 +1067,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 <div>
                   <div className="flex items-center gap-1.5">
                     <div className="relative flex-1">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <MapPin className="w-3.5 h-3.5" strokeWidth={1.8} />
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <MapPin className="w-4 h-4" strokeWidth={1.8} />
                       </div>
                       <input
                         type="text"
@@ -1077,23 +1077,23 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                         value={pincode}
                         onChange={handlePincodeChange}
                         placeholder="Enter 6 digit PIN code *"
-                        className="w-full h-8.5 pl-9 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                        className="w-full h-10.5 pl-10 pr-3.5 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={() => { if (pincode.length === 6) resolvePincode(pincode); }}
                       disabled={pincode.length !== 6 || fetchingPin}
-                      className="h-8.5 px-3 bg-[#0B63F6] hover:bg-[#0954D8] text-white text-[11px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                      className="h-10.5 px-3.5 bg-[#0B63F6] hover:bg-[#0954D8] text-white text-[11.5px] font-semibold rounded-xl flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
-                      <Search className="w-3 h-3" />
+                      <Search className="w-3.5 h-3.5" />
                       <span>Fetch</span>
                     </button>
                   </div>
 
                   {resolvedLocation && (
                     <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg animate-in fade-in">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>Auto-detected: <strong>{resolvedLocation}</strong></span>
                     </div>
                   )}
@@ -1102,8 +1102,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 {/* Address Lines */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <Home className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Home className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type="text"
@@ -1111,20 +1111,20 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={addressLine1}
                       onChange={(e) => setAddressLine1(e.target.value)}
                       placeholder="Address Line 1 *"
-                      className="w-full h-8.5 pl-9 pr-2.5 bg-white border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
 
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <Home className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Home className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type="text"
                       value={addressLine2}
                       onChange={(e) => setAddressLine2(e.target.value)}
                       placeholder="Address Line 2 (Optional)"
-                      className="w-full h-8.5 pl-9 pr-2.5 bg-white border border-[#E2E8F0] rounded-xl text-[11.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
@@ -1144,8 +1144,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <Lock className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -1153,20 +1153,20 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Password *"
-                      className="w-full h-8.5 pl-9 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                     >
-                      {showPassword ? <Eye className="w-3.5 h-3.5" strokeWidth={1.8} /> : <EyeOff className="w-3.5 h-3.5" strokeWidth={1.8} />}
+                      {showPassword ? <Eye className="w-4 h-4" strokeWidth={1.8} /> : <EyeOff className="w-4 h-4" strokeWidth={1.8} />}
                     </button>
                   </div>
 
                   <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <Lock className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" strokeWidth={1.8} />
                     </div>
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
@@ -1174,14 +1174,14 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm Password *"
-                      className="w-full h-8.5 pl-9 pr-8 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                     >
-                      {showConfirmPassword ? <Eye className="w-3.5 h-3.5" strokeWidth={1.8} /> : <EyeOff className="w-3.5 h-3.5" strokeWidth={1.8} />}
+                      {showConfirmPassword ? <Eye className="w-4 h-4" strokeWidth={1.8} /> : <EyeOff className="w-4 h-4" strokeWidth={1.8} />}
                     </button>
                   </div>
                 </div>
@@ -1191,13 +1191,13 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full h-10 mt-1 rounded-xl font-semibold text-[13px] text-white bg-[#DC2626] hover:bg-[#B91C1C] active:bg-[#991B1B] flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-red-500/20"
+                className="w-full h-11 mt-1 rounded-xl font-semibold text-[13.5px] text-white bg-[#DC2626] hover:bg-[#B91C1C] active:bg-[#991B1B] flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-red-500/20"
               >
                 {loading ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <UserPlus className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    <UserPlus className="w-4 h-4" strokeWidth={2.2} />
                     <span>Register Now →</span>
                   </>
                 )}
