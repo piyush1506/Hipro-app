@@ -20,7 +20,8 @@ router.post('/login', loginStaff);
 // Authenticated route: Get current staff profile
 router.get('/me', authenticate, getStaffProfile);
 
-// Super Admin / RBAC Manage routes:
+// RBAC management routes: Super Admin or any role with rbac.manage can view.
+// Mutations remain Super Admin only to prevent privilege escalation through role assignment.
 router.get('/', authenticate, requirePermission('rbac.manage'), listStaff);
 router.post('/', authenticate, requireAdmin, createStaff);
 router.put('/:id', authenticate, requireAdmin, updateStaff);

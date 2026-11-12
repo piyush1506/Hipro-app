@@ -142,7 +142,7 @@ function findInitialTab(roleValue, permissionsValue) {
     if (hasRoleAccess(role, permissionsValue, tab)) return tab;
   }
 
-  return 'overview';
+  return null;
 }
 
 export default function AdminApp({ currentUserRole: propUserRole, initialPermissions, initialStaff, onSwitchToCustomerApp, onLogout, onSwitchToVendor }) {
@@ -4039,18 +4039,30 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
               </button>
             )}
 
-            <button
-              onClick={() => setActiveTab('builder')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>New Quote</span>
-            </button>
+            {canAccess('builder') && (
+              <button
+                onClick={() => setActiveTab('builder')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-xs transition-all"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>New Quote</span>
+              </button>
+            )}
           </div>
         </header>
 
         {/* DYNAMIC TAB BODY */}
         <main className="flex-1 p-6 space-y-5 max-w-7xl w-full mx-auto">
+
+          {!activeTab && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center max-w-xl mx-auto mt-12">
+              <ShieldCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+              <h2 className="text-lg font-bold text-slate-900">No production modules assigned</h2>
+              <p className="text-sm text-slate-600 mt-2">
+                Your role does not currently have access to any console modules. Ask a Super Administrator to update the role permissions.
+              </p>
+            </div>
+          )}
 
           {/* LEADS PIPELINE TAB */}
           {activeTab === 'leads' && (

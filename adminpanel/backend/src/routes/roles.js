@@ -15,7 +15,7 @@ const {
 // List all roles (requires rbac.manage or Super Admin)
 router.get('/', authenticate, requirePermission('rbac.manage'), listRoles);
 
-// Manage roles (Super Admin only)
+// Manage roles (Super Admin only; prevents custom rbac.manage roles from escalating privileges)
 router.post('/', authenticate, requireAdmin, createRole);
 router.put('/:id', authenticate, requireAdmin, updateRole);
 router.delete('/:id', authenticate, requireAdmin, deleteRole);

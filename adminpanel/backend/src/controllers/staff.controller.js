@@ -69,6 +69,13 @@ async function loginStaff(req, res) {
       });
     }
 
+    if (!staff.role || staff.role.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your assigned role is inactive. Please contact the Super Administrator.'
+      });
+    }
+
     // 3. Verify password
     let passwordMatches = false;
     if (staff.password.startsWith('$2a$') || staff.password.startsWith('$2b$')) {
@@ -123,7 +130,15 @@ async function loginStaff(req, res) {
         name: staff.name,
         email: staff.email,
         phone: staff.phone,
-        role: staff.role.name,
+        role: {
+          id: staff.role.id,
+          name: staff.role.name,
+          displayName: staff.role.displayName,
+          permissions,
+          isSystem: staff.role.isSystem,
+          isActive: staff.role.isActive
+        },
+        roleName: staff.role.name,
         roleDisplayName: staff.role.displayName,
         permissions,
         lastLoginAt: staff.lastLoginAt
@@ -157,6 +172,22 @@ async function getStaffProfile(req, res) {
       });
     }
 
+    if (!staff.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'This staff account is deactivated'
+      });
+    }
+
+    if (!staff.role || staff.role.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'This staff account has an inactive role'
+      });
+    }
+
+    const permissions = Array.isArray(staff.role.permissions) ? staff.role.permissions : [];
+
     return res.status(200).json({
       success: true,
       staff: {
@@ -164,9 +195,18 @@ async function getStaffProfile(req, res) {
         name: staff.name,
         email: staff.email,
         phone: staff.phone,
-        role: staff.role.name,
+        role: {
+          id: staff.role.id,
+          name: staff.role.name,
+          displayName: staff.role.displayName,
+          description: staff.role.description,
+          permissions,
+          isSystem: staff.role.isSystem,
+          isActive: staff.role.isActive
+        },
+        roleName: staff.role.name,
         roleDisplayName: staff.role.displayName,
-        permissions: staff.role.permissions,
+        permissions,
         isActive: staff.isActive,
         createdAt: staff.createdAt,
         lastLoginAt: staff.lastLoginAt

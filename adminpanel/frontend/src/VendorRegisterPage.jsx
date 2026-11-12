@@ -5,7 +5,8 @@ import {
   Search, Info, UserPlus, ChevronDown, Rocket,
   ShieldCheck, Headphones, AlertCircle, CheckCircle2,
   Check, Receipt, Wrench, Zap, Droplets, Hammer,
-  Paintbrush, Package, HardHat, Sparkles, Plus, X
+  Paintbrush, Package, HardHat, Sparkles, Plus, X,
+  Compass, Mountain, Tent, Store, Trees
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
@@ -20,7 +21,25 @@ const INDIAN_STATES = [
   'Himachal Pradesh', 'Goa', 'Jammu and Kashmir', 'Chandigarh'
 ];
 
-export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin }) {
+const ADVENTURE_ACTIVITIES = [
+  { id: 'paragliding', title: 'Paragliding & Aero Sports', desc: 'Tandem flights, powered paragliding, paramotor' },
+  { id: 'camping_trekking', title: 'Camping, Trekking & Hiking', desc: 'Hill trekking, tent stays, bonfires, guided trails' },
+  { id: 'desert_safari', title: 'Desert Safari & Dune Bashing', desc: '4x4 Thar/Jeep safari, camel rides, sand dunes' },
+  { id: 'river_rafting', title: 'River Rafting & Water Sports', desc: 'White water rafting, kayaking, jet ski, boating' },
+  { id: 'zipline_climbing', title: 'Zipline, Rope Course & Climbing', desc: 'Aerial zipline, sky bridge, rock climbing, rappelling' },
+  { id: 'hot_air_balloon', title: 'Hot Air Ballooning', desc: 'Scenic tethered and free sunrise flights' },
+  { id: 'wildlife_safari', title: 'Wildlife & Jungle Safari', desc: 'National park jeep safari, bird watching, nature walks' },
+  { id: 'atv_quad', title: 'ATV Quad Biking & Off-Roading', desc: 'All-terrain vehicle circuits, dirt tracks' }
+];
+
+export default function VendorRegisterPage({ initialCategory = 'Services', onRegisterSuccess, onSwitchToLogin }) {
+  // Top-Level Partner Category / Domain Sector: 'Services' | 'Adventure' | 'Material'
+  const [partnerCategory, setPartnerCategory] = useState(() => {
+    if (initialCategory === 'Adventure') return 'Adventure';
+    if (initialCategory === 'Material') return 'Material';
+    return 'Services';
+  });
+
   // Business Ownership Toggle: False = Individual / Freelancer, True = Registered Business
   const [hasBusiness, setHasBusiness] = useState(false);
 
@@ -41,11 +60,18 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
   // Classification: LABOR, MATERIAL, or BOTH
   const [vendorType, setVendorType] = useState('LABOR'); // 'LABOR' | 'MATERIAL' | 'BOTH'
   
-  // Dynamic Service & Sub-service Selection
+  // Dynamic Service & Sub-service Selection (for Services)
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedSubServices, setSelectedSubServices] = useState([]);
   const [customTradeInput, setCustomTradeInput] = useState('');
   const [additionalSkills, setAdditionalSkills] = useState([]);
+
+  // Adventure Activities Selection (for Adventure & Tourism)
+  const [selectedAdventures, setSelectedAdventures] = useState([
+    'Paragliding & Aero Sports'
+  ]);
+  const [customAdventureInput, setCustomAdventureInput] = useState('');
+  const [additionalAdventures, setAdditionalAdventures] = useState([]);
 
   // Dynamic Material Selection
   const [selectedMaterials, setSelectedMaterials] = useState([]);
@@ -217,6 +243,34 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     }
   };
 
+  // Toggle adventure activity in list
+  const toggleAdventure = (title) => {
+    setSelectedAdventures((prev) => {
+      if (prev.includes(title)) {
+        if (prev.length === 1 && additionalAdventures.length === 0) return prev;
+        return prev.filter((t) => t !== title);
+      } else {
+        return [...prev, title];
+      }
+    });
+  };
+
+  // Add custom adventure activity
+  const handleAddCustomAdventure = (e) => {
+    if (e) e.preventDefault();
+    const clean = customAdventureInput.trim();
+    if (clean && !selectedAdventures.includes(clean) && !additionalAdventures.includes(clean)) {
+      setAdditionalAdventures((prev) => [...prev, clean]);
+      setSelectedAdventures((prev) => [...prev, clean]);
+      setCustomAdventureInput('');
+    }
+  };
+
+  const handleRemoveCustomAdventure = (title) => {
+    setAdditionalAdventures((prev) => prev.filter((t) => t !== title));
+    setSelectedAdventures((prev) => prev.filter((t) => t !== title));
+  };
+
   // Form submission handler
   const handleRegisterSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -267,15 +321,25 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
       return;
     }
 
+    const isAdventure = partnerCategory === 'Adventure';
+    const isMaterialOnly = partnerCategory === 'Material' || (partnerCategory === 'Services' && vendorType === 'MATERIAL');
+
     // Material validation if user selected material
-    if (vendorType === 'MATERIAL' && selectedMaterials.length === 0) {
+    if (isMaterialOnly && selectedMaterials.length === 0) {
       setError('Please select at least one material category you supply.');
+      return;
+    }
+
+    // Adventure validation
+    const allAdventureActivities = [...selectedAdventures, ...additionalAdventures];
+    if (isAdventure && allAdventureActivities.length === 0) {
+      setError('Please select at least one adventure activity or tourism service you operate.');
       return;
     }
 
     // Service validation if user selected labor
     const allLaborTrades = [...selectedSubServices, ...additionalSkills];
-    if ((vendorType === 'LABOR' || vendorType === 'BOTH') && allLaborTrades.length === 0) {
+    if (!isAdventure && !isMaterialOnly && (vendorType === 'LABOR' || vendorType === 'BOTH') && allLaborTrades.length === 0) {
       setError('Please select at least one service trade or work section.');
       return;
     }
@@ -283,17 +347,22 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
     setLoading(true);
 
     try {
-      const activeServiceObj = dbServices.find((s) => s.id === selectedServiceId);
-      const serviceName = activeServiceObj?.name || 'General Construction Services';
+      let resolvedCategory = isAdventure ? 'Adventure' : 'Services';
+      let resolvedServiceName = 'Civil & Home Services';
+      let resolvedSpecialization = '';
 
-      // Build specialization string
-      let specialization = serviceName;
-      if (vendorType === 'MATERIAL') {
-        specialization = selectedMaterials.join(', ') || 'Material Trader & Supplier';
-      } else if (vendorType === 'BOTH') {
-        specialization = `${serviceName} & Material Supply`;
+      if (isAdventure) {
+        resolvedServiceName = 'Adventure & Tourism';
+        resolvedSpecialization = allAdventureActivities.slice(0, 3).join(', ') || 'Adventure Operator';
+      } else if (isMaterialOnly) {
+        resolvedServiceName = 'Building Material Supply';
+        resolvedSpecialization = selectedMaterials.slice(0, 3).join(', ') || 'Material Trader & Supplier';
       } else {
-        specialization = allLaborTrades.slice(0, 3).join(', ') || serviceName;
+        const activeServiceObj = dbServices.find((s) => s.id === selectedServiceId);
+        resolvedServiceName = activeServiceObj?.name || 'General Construction Services';
+        resolvedSpecialization = (vendorType === 'BOTH')
+          ? `${resolvedServiceName} & Material Supply`
+          : (allLaborTrades.slice(0, 3).join(', ') || resolvedServiceName);
       }
 
       const payload = {
@@ -301,13 +370,13 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         businessName: hasBusiness ? businessName.trim() : resolvedName,
         phone: cleanPhone,
         email: email.trim() || undefined,
-        category: (serviceName.toLowerCase().includes('adventure')) ? 'Adventure' : 'Services',
-        vendorType,
-        serviceId: selectedServiceId || undefined,
-        serviceName,
-        laborCategories: (vendorType === 'LABOR' || vendorType === 'BOTH') ? allLaborTrades : [],
-        materialCategories: (vendorType === 'MATERIAL' || vendorType === 'BOTH') ? selectedMaterials : [],
-        specialization,
+        category: resolvedCategory,
+        vendorType: isAdventure ? 'LABOR' : (isMaterialOnly ? 'MATERIAL' : vendorType),
+        serviceId: isAdventure ? undefined : (selectedServiceId || undefined),
+        serviceName: resolvedServiceName,
+        laborCategories: isAdventure ? allAdventureActivities : ((vendorType === 'LABOR' || vendorType === 'BOTH') ? allLaborTrades : []),
+        materialCategories: isMaterialOnly || vendorType === 'BOTH' ? selectedMaterials : [],
+        specialization: resolvedSpecialization,
         experience,
         gstinNumber: hasBusiness && gstinNumber.trim() ? gstinNumber.trim().toUpperCase() : undefined,
         state: addressState || 'Rajasthan',
@@ -330,7 +399,6 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
 
       if (data.success && data.token) {
         localStorage.setItem('hipro_auth_token', data.token);
-        localStorage.setItem('hipro_user_role', 'VENDOR');
         if (data.vendor) {
           localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
         }
@@ -338,7 +406,7 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
         setSuccessMsg('Registration successful! Opening partner dashboard...');
         setTimeout(() => {
           if (onRegisterSuccess) {
-            onRegisterSuccess(data);
+            onRegisterSuccess('VENDOR', data);
           } else if (onSwitchToLogin) {
             onSwitchToLogin();
           } else if (typeof window !== 'undefined') {
@@ -671,186 +739,214 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
               </div>
 
               {/* ======================================================== */}
-              {/* SECTION 2: Work Classification & DYNAMIC CATEGORIES FROM DB */}
+              {/* SECTION 2: Partner Category & Domain Sector */}
               {/* ======================================================== */}
               <div className="space-y-4 pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                    <HardHat className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                    <span>Work Classification & Trade Skills *</span>
+                    <Store className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>Partner Category & Operating Domain *</span>
                   </div>
                   {catalogLoading && (
                     <span className="text-[11px] text-[#0B63F6] font-medium animate-pulse">Loading live catalog...</span>
                   )}
                 </div>
 
-                {/* 3 Type Selector: Labor vs Material vs Both */}
+                {/* Primary Category Selector Dropdown matching Login Screenshot */}
                 <div>
                   <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
-                    What type of services or materials do you provide? *
+                    Primary Domain / Sector *
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setVendorType('LABOR')}
-                      className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                        vendorType === 'LABOR'
-                          ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
+                  <div className="relative">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      {partnerCategory === 'Adventure' ? (
+                        <Compass className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
+                      ) : partnerCategory === 'Material' ? (
+                        <Package className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
+                      ) : (
+                        <Wrench className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
+                      )}
+                    </div>
+                    <select
+                      value={partnerCategory}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPartnerCategory(val);
+                        if (val === 'Material') {
+                          setVendorType('MATERIAL');
+                        } else if (val === 'Adventure') {
+                          setVendorType('LABOR');
+                        } else if (vendorType === 'MATERIAL') {
+                          setVendorType('LABOR');
+                        }
+                      }}
+                      className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
                     >
-                      <Wrench className="w-3.5 h-3.5" />
-                      <span>Labor & Services</span>
-                    </button>
+                      <option value="Services">🛠️ Maintenance & Civil Services (Electrician, Plumber, Waterproofing, Civil, ...)</option>
+                      <option value="Adventure">🪂 Adventure & Tourism Operator (Bathe, Paragliding, Camping, Trekking, Safari, ...)</option>
+                      <option value="Material">📦 Building Material Supplier & Trader (Cement, Steel, Wood, Tiles, Hardware, ...)</option>
+                    </select>
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setVendorType('MATERIAL')}
-                      className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                        vendorType === 'MATERIAL'
-                          ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <Package className="w-3.5 h-3.5" />
-                      <span>Material Supply</span>
-                    </button>
+                {/* Visual Category Selection Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div
+                    onClick={() => {
+                      setPartnerCategory('Services');
+                      if (vendorType === 'MATERIAL') setVendorType('LABOR');
+                    }}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                      partnerCategory === 'Services'
+                        ? 'bg-blue-50/70 border-[#0B63F6] shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${partnerCategory === 'Services' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        <Wrench className="w-3.5 h-3.5" />
+                      </div>
+                      <span className={`text-[12px] font-bold truncate ${partnerCategory === 'Services' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                        Services & Works
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">
+                      Electrician, Plumber, Waterproofing, Civil Works, Painter
+                    </p>
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setVendorType('BOTH')}
-                      className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                        vendorType === 'BOTH'
-                          ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <Building2 className="w-3.5 h-3.5" />
-                      <span>Both (Turnkey)</span>
-                    </button>
+                  <div
+                    onClick={() => {
+                      setPartnerCategory('Adventure');
+                      setVendorType('LABOR');
+                    }}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                      partnerCategory === 'Adventure'
+                        ? 'bg-blue-50/70 border-[#0B63F6] shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${partnerCategory === 'Adventure' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        <Compass className="w-3.5 h-3.5" />
+                      </div>
+                      <span className={`text-[12px] font-bold truncate ${partnerCategory === 'Adventure' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                        Adventure & Tourism
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">
+                      Paragliding, Trekking, Camping, Desert Safari, Water Sports
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      setPartnerCategory('Material');
+                      setVendorType('MATERIAL');
+                    }}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                      partnerCategory === 'Material'
+                        ? 'bg-blue-50/70 border-[#0B63F6] shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${partnerCategory === 'Material' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        <Package className="w-3.5 h-3.5" />
+                      </div>
+                      <span className={`text-[12px] font-bold truncate ${partnerCategory === 'Material' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                        Material Supplier
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">
+                      Cement, Steel, Wood, Tiles, Hardware, Sanitaryware
+                    </p>
                   </div>
                 </div>
 
                 {/* ======================================================== */}
-                {/* DYNAMIC SERVICE CATEGORY & WORK SECTIONS (When LABOR or BOTH) */}
+                {/* 1. ADVENTURE & TOURISM ACTIVITIES (When partnerCategory === 'Adventure') */}
                 {/* ======================================================== */}
-                {(vendorType === 'LABOR' || vendorType === 'BOTH') && (
-                  <div className="space-y-3.5 pt-1 animate-in fade-in duration-200">
-                    
-                    {/* Dynamic Primary Category Dropdown from DB */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                          Service Domain / Work Category * <span className="text-[#0B63F6] font-normal">(Live from Catalog)</span>
-                        </label>
-                        <span className="text-[10.5px] text-slate-400">
-                          {dbServices.length} categories available
-                        </span>
-                      </div>
-                      <div className="relative">
-                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                          <Landmark className="w-4 h-4" strokeWidth={1.8} />
-                        </div>
-                        <select
-                          value={selectedServiceId}
-                          onChange={(e) => handleServiceChange(e.target.value)}
-                          className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
-                        >
-                          {dbServices.map((srv) => (
-                            <option key={srv.id} value={srv.id}>
-                              {srv.name} ({srv.subServices?.length || 0} work sections)
-                            </option>
-                          ))}
-                        </select>
-                        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                          <ChevronDown className="w-4 h-4" />
-                        </div>
-                      </div>
+                {partnerCategory === 'Adventure' && (
+                  <div className="space-y-3 pt-1 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                        Adventure Activities & Operations * <span className="text-[#0B63F6] font-normal">(Select all that you offer)</span>
+                      </label>
+                      <span className="text-[10.5px] text-slate-400">
+                        {selectedAdventures.length} selected
+                      </span>
                     </div>
 
-                    {/* Dynamic Sub-services / Work Sections belonging to this Service */}
-                    {currentService && currentService.subServices && currentService.subServices.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                            Work Sections in <span className="text-[#0B63F6] font-bold">"{currentService.name}"</span>:
-                          </label>
-                          <span className="text-[10.5px] text-slate-400">Select what you do</span>
-                        </div>
-
-                        {/* Interactive dynamic sub-service cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {currentService.subServices.map((sub) => {
-                            const title = sub.titleEn || sub.name;
-                            const isSelected = selectedSubServices.includes(title);
-                            return (
-                              <div
-                                key={sub.id}
-                                onClick={() => toggleSubService(title)}
-                                className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
-                                  isSelected
-                                    ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
-                                    : 'bg-white border-slate-200 hover:border-slate-300'
-                                }`}
-                              >
-                                <div className="space-y-0.5">
-                                  <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                                    {title}
-                                  </div>
-                                  {sub.desc && (
-                                    <p className="text-[10.5px] text-slate-400 line-clamp-1">
-                                      {sub.desc}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
-                                  isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
-                                }`}>
-                                  {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {ADVENTURE_ACTIVITIES.map((act) => {
+                        const isSelected = selectedAdventures.includes(act.title);
+                        return (
+                          <div
+                            key={act.id}
+                            onClick={() => toggleAdventure(act.title)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
+                              isSelected
+                                ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                                {act.title}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                              <p className="text-[10.5px] text-slate-400 line-clamp-1">
+                                {act.desc}
+                              </p>
+                            </div>
+                            <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
+                              isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                    {/* Additional Custom Trade / Skill Addition */}
+                    {/* Add Custom Adventure Activity */}
                     <div className="space-y-1.5 pt-1">
                       <label className="block text-[11px] font-medium text-slate-600">
-                        Have other specialized skills or trade tools?
+                        Operate other outdoor adventures, tours or sports?
                       </label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
-                          value={customTradeInput}
-                          onChange={(e) => setCustomTradeInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
-                          placeholder="e.g. Copper Gas Piping, Core Cutting, Epoxy Grouting"
+                          value={customAdventureInput}
+                          onChange={(e) => setCustomAdventureInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomAdventure(e); }}
+                          placeholder="e.g. Scuba Diving, Bungee Jumping, Paramotor, Kayaking"
                           className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
                         />
                         <button
                           type="button"
-                          onClick={handleAddCustomSkill}
+                          onClick={handleAddCustomAdventure}
                           className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Skill</span>
+                          <span>Add</span>
                         </button>
                       </div>
 
-                      {/* Display Custom Added Skills */}
-                      {additionalSkills.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1.5">
-                          {additionalSkills.map((sk) => (
+                      {additionalAdventures.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {additionalAdventures.map((adv) => (
                             <span
-                              key={sk}
+                              key={adv}
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium"
                             >
-                              <span>{sk}</span>
+                              <span>{adv}</span>
                               <button
                                 type="button"
-                                onClick={() => handleRemoveCustomSkill(sk)}
+                                onClick={() => handleRemoveCustomAdventure(adv)}
                                 className="hover:text-red-600 cursor-pointer"
                               >
                                 <X className="w-3 h-3" />
@@ -860,14 +956,199 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                         </div>
                       )}
                     </div>
-
                   </div>
                 )}
 
                 {/* ======================================================== */}
-                {/* DYNAMIC MATERIAL SUPPLY CATEGORIES (When MATERIAL or BOTH) */}
+                {/* 2. MAINTENANCE & CIVIL SERVICES (When partnerCategory === 'Services') */}
                 {/* ======================================================== */}
-                {(vendorType === 'MATERIAL' || vendorType === 'BOTH') && (
+                {partnerCategory === 'Services' && (
+                  <div className="space-y-3.5 pt-1 animate-in fade-in duration-200">
+                    
+                    {/* 3 Type Selector: Labor vs Material vs Both */}
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
+                        What type of services or materials do you provide? *
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVendorType('LABOR')}
+                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            vendorType === 'LABOR'
+                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>Labor & Services</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setVendorType('MATERIAL')}
+                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            vendorType === 'MATERIAL'
+                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Package className="w-3.5 h-3.5" />
+                          <span>Material Supply</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setVendorType('BOTH')}
+                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            vendorType === 'BOTH'
+                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>Both (Turnkey)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* DYNAMIC SERVICE CATEGORY & WORK SECTIONS (When LABOR or BOTH) */}
+                    {(vendorType === 'LABOR' || vendorType === 'BOTH') && (
+                      <div className="space-y-3.5 pt-1 animate-in fade-in duration-200">
+                        
+                        {/* Dynamic Primary Category Dropdown from DB */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                              Service Domain / Work Category * <span className="text-[#0B63F6] font-normal">(Live from Catalog)</span>
+                            </label>
+                            <span className="text-[10.5px] text-slate-400">
+                              {dbServices.length} categories available
+                            </span>
+                          </div>
+                          <div className="relative">
+                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <Landmark className="w-4 h-4" strokeWidth={1.8} />
+                            </div>
+                            <select
+                              value={selectedServiceId}
+                              onChange={(e) => handleServiceChange(e.target.value)}
+                              className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                            >
+                              {dbServices.map((srv) => (
+                                <option key={srv.id} value={srv.id}>
+                                  {srv.name} ({srv.subServices?.length || 0} work sections)
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <ChevronDown className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dynamic Sub-services / Work Sections belonging to this Service */}
+                        {currentService && currentService.subServices && currentService.subServices.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                                Work Sections in <span className="text-[#0B63F6] font-bold">"{currentService.name}"</span>:
+                              </label>
+                              <span className="text-[10.5px] text-slate-400">Select what you do</span>
+                            </div>
+
+                            {/* Interactive dynamic sub-service cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {currentService.subServices.map((sub) => {
+                                const title = sub.titleEn || sub.name;
+                                const isSelected = selectedSubServices.includes(title);
+                                return (
+                                  <div
+                                    key={sub.id}
+                                    onClick={() => toggleSubService(title)}
+                                    className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
+                                      isSelected
+                                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
+                                        : 'bg-white border-slate-200 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    <div className="space-y-0.5">
+                                      <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                                        {title}
+                                      </div>
+                                      {sub.desc && (
+                                        <p className="text-[10.5px] text-slate-400 line-clamp-1">
+                                          {sub.desc}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
+                                      isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
+                                    }`}>
+                                      {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Additional Custom Trade / Skill Addition */}
+                        <div className="space-y-1.5 pt-1">
+                          <label className="block text-[11px] font-medium text-slate-600">
+                            Have other specialized skills or trade tools?
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={customTradeInput}
+                              onChange={(e) => setCustomTradeInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
+                              placeholder="e.g. Copper Gas Piping, Core Cutting, Epoxy Grouting"
+                              className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCustomSkill}
+                              className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Skill</span>
+                            </button>
+                          </div>
+
+                          {/* Display Custom Added Skills */}
+                          {additionalSkills.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1.5">
+                              {additionalSkills.map((sk) => (
+                                <span
+                                  key={sk}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium"
+                                >
+                                  <span>{sk}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomSkill(sk)}
+                                    className="hover:text-red-600 cursor-pointer"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ======================================================== */}
+                {/* 3. MATERIAL SUPPLY CATEGORIES (When partnerCategory === 'Material' or vendorType === 'MATERIAL' or 'BOTH') */}
+                {/* ======================================================== */}
+                {(partnerCategory === 'Material' || (partnerCategory === 'Services' && (vendorType === 'MATERIAL' || vendorType === 'BOTH'))) && (
                   <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
                     <div className="flex items-center justify-between">
                       <label className="block text-[11.5px] font-semibold text-[#1F2937]">
@@ -1155,7 +1436,15 @@ export default function VendorRegisterPage({ onRegisterSuccess, onSwitchToLogin 
                 ) : (
                   <>
                     <UserPlus className="w-4 h-4" strokeWidth={2.2} />
-                    <span>{hasBusiness ? 'Register Business Entity Now →' : 'Register Service Profile Now →'}</span>
+                    <span>
+                      {partnerCategory === 'Adventure'
+                        ? 'Register Adventure Operator Profile Now →'
+                        : partnerCategory === 'Material'
+                        ? 'Register Material Supplier Profile Now →'
+                        : hasBusiness
+                        ? 'Register Business Entity Now →'
+                        : 'Register Service Profile Now →'}
+                    </span>
                   </>
                 )}
               </button>

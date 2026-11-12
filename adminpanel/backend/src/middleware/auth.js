@@ -19,6 +19,83 @@ if (!JWT_SECRET || JWT_SECRET === 'your_super_secret_jwt_key_here') {
  */
 
 /**
+ * Normalize a role value from a JWT, database row, or request body.
+ */
+function normalizeRole(value) {
+  return String(value || 'CUSTOMER').trim().toUpperCase();
+}
+
+/**
+ * Resolve the request identity from the database, not from mutable JWT claims.
+ * Staff roles and permissions are re-read on every authenticated request so that
+ * role changes, permission edits, and deactivations take effect immediately.
+ */
+async function resolveRequestUser(decoded) {
+  const userId = decoded.id || decoded.userId;
+  if (!userId) return null;
+
+  const tokenRole = normalizeRole(decoded.role);
+  const hasStaffIdentity = Boolean(decoded.staffId) ||
+    !['VENDOR', 'CUSTOMER', 'USER'].includes(tokenRole);
+
+  if (hasStaffIdentity) {
+    const staff = await prisma.staffMember.findUnique({
+      where: { id: decoded.staffId || userId },
+      include: { role: true }
+    });
+
+    if (!staff || !staff.isActive || !staff.role || staff.role.isActive === false) {
+      return null;
+    }
+
+    return {
+      id: staff.id,
+      staffId: staff.id,
+      role: normalizeRole(staff.role.name),
+      roleName: staff.role.displayName || staff.role.name,
+      permissions: Array.isArray(staff.role.permissions) ? staff.role.permissions : [],
+      vendorId: null,
+      email: staff.email || null,
+      name: staff.name || null
+    };
+  }
+
+  if (tokenRole === 'VENDOR') {
+    const vendorId = decoded.vendorId || userId;
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      select: { id: true, name: true, email: true, phone: true, status: true }
+    });
+
+    if (!vendor || String(vendor.status || '').toLowerCase() === 'inactive') {
+      return null;
+    }
+
+    return {
+      id: vendor.id,
+      staffId: null,
+      role: 'VENDOR',
+      roleName: 'Vendor',
+      permissions: [],
+      vendorId: vendor.id,
+      email: vendor.email || null,
+      name: vendor.name || null
+    };
+  }
+
+  return {
+    id: userId,
+    staffId: null,
+    role: tokenRole,
+    roleName: decoded.roleName || tokenRole,
+    permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
+    vendorId: null,
+    email: decoded.email || null,
+    name: decoded.name || null
+  };
+}
+
+/**
  * Core Authentication Middleware
  * Validates JWT Bearer tokens, resolves identity and role, and attaches `req.user`.
  */
@@ -34,27 +111,16 @@ async function authenticate(req, res, next) {
 
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
+    const requestUser = await resolveRequestUser(decoded);
 
-    const userId = decoded.id || decoded.userId;
-    if (!userId) {
+    if (!requestUser) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid token payload'
+        message: 'This account or its assigned role is inactive. Please sign in again.'
       });
     }
 
-    // Attach identity & role to request
-    req.user = {
-      id: userId,
-      staffId: decoded.staffId || (decoded.role !== 'VENDOR' && decoded.role !== 'CUSTOMER' ? userId : null),
-      role: (decoded.role || 'CUSTOMER').toUpperCase(),
-      roleName: decoded.roleName || (decoded.role || 'CUSTOMER').toUpperCase(),
-      permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
-      vendorId: decoded.vendorId || (decoded.role === 'VENDOR' ? userId : null),
-      email: decoded.email || null,
-      name: decoded.name || null
-    };
-
+    req.user = requestUser;
     next();
   } catch (error) {
     return res.status(401).json({
@@ -81,17 +147,11 @@ function requireAdmin(req, res, next) {
 
 /**
  * Vendor Authorization Guard
- * Ensures user is an onboarded Vendor (or Super Admin inspecting vendor portal).
+ * Only authenticated vendor accounts can use vendor portal endpoints.
  */
 function requireVendor(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'Authentication required' });
-  }
-
-  // Admins can act as vendors for inspection / testing
-  if (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN') {
-    req.vendorId = req.query.vendorId || req.user.vendorId || 'v_adv_01';
-    return next();
   }
 
   if (req.user.role !== 'VENDOR') {
@@ -132,24 +192,22 @@ function preventVendorIDOR(req, res, next) {
     return res.status(401).json({ success: false, message: 'Authentication required' });
   }
 
-  // Admins are exempt from IDOR restrictions
-  if (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN') {
-    return next();
+  if (req.user.role !== 'VENDOR') {
+    return res.status(403).json({ success: false, message: 'Forbidden: Vendor access required' });
   }
 
-  if (req.user.role === 'VENDOR') {
-    const requestedVendorId = req.query.vendorId || req.body?.vendorId || req.params?.vendorId;
-    if (requestedVendorId && requestedVendorId !== req.user.vendorId && requestedVendorId !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Security Alert: You are not authorized to view or access another vendor\'s data.'
-      });
-    }
-    // Overwrite any client-supplied vendorId with the verified token identity
-    req.query.vendorId = req.user.vendorId || req.user.id;
-    if (req.body && req.body.vendorId) {
-      req.body.vendorId = req.user.vendorId || req.user.id;
-    }
+  const requestedVendorId = req.query.vendorId || req.body?.vendorId || req.params?.vendorId;
+  if (requestedVendorId && requestedVendorId !== req.user.vendorId && requestedVendorId !== req.user.id) {
+    return res.status(403).json({
+      success: false,
+      message: 'Security Alert: You are not authorized to view or access another vendor\'s data.'
+    });
+  }
+
+  // Overwrite any client-supplied vendorId with the verified token identity
+  req.query.vendorId = req.user.vendorId || req.user.id;
+  if (req.body && req.body.vendorId) {
+    req.body.vendorId = req.user.vendorId || req.user.id;
   }
 
   next();
@@ -204,18 +262,9 @@ async function optionalAuth(req, res, next) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       const decoded = jwt.verify(token, JWT_SECRET);
-      const userId = decoded.id || decoded.userId;
-      if (userId) {
-        req.user = {
-          id: userId,
-          staffId: decoded.staffId || (decoded.role !== 'VENDOR' && decoded.role !== 'CUSTOMER' ? userId : null),
-          role: (decoded.role || 'CUSTOMER').toUpperCase(),
-          roleName: decoded.roleName || (decoded.role || 'CUSTOMER').toUpperCase(),
-          permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
-          vendorId: decoded.vendorId || (decoded.role === 'VENDOR' ? userId : null),
-          email: decoded.email || null,
-          name: decoded.name || null
-        };
+      const requestUser = await resolveRequestUser(decoded);
+      if (requestUser) {
+        req.user = requestUser;
       }
     }
   } catch (err) {

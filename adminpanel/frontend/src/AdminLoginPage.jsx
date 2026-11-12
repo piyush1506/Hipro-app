@@ -3,7 +3,7 @@ import {
   Briefcase, Lock, Mail, Eye, EyeOff,
   AlertCircle, CheckCircle2
 } from 'lucide-react';
-import { getRoleDisplayName, getStaffRoleName } from './authUtils.js';
+import { clearLegacyRoleCache, clearStoredSession, getRoleDisplayName, getStaffRoleName } from './authUtils.js';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
   ? ''
@@ -21,73 +21,46 @@ export default function AdminLoginPage({ onLoginSuccess }) {
   const handleAdminSubmit = async (e) => {
     if (e) e.preventDefault();
     setError(null);
+    setSuccessMsg(null);
 
     const email = adminEmail.trim();
     const password = adminPassword.trim();
 
     if (!email) {
-      setError('Please provide your registered operator email or phone.');
+      setError('Please provide your registered staff email address.');
       return;
     }
     if (!password) {
-      setError('Please enter your security passcode or password.');
+      setError('Please enter your password.');
       return;
     }
 
     setLoading(true);
 
     try {
-      // 1. Authenticate with unified staff role endpoint
-      let res = await fetch(`${API_BASE}/api/v1/auth/staff/login`, {
+      // Only the production staff endpoint is allowed here. There are no cross-role fallbacks.
+      const res = await fetch(`${API_BASE}/api/v1/auth/staff/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
-      // 2. Fallback to legacy admin if staff login 404s
-      if (res.status === 404) {
-        res = await fetch(`${API_BASE}/api/v1/auth/admin/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-      }
+      const data = await res.json().catch(() => ({}));
 
-      // 3. Fallback to vendor login if this is a partner credential
-      if (res.status === 401 || res.status === 403) {
-        const vRes = await fetch(`${API_BASE}/api/v1/auth/vendor/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: email, email, passcode: password, category: operatorCategory }),
-        });
-        const vData = await vRes.json();
-        if (vData.success && vData.token) {
-          localStorage.setItem('hipro_auth_token', vData.token);
-          localStorage.setItem('hipro_user_role', 'VENDOR');
-          localStorage.setItem('hipro_vendor', JSON.stringify(vData.vendor));
-          setSuccessMsg(`Welcome, ${vData.vendor?.businessName || vData.vendor?.name}! Opening console...`);
-          setTimeout(() => {
-            if (onLoginSuccess) onLoginSuccess('VENDOR', vData);
-            else window.location.href = '/';
-          }, 450);
+      if (res.ok && data.success && data.token) {
+        const userRole = getStaffRoleName(data.staff);
+        if (!userRole) {
+          setError('Your account has no active production role assigned. Contact the Super Administrator.');
           return;
         }
-      }
 
-      const data = await res.json();
-
-      if (data.success && data.token) {
-        const userRole = (data.staff?.role || data.user?.role || 'ADMIN').toUpperCase();
-        const userRoleDisplay = data.staff?.roleDisplayName || data.staff?.role || userRole;
-        const permissions = data.staff?.permissions || (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' ? ['*'] : []);
-
+        clearStoredSession();
         localStorage.setItem('hipro_auth_token', data.token);
-        localStorage.setItem('hipro_user_role', userRole);
-        localStorage.setItem('hipro_user_role_display', userRoleDisplay);
-        localStorage.setItem('hipro_user', JSON.stringify(data.staff || data.user));
-        localStorage.setItem('hipro_permissions', JSON.stringify(permissions));
+        clearLegacyRoleCache();
 
-        setSuccessMsg(`Access verified for ${data.staff?.name || 'Administrator'} (${userRoleDisplay}). Opening console...`);
+        const userRoleDisplay = getRoleDisplayName(data.staff) || userRole;
+        setSuccessMsg(`Access verified for ${data.staff?.name || 'Staff User'} (${userRoleDisplay}). Opening console...`);
+
         setTimeout(() => {
           if (onLoginSuccess) {
             onLoginSuccess(userRole, data);
@@ -96,28 +69,13 @@ export default function AdminLoginPage({ onLoginSuccess }) {
           }
         }, 450);
       } else {
-        setError(data.message || 'Access Denied: Invalid credentials or role permissions.');
+        setError(data.message || `Access Denied: Invalid staff credentials (HTTP ${res.status}).`);
       }
     } catch (err) {
-      console.error('Admin login network error:', err);
-      setError('Authentication server unreachable. Please verify backend is running on port 5000.');
+      console.error('Staff login network error:', err);
+      setError('Authentication server unreachable. Please verify the backend is running.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getButtonLabel = () => {
-    switch (operatorCategory) {
-      case 'Staff':
-        return 'Access Operations Console →';
-      case 'Adventure':
-        return 'Access Adventure Console →';
-      case 'Services':
-        return 'Access Contractor Console →';
-      case 'Material':
-        return 'Access Supplier Console →';
-      default:
-        return 'Access Operations Console →';
     }
   };
 
@@ -138,7 +96,7 @@ export default function AdminLoginPage({ onLoginSuccess }) {
           <div className="flex items-center">
             <span className="font-heading font-bold text-[20px] text-[#0F172A] tracking-tight">Hipro</span>
             <span className="text-slate-300 font-light text-base mx-3">|</span>
-            <span className="text-[14px] font-normal text-slate-500">Partner Access</span>
+            <span className="text-[14px] font-normal text-slate-500">Staff Access</span>
           </div>
         </div>
 
@@ -217,10 +175,10 @@ export default function AdminLoginPage({ onLoginSuccess }) {
           {/* Stronger Together Text - Left Aligned */}
           <div className="space-y-1.5 pl-2">
             <h2 className="font-heading font-bold text-[24px] text-[#0F172A] tracking-tight">
-              Stronger Together
+              Secure Operations
             </h2>
             <p className="text-[14px] text-slate-500 font-normal leading-relaxed">
-              Partner with Hipro for<br />better business growth.
+              Production role-based access<br />for Hipro staff.
             </p>
           </div>
         </div>
@@ -237,10 +195,10 @@ export default function AdminLoginPage({ onLoginSuccess }) {
             {/* Title & Subtitle */}
             <div className="text-center mb-6">
               <h1 className="font-heading font-bold text-[23px] text-[#0F172A] tracking-tight">
-                Vendor & Operator Login
+                Staff & Operator Login
               </h1>
               <p className="text-[12.5px] text-slate-500 font-normal mt-1 leading-normal">
-                Sign in to manage your bookings, quotes and customer requests.
+                Sign in with your production role credentials to access the operations console.
               </p>
             </div>
 
@@ -262,61 +220,30 @@ export default function AdminLoginPage({ onLoginSuccess }) {
             {/* Form */}
             <form onSubmit={handleAdminSubmit} className="space-y-4">
               
-              {/* Field 1: Partner Category * */}
+              {/* Field 1: Registered Staff Email */}
               <div>
                 <label className="block text-[12px] font-semibold text-[#1F2937] mb-1.5">
-                  Partner Category *
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                    <Store className="w-4 h-4" strokeWidth={1.8} />
-                  </div>
-
-                  <select
-                    value={operatorCategory}
-                    onChange={(e) => {
-                      setOperatorCategory(e.target.value);
-                      setError(null);
-                    }}
-                    className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
-                  >
-                    <option value="Adventure">Adventure & Tourism Operator (Bathe, Paragliding, ...</option>
-                    <option value="Staff">Operations & Staff Role (Telecaller, Civil Engineer, Purchase, ...</option>
-                    <option value="Services">Civil & Home Services Contractor (Civil, Waterproof, ...</option>
-                    <option value="Material">Material Supplier & Trader (Cement, Steel, Wood, ...</option>
-                    <option value="Labor">Labor Contractor & Manpower (Masons, Helpers, ...</option>
-                  </select>
-
-                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Field 2: Registered Mobile Number or Email * */}
-              <div>
-                <label className="block text-[12px] font-semibold text-[#1F2937] mb-1.5">
-                  Registered Mobile Number or Email *
+                  Registered Email Address *
                 </label>
                 <div className="relative">
                   <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <Mail className="w-4 h-4" strokeWidth={1.8} />
                   </div>
                   <input
-                    type="text"
+                    type="email"
                     required
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="Enter mobile number or email"
+                    placeholder="name@hipro.in"
                     className="w-full h-11 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                   />
                 </div>
               </div>
 
-              {/* Field 3: Security PIN / Passcode */}
+              {/* Field 2: Password */}
               <div>
                 <label className="block text-[12px] font-semibold text-[#1F2937] mb-1.5">
-                  Security PIN / Passcode
+                  Password *
                 </label>
                 <div className="relative">
                   <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -324,9 +251,10 @@ export default function AdminLoginPage({ onLoginSuccess }) {
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    required
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="Enter 4–6 digits"
+                    placeholder="Enter your password"
                     className="w-full h-11 pl-10 pr-10 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                   />
                   <button
@@ -348,27 +276,9 @@ export default function AdminLoginPage({ onLoginSuccess }) {
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 ) : (
-                  <span>{getButtonLabel()}</span>
+                  <span>Access Operations Console →</span>
                 )}
               </button>
-
-              {/* OR Divider */}
-              <div className="relative my-4 flex items-center justify-center before:content-[''] before:flex-1 before:border-t before:border-slate-100 after:content-[''] after:flex-1 after:border-t after:border-slate-100">
-                <span className="px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-                  OR
-                </span>
-              </div>
-
-              {/* Register Link */}
-              <div className="text-center pt-0.5">
-                <a
-                  href="/#register"
-                  className="text-[12.5px] text-[#0B63F6] hover:text-[#0954D8] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <UserPlus className="w-3.5 h-3.5" strokeWidth={2} />
-                  <span>New operator or contractor? Register here →</span>
-                </a>
-              </div>
             </form>
           </div>
         </div>
@@ -384,7 +294,7 @@ export default function AdminLoginPage({ onLoginSuccess }) {
           <span>TLS 1.3 / Secure Connection</span>
         </div>
         <span className="text-slate-300 font-light">|</span>
-        <span className="font-normal text-slate-500">Hipro Partner Portal</span>
+        <span className="font-normal text-slate-500">Hipro Staff Portal</span>
       </footer>
     </div>
   );

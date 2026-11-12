@@ -4,6 +4,7 @@ import {
   Eye, EyeOff, ShieldCheck, AlertCircle, CheckCircle2,
   ChevronDown, UserPlus, Store, Building2, HardHat, Sparkles
 } from 'lucide-react';
+import { clearLegacyRoleCache, clearStoredSession, getRoleDisplayName, getStaffRoleName } from './authUtils.js';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
   ? ''
@@ -53,36 +54,37 @@ export default function LoginPage({ onLoginSuccess, onSwitchToRegister }) {
     setLoading(true);
 
     try {
-      // 1. If Category is Staff or credentials look like staff email, or first attempt vendor login
+      // Staff login is explicit. It never falls back to another portal based on the email/phone shape.
       if (vendorCategory === 'Staff') {
-        // Direct staff login
         const sRes = await fetch(`${API_BASE}/api/v1/auth/staff/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: contact, password: passcode })
         });
-        const sData = await sRes.json();
-        if (sData.success && sData.token) {
-          const userRole = (sData.staff?.role || 'ADMIN').toUpperCase();
-          const userRoleDisplay = sData.staff?.roleDisplayName || sData.staff?.role || userRole;
-          const permissions = sData.staff?.permissions || (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' ? ['*'] : []);
+        const sData = await sRes.json().catch(() => ({}));
 
+        if (sRes.ok && sData.success && sData.token) {
+          const userRole = getStaffRoleName(sData.staff);
+          if (!userRole) {
+            setError('Your account has no active production role assigned. Contact the Super Administrator.');
+            return;
+          }
+
+          clearStoredSession();
           localStorage.setItem('hipro_auth_token', sData.token);
-          localStorage.setItem('hipro_user_role', userRole);
-          localStorage.setItem('hipro_user_role_display', userRoleDisplay);
-          localStorage.setItem('hipro_user', JSON.stringify(sData.staff));
-          localStorage.setItem('hipro_permissions', JSON.stringify(permissions));
+          clearLegacyRoleCache();
 
-          setSuccessMsg(`Access verified for ${sData.staff?.name || 'User'} (${userRoleDisplay}). Loading console...`);
+          const userRoleDisplay = getRoleDisplayName(sData.staff) || userRole;
+          setSuccessMsg(`Access verified for ${sData.staff?.name || 'Staff User'} (${userRoleDisplay}). Loading operations console...`);
           setTimeout(() => handleLoginComplete(userRole, sData), 450);
           return;
-        } else {
-          setError(sData.message || 'Access Denied: Invalid operator credentials.');
-          return;
         }
+
+        setError(sData.message || `Access Denied: Invalid staff credentials (HTTP ${sRes.status}).`);
+        return;
       }
 
-      // 2. Vendor / Partner Login
+      // Vendor / Partner login only. No staff fallback is attempted from the partner portal.
       const res = await fetch(`${API_BASE}/api/v1/auth/vendor/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,12 +95,16 @@ export default function LoginPage({ onLoginSuccess, onSwitchToRegister }) {
           category: vendorCategory
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (data.success && data.token) {
+      if (res.ok && data.success && data.token) {
+        clearStoredSession();
         localStorage.setItem('hipro_auth_token', data.token);
-        localStorage.setItem('hipro_user_role', 'VENDOR');
-        localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
+        if (data.vendor) {
+          localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
+        }
+        clearLegacyRoleCache();
+
         setSuccessMsg(`Welcome, ${data.vendor?.businessName || data.vendor?.name || 'Partner'}! Opening console...`);
         setTimeout(() => {
           handleLoginComplete('VENDOR', data);
@@ -106,32 +112,7 @@ export default function LoginPage({ onLoginSuccess, onSwitchToRegister }) {
         return;
       }
 
-      // 3. Fallback: Check if this user is a staff member logging in via the main portal
-      if (contact.includes('@') && passcode) {
-        const staffRes = await fetch(`${API_BASE}/api/v1/auth/staff/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: contact, password: passcode })
-        });
-        const staffData = await staffRes.json();
-        if (staffData.success && staffData.token) {
-          const userRole = (staffData.staff?.role || 'ADMIN').toUpperCase();
-          const userRoleDisplay = staffData.staff?.roleDisplayName || staffData.staff?.role || userRole;
-          const permissions = staffData.staff?.permissions || (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' ? ['*'] : []);
-
-          localStorage.setItem('hipro_auth_token', staffData.token);
-          localStorage.setItem('hipro_user_role', userRole);
-          localStorage.setItem('hipro_user_role_display', userRoleDisplay);
-          localStorage.setItem('hipro_user', JSON.stringify(staffData.staff));
-          localStorage.setItem('hipro_permissions', JSON.stringify(permissions));
-
-          setSuccessMsg(`Verified staff member ${staffData.staff?.name} (${userRoleDisplay}). Redirecting...`);
-          setTimeout(() => handleLoginComplete(userRole, staffData), 450);
-          return;
-        }
-      }
-
-      setError(data.message || 'Access Denied: Unregistered contact or invalid security PIN.');
+      setError(data.message || `Access Denied: Unregistered contact or invalid security PIN (HTTP ${res.status}).`);
     } catch (err) {
       console.error('Login error:', err);
       setError('Connection failed: Unable to reach authentication server. Please ensure server is running.');
@@ -419,7 +400,7 @@ export default function LoginPage({ onLoginSuccess, onSwitchToRegister }) {
                   type="button"
                   onClick={() => {
                     if (onSwitchToRegister) {
-                      onSwitchToRegister();
+                      onSwitchToRegister(vendorCategory);
                     } else if (typeof window !== 'undefined') {
                       window.location.hash = '#register';
                     }

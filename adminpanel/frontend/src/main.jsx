@@ -201,8 +201,12 @@ function AppRoot() {
   };
 
   const handleLoginSuccess = (role, data) => {
-    const staff = data?.staff || null;
-    const normalizedRole = normalizeRoleName(role) || getStaffRoleName(staff);
+    // Some legacy callers pass only the response payload. Normalize both shapes.
+    const payload = data || (role && typeof role === 'object' ? role : null);
+    const staff = payload?.staff || null;
+    const normalizedRole = normalizeRoleName(role) ||
+      getStaffRoleName(staff) ||
+      (payload?.vendor ? 'VENDOR' : '');
 
     if (!normalizedRole) {
       clearStoredSession();
@@ -225,6 +229,13 @@ function AppRoot() {
       if (typeof window !== 'undefined') {
         try {
           window.history.replaceState(null, '', ADMIN_ROUTE);
+        } catch (e) {}
+      }
+    } else if (normalizedRole === 'VENDOR') {
+      setTargetPortal('vendor');
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.replaceState(null, '', '/');
         } catch (e) {}
       }
     }
@@ -279,11 +290,14 @@ function AppRoot() {
     );
   }
 
+  const [selectedRegisterCategory, setSelectedRegisterCategory] = useState('Services');
+
   // Root & Vendor Routes (`/`, `/vendor`, `/login`, `/register`)
   if (!authState.isAuthenticated || authState.role !== 'VENDOR') {
     if (targetPortal === 'register') {
       return (
         <VendorRegisterPage
+          initialCategory={selectedRegisterCategory}
           onRegisterSuccess={handleLoginSuccess}
           onSwitchToLogin={() => navigatePortal('vendor')}
         />
@@ -292,7 +306,10 @@ function AppRoot() {
     return (
       <LoginPage
         onLoginSuccess={handleLoginSuccess}
-        onSwitchToRegister={() => navigatePortal('register')}
+        onSwitchToRegister={(cat) => {
+          if (cat) setSelectedRegisterCategory(cat);
+          navigatePortal('register');
+        }}
       />
     );
   }
