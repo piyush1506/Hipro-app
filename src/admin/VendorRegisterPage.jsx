@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Briefcase, Building2, Landmark, User, Users,
+  Briefcase, Building2, Landmark, User,
   Mail, Phone, Lock, Eye, EyeOff, MapPin, Home,
   Search, Info, UserPlus, ChevronDown, Rocket,
   ShieldCheck, Headphones, AlertCircle, CheckCircle2,
-  Check, Receipt, Wrench, Zap, Droplets, Hammer,
-  Paintbrush, Package, HardHat, Sparkles, Plus, X,
-  Compass, Mountain, Tent, Store, Trees
+  Check, Receipt, Wrench, Package, Sparkles, Plus, X,
+  Compass, CheckSquare, Square
 } from 'lucide-react';
 
 const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
   ? ''
   : (import.meta.env.VITE_API_BASE_URL || 'https://app.hindustanprojects.in');
-
-const INDIAN_STATES = [
-  'Rajasthan', 'Maharashtra', 'Delhi', 'Gujarat', 'Karnataka',
-  'Uttar Pradesh', 'Tamil Nadu', 'Telangana', 'West Bengal', 'Madhya Pradesh',
-  'Haryana', 'Punjab', 'Bihar', 'Kerala', 'Andhra Pradesh',
-  'Odisha', 'Assam', 'Jharkhand', 'Chhattisgarh', 'Uttarakhand',
-  'Himachal Pradesh', 'Goa', 'Jammu and Kashmir', 'Chandigarh'
-];
 
 const ADVENTURE_ACTIVITIES = [
   { id: 'paragliding', title: 'Paragliding & Aero Sports', desc: 'Tandem flights, powered paragliding, paramotor' },
@@ -33,59 +24,46 @@ const ADVENTURE_ACTIVITIES = [
 ];
 
 export default function VendorRegisterPage({ initialCategory = 'Services', onRegisterSuccess, onSwitchToLogin }) {
-  // Top-Level Partner Category / Domain Sector: 'Services' | 'Adventure' | 'Material'
+  // ─── Step 1: Root Partner Category (ONLY 2: Services OR Adventure) ───
   const [partnerCategory, setPartnerCategory] = useState(() => {
     if (initialCategory === 'Adventure') return 'Adventure';
-    if (initialCategory === 'Material') return 'Material';
     return 'Services';
   });
 
-  // Business Ownership Toggle: False = Individual / Freelancer, True = Registered Business
-  const [hasBusiness, setHasBusiness] = useState(false);
+  // ─── Step 2: Under Services -> Type (Labor, Material, or Both) ───
+  const [vendorType, setVendorType] = useState('LABOR'); // 'LABOR' | 'MATERIAL' | 'BOTH'
 
-  // Dynamic Catalog State from Backend PostgreSQL
+  // Dynamic Catalog from Backend
   const [dbServices, setDbServices] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [materialCatalog, setMaterialCatalog] = useState([]);
 
-  // Common Identity
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-
-  // Business-specific fields (Conditional on hasBusiness)
-  const [businessName, setBusinessName] = useState('');
-  const [gstinNumber, setGstinNumber] = useState('');
-
-  // Classification: LABOR, MATERIAL, or BOTH
-  const [vendorType, setVendorType] = useState('LABOR'); // 'LABOR' | 'MATERIAL' | 'BOTH'
-  
-  // Dynamic Service & Sub-service Selection (for Services)
+  // Selected Service & Sub-services
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedSubServices, setSelectedSubServices] = useState([]);
   const [customTradeInput, setCustomTradeInput] = useState('');
   const [additionalSkills, setAdditionalSkills] = useState([]);
 
-  // Adventure Activities Selection (for Adventure & Tourism)
-  const [selectedAdventures, setSelectedAdventures] = useState([
-    'Paragliding & Aero Sports'
-  ]);
+  // Material Selection (when Material or Both)
+  const [selectedMaterials, setSelectedMaterials] = useState([]);
+  const [customMaterialInput, setCustomMaterialInput] = useState('');
+
+  // Adventure Activities (when Adventure)
+  const [selectedAdventures, setSelectedAdventures] = useState(['Paragliding & Aero Sports']);
   const [customAdventureInput, setCustomAdventureInput] = useState('');
   const [additionalAdventures, setAdditionalAdventures] = useState([]);
 
-  // Dynamic Material Selection
-  const [selectedMaterials, setSelectedMaterials] = useState([]);
-  const [customMaterialInput, setCustomMaterialInput] = useState('');
-  
   const [experience, setExperience] = useState('3-5 Years');
 
-  // Security Credentials
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // ─── Step 3: Identity & Business Details ───
+  const [hasBusiness, setHasBusiness] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [gstinNumber, setGstinNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
 
-  // Address fields
+  // ─── Step 4: Address Details (PIN Auto-Fetch) ───
   const [pincode, setPincode] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
@@ -93,18 +71,25 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
   const [city, setCity] = useState('');
   const [addressState, setAddressState] = useState('');
   const [resolvedLocation, setResolvedLocation] = useState(null);
-
-  // Interactive states
   const [fetchingPin, setFetchingPin] = useState(false);
+
+  // ─── Step 5: Security Credentials (LAST STEP) ───
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Form State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Auto-resolve Indian location in background when 6-digit PIN code is typed
+  // ═══════════════════════════════════════════════
+  // PIN Code Auto-Resolver (Triggers at 6 digits)
+  // ═══════════════════════════════════════════════
   const resolvePincode = async (code) => {
     const cleanPin = code.trim().replace(/\D/g, '');
     if (cleanPin.length !== 6) return;
-
     setFetchingPin(true);
     try {
       const res = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`);
@@ -114,7 +99,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
         const distName = po.District || '';
         const cityName = (po.Block && po.Block !== 'NA') ? po.Block : (po.District || po.Name || '');
         const stateName = po.State || '';
-
         setDistrict(distName);
         setCity(cityName);
         setAddressState(stateName);
@@ -139,15 +123,17 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
       setResolvedLocation(null);
     }
   };
+
+  // ═══════════════════════════════════════════════
+  // Dynamic Catalog Fetch
+  // ═══════════════════════════════════════════════
   useEffect(() => {
     let isCancelled = false;
     const fetchCatalog = async () => {
       try {
         setCatalogLoading(true);
-        // Try unified catalog endpoint
         let res = await fetch(`${API_BASE}/api/v1/vendors/catalog`);
         if (!res.ok) {
-          // Fallback to standard services endpoint
           res = await fetch(`${API_BASE}/api/v1/services`);
         }
         const data = await res.json();
@@ -163,8 +149,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               'Tiles, Marbles & Sanitaryware', 'Bricks, Stone & AAC Blocks', 'Glass, Aluminum & Hardware'
             ]);
           }
-
-          // Default to first service and its subservices
           if (servicesList.length > 0) {
             const first = servicesList[0];
             setSelectedServiceId(first.id);
@@ -179,12 +163,13 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
         if (!isCancelled) setCatalogLoading(false);
       }
     };
-
     fetchCatalog();
     return () => { isCancelled = true; };
   }, []);
 
-  // When selected service changes, refresh the active subservices
+  // Currently active service from DB
+  const currentService = dbServices.find((s) => s.id === selectedServiceId) || dbServices[0];
+
   const handleServiceChange = (serviceId) => {
     setSelectedServiceId(serviceId);
     const matchedService = dbServices.find((s) => s.id === serviceId);
@@ -195,11 +180,10 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     }
   };
 
-  // Toggle subservice in list
   const toggleSubService = (subTitle) => {
     setSelectedSubServices((prev) => {
       if (prev.includes(subTitle)) {
-        if (prev.length === 1 && additionalSkills.length === 0) return prev; // keep at least 1
+        if (prev.length === 1 && additionalSkills.length === 0) return prev;
         return prev.filter((s) => s !== subTitle);
       } else {
         return [...prev, subTitle];
@@ -207,7 +191,18 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     });
   };
 
-  // Add custom trade skill
+  const handleSelectAllSubServices = () => {
+    if (!currentService || !currentService.subServices) return;
+    const allTitles = currentService.subServices.map((s) => s.titleEn || s.name);
+    if (selectedSubServices.length === allTitles.length) {
+      // If all are selected, reset to only the first one
+      setSelectedSubServices(allTitles.length > 0 ? [allTitles[0]] : []);
+    } else {
+      // Select all
+      setSelectedSubServices(allTitles);
+    }
+  };
+
   const handleAddCustomSkill = (e) => {
     if (e) e.preventDefault();
     const clean = customTradeInput.trim();
@@ -221,18 +216,13 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     setAdditionalSkills((prev) => prev.filter((s) => s !== skill));
   };
 
-  // Toggle material in list
   const toggleMaterial = (mat) => {
     setSelectedMaterials((prev) => {
-      if (prev.includes(mat)) {
-        return prev.filter((m) => m !== mat);
-      } else {
-        return [...prev, mat];
-      }
+      if (prev.includes(mat)) return prev.filter((m) => m !== mat);
+      return [...prev, mat];
     });
   };
 
-  // Add custom material
   const handleAddCustomMaterial = (e) => {
     if (e) e.preventDefault();
     const clean = customMaterialInput.trim();
@@ -243,7 +233,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     }
   };
 
-  // Toggle adventure activity in list
   const toggleAdventure = (title) => {
     setSelectedAdventures((prev) => {
       if (prev.includes(title)) {
@@ -255,7 +244,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     });
   };
 
-  // Add custom adventure activity
   const handleAddCustomAdventure = (e) => {
     if (e) e.preventDefault();
     const clean = customAdventureInput.trim();
@@ -271,23 +259,22 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     setSelectedAdventures((prev) => prev.filter((t) => t !== title));
   };
 
-  // Form submission handler
+  // ═══════════════════════════════════════════════
+  // Form Submission
+  // ═══════════════════════════════════════════════
   const handleRegisterSubmit = async (e) => {
     if (e) e.preventDefault();
     setError(null);
 
-    // Validation
     const resolvedName = fullName.trim() || (hasBusiness ? businessName.trim() : '');
     if (!resolvedName) {
       setError(hasBusiness ? 'Please enter contact person or enterprise name.' : 'Please enter your full legal name.');
       return;
     }
-
     if (hasBusiness && !businessName.trim()) {
       setError('Please enter your registered business or enterprise name.');
       return;
     }
-
     if (!phone.trim()) {
       setError('Please enter your mobile phone number.');
       return;
@@ -295,6 +282,15 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     const cleanPhone = phone.trim().replace(/\D/g, '');
     if (cleanPhone.length < 10) {
       setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (!pincode.trim() || pincode.trim().length !== 6) {
+      setError('Please enter a valid 6-digit postal PIN code.');
+      return;
+    }
+    if (!addressLine1.trim()) {
+      setError('Please enter your address in Address Line 1.');
       return;
     }
 
@@ -311,33 +307,20 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
       return;
     }
 
-    if (!pincode.trim() || pincode.trim().length !== 6) {
-      setError('Please enter a valid 6-digit postal PIN code.');
-      return;
-    }
-
-    if (!addressLine1.trim()) {
-      setError('Please enter your address in Address Line 1.');
-      return;
-    }
-
     const isAdventure = partnerCategory === 'Adventure';
-    const isMaterialOnly = partnerCategory === 'Material' || (partnerCategory === 'Services' && vendorType === 'MATERIAL');
+    const isMaterialOnly = partnerCategory === 'Services' && vendorType === 'MATERIAL';
 
-    // Material validation if user selected material
     if (isMaterialOnly && selectedMaterials.length === 0) {
       setError('Please select at least one material category you supply.');
       return;
     }
 
-    // Adventure validation
     const allAdventureActivities = [...selectedAdventures, ...additionalAdventures];
     if (isAdventure && allAdventureActivities.length === 0) {
       setError('Please select at least one adventure activity or tourism service you operate.');
       return;
     }
 
-    // Service validation if user selected labor
     const allLaborTrades = [...selectedSubServices, ...additionalSkills];
     if (!isAdventure && !isMaterialOnly && (vendorType === 'LABOR' || vendorType === 'BOTH') && allLaborTrades.length === 0) {
       setError('Please select at least one service trade or work section.');
@@ -402,7 +385,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
         if (data.vendor) {
           localStorage.setItem('hipro_vendor', JSON.stringify(data.vendor));
         }
-
         setSuccessMsg('Registration successful! Opening partner dashboard...');
         setTimeout(() => {
           if (onRegisterSuccess) {
@@ -433,20 +415,15 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
     }
   };
 
-  // Find currently selected service object
-  const currentService = dbServices.find((s) => s.id === selectedServiceId) || dbServices[0];
-
   return (
     <div className="min-h-screen bg-[#F8FAFD] text-slate-800 flex flex-col justify-between font-sans antialiased relative overflow-hidden select-none">
-      
-      {/* Background Soft Ambient Gradients */}
+
+      {/* Ambient background blur */}
       <div className="absolute -top-32 -right-32 w-[540px] h-[540px] rounded-full bg-[#EBF3FE]/75 blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full bg-[#EEF5FF]/85 blur-3xl pointer-events-none"></div>
 
-      {/* Top Navigation Bar */}
+      {/* ═══════════════ Top Navigation Bar ═══════════════ */}
       <header className="relative z-10 w-full px-6 sm:px-12 py-5 flex items-center justify-between">
-        
-        {/* Left: Brand + Hipro | Partner Onboarding */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-[10px] bg-[#0B63F6] flex items-center justify-center font-bold text-white text-[18px] shadow-sm tracking-tight">
             H
@@ -458,12 +435,11 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               <span className="text-[13.5px] font-semibold text-[#1E293B]">Partner Onboarding</span>
             </div>
             <p className="text-[10.5px] text-slate-400 font-normal mt-0.5 tracking-tight">
-              Dynamic Service & Trade Gateway
+              Service & Adventure Operator Gateway
             </p>
           </div>
         </div>
 
-        {/* Center: Partner Portal Button */}
         <button
           type="button"
           onClick={handleGoToLogin}
@@ -472,7 +448,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
           Partner Portal
         </button>
 
-        {/* Right: Secure & Trusted */}
         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
           <svg className="w-4 h-4 text-[#10B981]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -482,13 +457,11 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* ═══════════════ Main Content ═══════════════ */}
       <main className="relative z-10 flex-1 max-w-6xl mx-auto w-full px-5 sm:px-8 py-4 sm:py-6 flex flex-col lg:flex-row items-start justify-center gap-10 lg:gap-14">
-        
-        {/* Left Side: Illustration + Grow Together + Value Props */}
+
+        {/* ─── Left Column: Illustration & Value Pillars ─── */}
         <div className="hidden lg:flex flex-col items-start text-left max-w-[340px] pt-4 sticky top-6">
-          
-          {/* Skyline & Handshake Graphic */}
           <div className="relative w-full h-[180px] flex items-center justify-center mb-4">
             <svg className="absolute top-1 left-4 w-[280px] h-[130px] text-slate-200/90 pointer-events-none" viewBox="0 0 240 120" fill="currentColor">
               <rect x="18" y="45" width="22" height="75" rx="2" opacity="0.45" />
@@ -498,53 +471,31 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               <rect x="136" y="32" width="24" height="88" rx="2" opacity="0.6" />
               <rect x="164" y="20" width="26" height="100" rx="2.5" opacity="0.7" />
               <rect x="194" y="50" width="20" height="70" rx="2" opacity="0.45" />
-              <circle cx="57" cy="36" r="1.5" fill="#FFFFFF" opacity="0.85" />
-              <circle cx="57" cy="48" r="1.5" fill="#FFFFFF" opacity="0.85" />
-              <circle cx="116" cy="22" r="1.8" fill="#FFFFFF" opacity="0.9" />
-              <circle cx="116" cy="34" r="1.8" fill="#FFFFFF" opacity="0.9" />
-              <circle cx="116" cy="46" r="1.8" fill="#FFFFFF" opacity="0.9" />
-              <circle cx="177" cy="32" r="1.5" fill="#FFFFFF" opacity="0.85" />
-              <circle cx="177" cy="44" r="1.5" fill="#FFFFFF" opacity="0.85" />
             </svg>
-
-            <div className="absolute top-2 left-32 text-[#60A5FA] pointer-events-none drop-shadow-xs">
+            <div className="absolute top-2 left-32 text-[#60A5FA] pointer-events-none">
               <MapPin className="w-5 h-5 fill-[#EBF3FE] text-[#3B82F6]" />
             </div>
-
             <div className="relative z-10 w-[110px] h-[110px] flex items-center justify-center">
               <svg className="w-[100px] h-[100px] drop-shadow-[0_4px_12px_rgba(37,99,235,0.18)]" viewBox="0 0 100 100" fill="none">
                 <path d="M8 50 L26 34 L36 45 L18 61 Z" fill="#2563EB" />
                 <path d="M24 32 L29 28 L39 39 L34 43 Z" fill="#93C5FD" />
                 <path d="M92 50 L74 34 L64 45 L82 61 Z" fill="#3B82F6" />
                 <path d="M76 32 L71 28 L61 39 L66 43 Z" fill="#93C5FD" />
-                <path
-                  d="M30 42 C32 40 37 40 40 43 L54 53 C57 55 57 59 54 62 C51 65 47 65 44 62 L30 51 C28 49 28 45 30 42 Z"
-                  fill="#1D4ED8"
-                />
-                <path
-                  d="M70 42 C68 40 63 40 60 43 L46 53 C43 55 43 59 46 62 C49 65 53 65 56 62 L70 51 C72 49 72 45 70 42 Z"
-                  fill="#60A5FA"
-                />
-                <path d="M38 39 C41 36 46 38 47 42 L44 47 L37 42 Z" fill="#2563EB" />
-                <path d="M62 39 C59 36 54 38 53 42 L56 47 L63 42 Z" fill="#93C5FD" />
-                <path d="M48 57 C50 59 53 60 55 58" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-                <path d="M51 53 C53 55 56 56 58 54" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-                <path d="M54 49 C56 51 59 52 61 50" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                <path d="M30 42 C32 40 37 40 40 43 L54 53 C57 55 57 59 54 62 C51 65 47 65 44 62 L30 51 C28 49 28 45 30 42 Z" fill="#1D4ED8" />
+                <path d="M70 42 C68 40 63 40 60 43 L46 53 C43 55 43 59 46 62 C49 65 53 65 56 62 L70 51 C72 49 72 45 70 42 Z" fill="#60A5FA" />
               </svg>
             </div>
           </div>
 
-          {/* Heading */}
           <div className="mb-8">
             <h1 className="font-heading font-bold text-[28px] text-[#0F172A] tracking-tight leading-tight">
               Grow Together<br />with Hipro
             </h1>
             <p className="text-[14px] text-slate-500 font-normal mt-1 leading-snug">
-              Connect to 100+ live civil projects & service requests daily.
+              Partner with us for better business growth.
             </p>
           </div>
 
-          {/* 3 Value Pillars */}
           <div className="space-y-5 w-full">
             <div className="flex items-center gap-3.5">
               <div className="w-11 h-11 rounded-full bg-[#EBF3FE] flex items-center justify-center shrink-0">
@@ -552,10 +503,10 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Direct Work Dispatch
+                  Expand Your Business
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Assigned directly by Civil Engineers
+                  Get more opportunities
                 </p>
               </div>
             </div>
@@ -566,10 +517,10 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Guaranteed Settlements
+                  Trusted Platform
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  100% Milestone-based escrow security
+                  Safe & Secure
                 </p>
               </div>
             </div>
@@ -580,21 +531,20 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
               </div>
               <div>
                 <h3 className="font-semibold text-[13.5px] text-[#0F172A] leading-none">
-                  Procurement Support
+                  Professional Support
                 </h3>
                 <p className="text-[12px] text-slate-500 font-normal mt-1">
-                  Transparent RFQ quotations
+                  Dedicated Support
                 </p>
               </div>
             </div>
           </div>
-
         </div>
 
-        {/* Right Side: Registration Form Card */}
+        {/* ─── Right Column: Step-by-Step Form Card ─── */}
         <div className="w-full max-w-[650px]">
           <div className="bg-white rounded-[28px] px-7 sm:px-9 py-8 sm:py-9 shadow-[0_15px_45px_rgba(15,23,42,0.06)] border border-slate-100">
-            
+
             {/* Top Briefcase Icon */}
             <div className="w-13 h-13 rounded-full bg-[#EBF3FE] flex items-center justify-center mb-3">
               <Briefcase className="w-6 h-6 text-[#0B63F6]" strokeWidth={2} />
@@ -606,46 +556,8 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 Register as a Hipro Partner
               </h2>
               <p className="text-[12.5px] text-slate-500 font-normal mt-0.5">
-                Onboard your skilled services or material inventory onto Hipro.
+                Fill in the details below to become a registered partner with Hipro.
               </p>
-            </div>
-
-            {/* Business Ownership Toggle Checkbox */}
-            <div 
-              onClick={() => setHasBusiness(!hasBusiness)}
-              className={`mb-5 p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
-                hasBusiness 
-                  ? 'bg-[#EBF3FE]/70 border-[#0B63F6]/40 shadow-xs' 
-                  : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
-                  hasBusiness 
-                    ? 'bg-[#0B63F6] border-[#0B63F6] text-white shadow-xs' 
-                    : 'bg-white border-slate-300'
-                }`}>
-                  {hasBusiness && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                </div>
-                <div>
-                  <div className="text-[13px] font-semibold text-[#0F172A] flex items-center gap-1.5 leading-none">
-                    <Building2 className={`w-4 h-4 ${hasBusiness ? 'text-[#0B63F6]' : 'text-slate-400'}`} />
-                    <span>I own a business / registered enterprise</span>
-                  </div>
-                  <p className="text-[11.5px] text-slate-500 font-normal mt-1 leading-none">
-                    {hasBusiness 
-                      ? 'Enterprise Account: Enter Business Name & optional GST' 
-                      : 'Individual Account: Only your name, trade skill & address required'}
-                  </p>
-                </div>
-              </div>
-              <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full shrink-0 ${
-                hasBusiness 
-                  ? 'bg-[#0B63F6] text-white' 
-                  : 'bg-slate-200/80 text-slate-600'
-              }`}>
-                {hasBusiness ? 'Business' : 'Individual'}
-              </span>
             </div>
 
             {/* Alerts */}
@@ -655,7 +567,6 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 <span>{error}</span>
               </div>
             )}
-
             {successMsg && (
               <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2 animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
@@ -664,20 +575,490 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
             )}
 
             <form onSubmit={handleRegisterSubmit} className="space-y-5">
-              
-              {/* ======================================================== */}
-              {/* SECTION 1: Identity & Name */}
-              {/* ======================================================== */}
+
+              {/* ═══════════════════════════════════════════════════════ */}
+              {/* STEP 1: CATEGORY SELECTION (Services vs Adventure)     */}
+              {/* ═══════════════════════════════════════════════════════ */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                  <User className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                  <span>{hasBusiness ? 'Contact Person & Enterprise Identity' : 'Personal Details'}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <Briefcase className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>Select Partner Category *</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Step 1 of 5</span>
                 </div>
 
-                {/* Individual Full Name */}
+                {/* 2-Option Cards: Services & Maintenance vs Adventure & Tourism */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    onClick={() => {
+                      setPartnerCategory('Services');
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start gap-3 ${
+                      partnerCategory === 'Services'
+                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-xs ring-1 ring-[#0B63F6]/20'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      partnerCategory === 'Services' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      <Wrench className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[13px] font-bold ${partnerCategory === 'Services' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                          Maintenance & Services
+                        </span>
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          partnerCategory === 'Services' ? 'border-[#0B63F6] bg-[#0B63F6] text-white' : 'border-slate-300'
+                        }`}>
+                          {partnerCategory === 'Services' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        Electrician, Plumber, Waterproofing, Civil & Materials
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      setPartnerCategory('Adventure');
+                      setVendorType('LABOR');
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start gap-3 ${
+                      partnerCategory === 'Adventure'
+                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-xs ring-1 ring-[#0B63F6]/20'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      partnerCategory === 'Adventure' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      <Compass className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[13px] font-bold ${partnerCategory === 'Adventure' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                          Adventure & Tourism
+                        </span>
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          partnerCategory === 'Adventure' ? 'border-[#0B63F6] bg-[#0B63F6] text-white' : 'border-slate-300'
+                        }`}>
+                          {partnerCategory === 'Adventure' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        Paragliding, Trekking, Camping, Desert Safari & Sports
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════ */}
+              {/* STEP 2: WORK / SERVICE SPECIFICATIONS                  */}
+              {/* ═══════════════════════════════════════════════════════ */}
+              <div className="space-y-3.5 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <Wrench className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>
+                      {partnerCategory === 'Services' ? 'Service Type & Work Selection' : 'Adventure Operations & Activities'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Step 2 of 5</span>
+                </div>
+
+                {/* ──── IF SERVICES: Type Selector (Labor vs Material vs Both) ──── */}
+                {partnerCategory === 'Services' && (
+                  <div className="space-y-3.5">
+                    <div>
+                      <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
+                        Select Working Type *
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVendorType('LABOR')}
+                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            vendorType === 'LABOR'
+                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>Labour / Work</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVendorType('MATERIAL')}
+                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            vendorType === 'MATERIAL'
+                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Package className="w-3.5 h-3.5" />
+                          <span>Material Supply</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVendorType('BOTH')}
+                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            vendorType === 'BOTH'
+                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>Both (Labour + Material)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* DYNAMIC SERVICE DROPDOWN & SUB-SERVICES (When Labor or Both) */}
+                    {(vendorType === 'LABOR' || vendorType === 'BOTH') && (
+                      <div className="space-y-3 pt-1 animate-in fade-in duration-200">
+                        {/* Dynamic Service Dropdown from PostgreSQL DB */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                              Select Service Category * <span className="text-[#0B63F6] font-normal">(Dynamic from Catalog)</span>
+                            </label>
+                            {catalogLoading ? (
+                              <span className="text-[11px] text-[#0B63F6] font-medium animate-pulse">Loading live categories...</span>
+                            ) : (
+                              <span className="text-[10.5px] text-slate-400">{dbServices.length} categories</span>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <Landmark className="w-4 h-4" strokeWidth={1.8} />
+                            </div>
+                            <select
+                              value={selectedServiceId}
+                              onChange={(e) => handleServiceChange(e.target.value)}
+                              className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
+                            >
+                              {dbServices.map((srv) => (
+                                <option key={srv.id} value={srv.id}>
+                                  {srv.name} ({srv.subServices?.length || 0} sub-services)
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <ChevronDown className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dynamic Sub-Services with "Select All" Option */}
+                        {currentService && currentService.subServices && currentService.subServices.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                                Sub-Services in <span className="text-[#0B63F6] font-bold">"{currentService.name}"</span>:
+                              </label>
+                              <button
+                                type="button"
+                                onClick={handleSelectAllSubServices}
+                                className="text-[11px] text-[#0B63F6] hover:text-[#0954D8] font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                {selectedSubServices.length === currentService.subServices.length ? (
+                                  <>
+                                    <Square className="w-3.5 h-3.5" />
+                                    <span>Reset Selection</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckSquare className="w-3.5 h-3.5" />
+                                    <span>Select All ({currentService.subServices.length})</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {currentService.subServices.map((sub) => {
+                                const title = sub.titleEn || sub.name;
+                                const isSelected = selectedSubServices.includes(title);
+                                return (
+                                  <div
+                                    key={sub.id}
+                                    onClick={() => toggleSubService(title)}
+                                    className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
+                                      isSelected
+                                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
+                                        : 'bg-white border-slate-200 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    <div className="space-y-0.5">
+                                      <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                                        {title}
+                                      </div>
+                                      {sub.desc && (
+                                        <p className="text-[10.5px] text-slate-400 line-clamp-1">{sub.desc}</p>
+                                      )}
+                                    </div>
+                                    <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
+                                      isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
+                                    }`}>
+                                      {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* "Other" Input Field for Custom Trade/Section */}
+                        <div className="space-y-1.5 pt-1">
+                          <label className="block text-[11px] font-medium text-slate-600">
+                            Other specialized skill or work section? Enter details:
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={customTradeInput}
+                              onChange={(e) => setCustomTradeInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
+                              placeholder="e.g. Copper Gas Piping, Core Cutting, Epoxy Grouting"
+                              className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCustomSkill}
+                              className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Other</span>
+                            </button>
+                          </div>
+                          {additionalSkills.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1.5">
+                              {additionalSkills.map((sk) => (
+                                <span key={sk} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium">
+                                  <span>{sk}</span>
+                                  <button type="button" onClick={() => handleRemoveCustomSkill(sk)} className="hover:text-red-600 cursor-pointer">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MATERIAL SUPPLY CATEGORIES (When Material or Both) */}
+                    {(vendorType === 'MATERIAL' || vendorType === 'BOTH') && (
+                      <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                            Material Categories Supplied <span className="text-slate-400 font-normal">(Click all that you stock)</span>:
+                          </label>
+                          <span className="text-[10.5px] text-slate-400">{selectedMaterials.length} selected</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {materialCatalog.map((cat) => {
+                            const isSelected = selectedMaterials.includes(cat);
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => toggleMaterial(cat)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  isSelected
+                                    ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-2xs'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <span>{cat}</span>
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* Other material input */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="text"
+                            value={customMaterialInput}
+                            onChange={(e) => setCustomMaterialInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomMaterial(e); }}
+                            placeholder="Other material category..."
+                            className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddCustomMaterial}
+                            className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Other</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ──── IF ADVENTURE: Activities & Operations ──── */}
+                {partnerCategory === 'Adventure' && (
+                  <div className="space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11.5px] font-semibold text-[#1F2937]">
+                        Adventure Activities * <span className="text-[#0B63F6] font-normal">(Select all that you offer)</span>
+                      </label>
+                      <span className="text-[10.5px] text-slate-400">{selectedAdventures.length} selected</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {ADVENTURE_ACTIVITIES.map((act) => {
+                        const isSelected = selectedAdventures.includes(act.title);
+                        return (
+                          <div
+                            key={act.id}
+                            onClick={() => toggleAdventure(act.title)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
+                              isSelected
+                                ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
+                                {act.title}
+                              </div>
+                              <p className="text-[10.5px] text-slate-400 line-clamp-1">{act.desc}</p>
+                            </div>
+                            <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
+                              isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Other Adventure input */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="block text-[11px] font-medium text-slate-600">
+                        Other outdoor adventure or tourism operation? Enter details:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={customAdventureInput}
+                          onChange={(e) => setCustomAdventureInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomAdventure(e); }}
+                          placeholder="e.g. Scuba Diving, Bungee Jumping, Paramotor"
+                          className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomAdventure}
+                          className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Other</span>
+                        </button>
+                      </div>
+                      {additionalAdventures.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {additionalAdventures.map((adv) => (
+                            <span key={adv} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium">
+                              <span>{adv}</span>
+                              <button type="button" onClick={() => handleRemoveCustomAdventure(adv)} className="hover:text-red-600 cursor-pointer">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Experience Level */}
+                <div className="pt-1">
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                    Industry Experience Level
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={experience}
+                      onChange={(e) => setExperience(e.target.value)}
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
+                    >
+                      <option value="1-3 Years">1 to 3 Years</option>
+                      <option value="3-5 Years">3 to 5 Years (Standard)</option>
+                      <option value="5-10 Years">5 to 10 Years (Experienced)</option>
+                      <option value="10+ Years">10+ Years (Master Contractor)</option>
+                    </select>
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════ */}
+              {/* STEP 3: PERSONAL / BUSINESS DETAILS                    */}
+              {/* ═══════════════════════════════════════════════════════ */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <User className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>Personal & Business Information</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Step 3 of 5</span>
+                </div>
+
+                {/* "I own a business" Toggle Checkbox */}
+                <div
+                  onClick={() => setHasBusiness(!hasBusiness)}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                    hasBusiness
+                      ? 'bg-[#EBF3FE]/70 border-[#0B63F6]/40 shadow-xs'
+                      : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
+                      hasBusiness
+                        ? 'bg-[#0B63F6] border-[#0B63F6] text-white shadow-xs'
+                        : 'bg-white border-slate-300'
+                    }`}>
+                      {hasBusiness && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                    <div>
+                      <div className="text-[13px] font-semibold text-[#0F172A] flex items-center gap-1.5 leading-none">
+                        <Building2 className={`w-4 h-4 ${hasBusiness ? 'text-[#0B63F6]' : 'text-slate-400'}`} />
+                        <span>I own a business / registered enterprise</span>
+                      </div>
+                      <p className="text-[11.5px] text-slate-500 font-normal mt-1 leading-none">
+                        {hasBusiness
+                          ? 'Enter Business Name and optional GST number'
+                          : 'Individual / Freelancer: Only your name & contact required'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full shrink-0 ${
+                    hasBusiness ? 'bg-[#0B63F6] text-white' : 'bg-slate-200/80 text-slate-600'
+                  }`}>
+                    {hasBusiness ? 'Business' : 'Individual'}
+                  </span>
+                </div>
+
+                {/* Full Legal Name (Always required) */}
                 <div>
                   <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                    {hasBusiness ? 'Authorized Contact Person Name *' : 'Full Name *'}
+                    {hasBusiness ? 'Contact Person / Owner Full Name *' : 'Full Name *'}
                   </label>
                   <div className="relative">
                     <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -688,18 +1069,18 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder={hasBusiness ? 'e.g. Ramesh Kumar Sharma' : 'e.g. Mukesh Sen (Electrician / Contractor)'}
+                      placeholder={hasBusiness ? 'e.g. Ramesh Kumar Sharma' : 'e.g. Mukesh Sen'}
                       className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
                     />
                   </div>
                 </div>
 
-                {/* CONDITIONAL: Business Name & GSTIN (Shown ONLY when hasBusiness is true) */}
+                {/* Conditional: Business Name & GSTIN */}
                 {hasBusiness && (
                   <div className="space-y-3 pt-1 animate-in fade-in duration-300">
                     <div>
                       <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                        Business Name / Organization Name *
+                        Business Name / Enterprise Name *
                       </label>
                       <div className="relative">
                         <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -736,505 +1117,9 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* ======================================================== */}
-              {/* SECTION 2: Partner Category & Domain Sector */}
-              {/* ======================================================== */}
-              <div className="space-y-4 pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                    <Store className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                    <span>Partner Category & Operating Domain *</span>
-                  </div>
-                  {catalogLoading && (
-                    <span className="text-[11px] text-[#0B63F6] font-medium animate-pulse">Loading live catalog...</span>
-                  )}
-                </div>
-
-                {/* Primary Category Selector Dropdown matching Login Screenshot */}
-                <div>
-                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
-                    Primary Domain / Sector *
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      {partnerCategory === 'Adventure' ? (
-                        <Compass className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
-                      ) : partnerCategory === 'Material' ? (
-                        <Package className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
-                      ) : (
-                        <Wrench className="w-4 h-4 text-[#0B63F6]" strokeWidth={1.8} />
-                      )}
-                    </div>
-                    <select
-                      value={partnerCategory}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setPartnerCategory(val);
-                        if (val === 'Material') {
-                          setVendorType('MATERIAL');
-                        } else if (val === 'Adventure') {
-                          setVendorType('LABOR');
-                        } else if (vendorType === 'MATERIAL') {
-                          setVendorType('LABOR');
-                        }
-                      }}
-                      className="w-full h-11 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-semibold text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
-                    >
-                      <option value="Services">🛠️ Maintenance & Civil Services (Electrician, Plumber, Waterproofing, Civil, ...)</option>
-                      <option value="Adventure">🪂 Adventure & Tourism Operator (Bathe, Paragliding, Camping, Trekking, Safari, ...)</option>
-                      <option value="Material">📦 Building Material Supplier & Trader (Cement, Steel, Wood, Tiles, Hardware, ...)</option>
-                    </select>
-                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Visual Category Selection Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div
-                    onClick={() => {
-                      setPartnerCategory('Services');
-                      if (vendorType === 'MATERIAL') setVendorType('LABOR');
-                    }}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                      partnerCategory === 'Services'
-                        ? 'bg-blue-50/70 border-[#0B63F6] shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${partnerCategory === 'Services' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        <Wrench className="w-3.5 h-3.5" />
-                      </div>
-                      <span className={`text-[12px] font-bold truncate ${partnerCategory === 'Services' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                        Services & Works
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">
-                      Electrician, Plumber, Waterproofing, Civil Works, Painter
-                    </p>
-                  </div>
-
-                  <div
-                    onClick={() => {
-                      setPartnerCategory('Adventure');
-                      setVendorType('LABOR');
-                    }}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                      partnerCategory === 'Adventure'
-                        ? 'bg-blue-50/70 border-[#0B63F6] shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${partnerCategory === 'Adventure' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        <Compass className="w-3.5 h-3.5" />
-                      </div>
-                      <span className={`text-[12px] font-bold truncate ${partnerCategory === 'Adventure' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                        Adventure & Tourism
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">
-                      Paragliding, Trekking, Camping, Desert Safari, Water Sports
-                    </p>
-                  </div>
-
-                  <div
-                    onClick={() => {
-                      setPartnerCategory('Material');
-                      setVendorType('MATERIAL');
-                    }}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                      partnerCategory === 'Material'
-                        ? 'bg-blue-50/70 border-[#0B63F6] shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${partnerCategory === 'Material' ? 'bg-[#0B63F6] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        <Package className="w-3.5 h-3.5" />
-                      </div>
-                      <span className={`text-[12px] font-bold truncate ${partnerCategory === 'Material' ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                        Material Supplier
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">
-                      Cement, Steel, Wood, Tiles, Hardware, Sanitaryware
-                    </p>
-                  </div>
-                </div>
-
-                {/* ======================================================== */}
-                {/* 1. ADVENTURE & TOURISM ACTIVITIES (When partnerCategory === 'Adventure') */}
-                {/* ======================================================== */}
-                {partnerCategory === 'Adventure' && (
-                  <div className="space-y-3 pt-1 animate-in fade-in duration-200">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                        Adventure Activities & Operations * <span className="text-[#0B63F6] font-normal">(Select all that you offer)</span>
-                      </label>
-                      <span className="text-[10.5px] text-slate-400">
-                        {selectedAdventures.length} selected
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {ADVENTURE_ACTIVITIES.map((act) => {
-                        const isSelected = selectedAdventures.includes(act.title);
-                        return (
-                          <div
-                            key={act.id}
-                            onClick={() => toggleAdventure(act.title)}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
-                              isSelected
-                                ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
-                                : 'bg-white border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            <div className="space-y-0.5">
-                              <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                                {act.title}
-                              </div>
-                              <p className="text-[10.5px] text-slate-400 line-clamp-1">
-                                {act.desc}
-                              </p>
-                            </div>
-                            <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
-                              isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
-                            }`}>
-                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Add Custom Adventure Activity */}
-                    <div className="space-y-1.5 pt-1">
-                      <label className="block text-[11px] font-medium text-slate-600">
-                        Operate other outdoor adventures, tours or sports?
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={customAdventureInput}
-                          onChange={(e) => setCustomAdventureInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomAdventure(e); }}
-                          placeholder="e.g. Scuba Diving, Bungee Jumping, Paramotor, Kayaking"
-                          className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddCustomAdventure}
-                          className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
-                        </button>
-                      </div>
-
-                      {additionalAdventures.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {additionalAdventures.map((adv) => (
-                            <span
-                              key={adv}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium"
-                            >
-                              <span>{adv}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveCustomAdventure(adv)}
-                                className="hover:text-red-600 cursor-pointer"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ======================================================== */}
-                {/* 2. MAINTENANCE & CIVIL SERVICES (When partnerCategory === 'Services') */}
-                {/* ======================================================== */}
-                {partnerCategory === 'Services' && (
-                  <div className="space-y-3.5 pt-1 animate-in fade-in duration-200">
-                    
-                    {/* 3 Type Selector: Labor vs Material vs Both */}
-                    <div>
-                      <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1.5">
-                        What type of services or materials do you provide? *
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setVendorType('LABOR')}
-                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                            vendorType === 'LABOR'
-                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>Labor & Services</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setVendorType('MATERIAL')}
-                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                            vendorType === 'MATERIAL'
-                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <Package className="w-3.5 h-3.5" />
-                          <span>Material Supply</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setVendorType('BOTH')}
-                          className={`h-10 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                            vendorType === 'BOTH'
-                              ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <Building2 className="w-3.5 h-3.5" />
-                          <span>Both (Turnkey)</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* DYNAMIC SERVICE CATEGORY & WORK SECTIONS (When LABOR or BOTH) */}
-                    {(vendorType === 'LABOR' || vendorType === 'BOTH') && (
-                      <div className="space-y-3.5 pt-1 animate-in fade-in duration-200">
-                        
-                        {/* Dynamic Primary Category Dropdown from DB */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                              Service Domain / Work Category * <span className="text-[#0B63F6] font-normal">(Live from Catalog)</span>
-                            </label>
-                            <span className="text-[10.5px] text-slate-400">
-                              {dbServices.length} categories available
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                              <Landmark className="w-4 h-4" strokeWidth={1.8} />
-                            </div>
-                            <select
-                              value={selectedServiceId}
-                              onChange={(e) => handleServiceChange(e.target.value)}
-                              className="w-full h-10.5 pl-10 pr-9 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300 truncate"
-                            >
-                              {dbServices.map((srv) => (
-                                <option key={srv.id} value={srv.id}>
-                                  {srv.name} ({srv.subServices?.length || 0} work sections)
-                                </option>
-                              ))}
-                            </select>
-                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                              <ChevronDown className="w-4 h-4" />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Dynamic Sub-services / Work Sections belonging to this Service */}
-                        {currentService && currentService.subServices && currentService.subServices.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                                Work Sections in <span className="text-[#0B63F6] font-bold">"{currentService.name}"</span>:
-                              </label>
-                              <span className="text-[10.5px] text-slate-400">Select what you do</span>
-                            </div>
-
-                            {/* Interactive dynamic sub-service cards */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {currentService.subServices.map((sub) => {
-                                const title = sub.titleEn || sub.name;
-                                const isSelected = selectedSubServices.includes(title);
-                                return (
-                                  <div
-                                    key={sub.id}
-                                    onClick={() => toggleSubService(title)}
-                                    className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2.5 ${
-                                      isSelected
-                                        ? 'bg-blue-50/80 border-[#0B63F6] shadow-2xs'
-                                        : 'bg-white border-slate-200 hover:border-slate-300'
-                                    }`}
-                                  >
-                                    <div className="space-y-0.5">
-                                      <div className={`text-[12px] font-semibold leading-snug ${isSelected ? 'text-[#0B63F6]' : 'text-slate-800'}`}>
-                                        {title}
-                                      </div>
-                                      {sub.desc && (
-                                        <p className="text-[10.5px] text-slate-400 line-clamp-1">
-                                          {sub.desc}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className={`w-4 h-4 rounded-md border shrink-0 flex items-center justify-center mt-0.5 ${
-                                      isSelected ? 'bg-[#0B63F6] border-[#0B63F6] text-white' : 'border-slate-300'
-                                    }`}>
-                                      {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Additional Custom Trade / Skill Addition */}
-                        <div className="space-y-1.5 pt-1">
-                          <label className="block text-[11px] font-medium text-slate-600">
-                            Have other specialized skills or trade tools?
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={customTradeInput}
-                              onChange={(e) => setCustomTradeInput(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
-                              placeholder="e.g. Copper Gas Piping, Core Cutting, Epoxy Grouting"
-                              className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleAddCustomSkill}
-                              className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Add Skill</span>
-                            </button>
-                          </div>
-
-                          {/* Display Custom Added Skills */}
-                          {additionalSkills.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1.5">
-                              {additionalSkills.map((sk) => (
-                                <span
-                                  key={sk}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-[#0B63F6] text-[11.5px] font-medium"
-                                >
-                                  <span>{sk}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveCustomSkill(sk)}
-                                    className="hover:text-red-600 cursor-pointer"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ======================================================== */}
-                {/* 3. MATERIAL SUPPLY CATEGORIES (When partnerCategory === 'Material' or vendorType === 'MATERIAL' or 'BOTH') */}
-                {/* ======================================================== */}
-                {(partnerCategory === 'Material' || (partnerCategory === 'Services' && (vendorType === 'MATERIAL' || vendorType === 'BOTH'))) && (
-                  <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[11.5px] font-semibold text-[#1F2937]">
-                        Material Categories Supplied <span className="text-slate-400 font-normal">(Click all that you stock)</span>:
-                      </label>
-                      <span className="text-[10.5px] text-slate-400">{selectedMaterials.length} selected</span>
-                    </div>
-
-                    {/* Badges of Material Categories */}
-                    <div className="flex flex-wrap gap-2">
-                      {materialCatalog.map((cat) => {
-                        const isSelected = selectedMaterials.includes(cat);
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => toggleMaterial(cat)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 ${
-                              isSelected
-                                ? 'bg-[#0B63F6] text-white border-[#0B63F6] shadow-2xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            <span>{cat}</span>
-                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Add Custom Material Option */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="text"
-                        value={customMaterialInput}
-                        onChange={(e) => setCustomMaterialInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomMaterial(e); }}
-                        placeholder="Add other material or product line..."
-                        className="flex-1 h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-[12px] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6]"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddCustomMaterial}
-                        className="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Experience Level */}
-                <div className="pt-1">
-                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                    Industry Experience Level
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={experience}
-                      onChange={(e) => setExperience(e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] appearance-none focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all cursor-pointer hover:border-slate-300"
-                    >
-                      <option value="1-3 Years">1 to 3 Years</option>
-                      <option value="3-5 Years">3 to 5 Years (Standard)</option>
-                      <option value="5-10 Years">5 to 10 Years (Experienced)</option>
-                      <option value="10+ Years">10+ Years (Master Contractor)</option>
-                    </select>
-                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <ChevronDown className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* ======================================================== */}
-              {/* SECTION 3: Contact Details */}
-              {/* ======================================================== */}
-              <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                  <Mail className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                  <span>Contact Details</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Email & Mobile Number */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   <div>
                     <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
                       Email Address <span className="text-slate-400 font-normal">(Optional)</span>
@@ -1274,13 +1159,117 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 </div>
               </div>
 
-              {/* ======================================================== */}
-              {/* SECTION 4: Security Information */}
-              {/* ======================================================== */}
+              {/* ═══════════════════════════════════════════════════════ */}
+              {/* STEP 4: ADDRESS DETAILS (PIN Code Auto-Fetch)           */}
+              {/* ═══════════════════════════════════════════════════════ */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                  <Lock className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                  <span>Security Information</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <MapPin className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>Address Details</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {fetchingPin && (
+                      <span className="text-[11px] text-[#0B63F6] font-medium flex items-center gap-1.5 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-[#0B63F6] animate-ping"></span>
+                        Fetching address...
+                      </span>
+                    )}
+                    <span className="text-[11px] text-slate-400">Step 4 of 5</span>
+                  </div>
+                </div>
+
+                {/* PIN Code Field */}
+                <div>
+                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                    PIN Code * <span className="text-slate-400 font-normal">(Auto-detects location on 6 digits)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <MapPin className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        required
+                        value={pincode}
+                        onChange={handlePincodeChange}
+                        placeholder="Enter 6 digit PIN code"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { if (pincode.length === 6) resolvePincode(pincode); }}
+                      disabled={pincode.length !== 6 || fetchingPin}
+                      className="h-10.5 px-4 bg-[#0B63F6] hover:bg-[#0954D8] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-xs"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Fetch</span>
+                    </button>
+                  </div>
+
+                  {/* Auto-resolved location indicator pill */}
+                  {resolvedLocation && (
+                    <div className="mt-2 flex items-center gap-2 text-[11.5px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-xl animate-in fade-in">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Auto-detected: <strong>{resolvedLocation}</strong></span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Address Line 1 & Line 2 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Address Line 1 *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Home className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={addressLine1}
+                        onChange={(e) => setAddressLine1(e.target.value)}
+                        placeholder="House/Shop No., Building, Area"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
+                      Address Line 2 <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Home className="w-4 h-4" strokeWidth={1.8} />
+                      </div>
+                      <input
+                        type="text"
+                        value={addressLine2}
+                        onChange={(e) => setAddressLine2(e.target.value)}
+                        placeholder="Landmark, Road, Colony"
+                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════ */}
+              {/* STEP 5: SECURITY INFORMATION (Password - LAST STEP)     */}
+              {/* ═══════════════════════════════════════════════════════ */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
+                    <Lock className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
+                    <span>Security & Credentials</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Step 5 of 5 (Final)</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -1338,94 +1327,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 </div>
               </div>
 
-              {/* ======================================================== */}
-              {/* SECTION 5: Address Details (Streamlined: PIN Code & Address Line) */}
-              {/* ======================================================== */}
-              <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[#0F172A] font-semibold text-[13.5px]">
-                    <MapPin className="w-4 h-4 text-[#0B63F6]" strokeWidth={2} />
-                    <span>{hasBusiness ? 'Business Address' : 'Address Details'}</span>
-                  </div>
-                  {fetchingPin && (
-                    <span className="text-[11px] text-[#0B63F6] font-medium flex items-center gap-1.5 animate-pulse">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#0B63F6] animate-ping"></span>
-                      Auto-fetching location...
-                    </span>
-                  )}
-                </div>
-
-                {/* PIN Code Field */}
-                <div>
-                  <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                    PIN Code *
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                      <MapPin className="w-4 h-4" strokeWidth={1.8} />
-                    </div>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      required
-                      value={pincode}
-                      onChange={handlePincodeChange}
-                      placeholder="Enter 6 digit postal PIN code"
-                      className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12.5px] font-medium text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                    />
-                  </div>
-
-                  {/* Auto-resolved location indicator */}
-                  {resolvedLocation && (
-                    <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-200/70 px-2.5 py-1 rounded-lg">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Auto-detected: {resolvedLocation}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Address Line 1 & Line 2 */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                  <div>
-                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                      Address Line 1 *
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <Home className="w-4 h-4" strokeWidth={1.8} />
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        value={addressLine1}
-                        onChange={(e) => setAddressLine1(e.target.value)}
-                        placeholder="House / Shop / Building No., Street, Area"
-                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11.5px] font-semibold text-[#1F2937] mb-1">
-                      Address Line 2 (Optional)
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <Home className="w-4 h-4" strokeWidth={1.8} />
-                      </div>
-                      <input
-                        type="text"
-                        value={addressLine2}
-                        onChange={(e) => setAddressLine2(e.target.value)}
-                        placeholder="Landmark, Colony, Road"
-                        className="w-full h-10.5 pl-10 pr-4 bg-white border border-[#E2E8F0] rounded-xl text-[12px] font-normal text-[#1E293B] placeholder:text-slate-400 focus:outline-none focus:border-[#0B63F6] focus:ring-1 focus:ring-[#0B63F6] transition-all hover:border-slate-300"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Crimson Red Action Button: Register Now → */}
+              {/* ═══════════════ Crimson Red Register Action Button ═══════════════ */}
               <button
                 type="submit"
                 disabled={loading}
@@ -1436,15 +1338,7 @@ export default function VendorRegisterPage({ initialCategory = 'Services', onReg
                 ) : (
                   <>
                     <UserPlus className="w-4 h-4" strokeWidth={2.2} />
-                    <span>
-                      {partnerCategory === 'Adventure'
-                        ? 'Register Adventure Operator Profile Now →'
-                        : partnerCategory === 'Material'
-                        ? 'Register Material Supplier Profile Now →'
-                        : hasBusiness
-                        ? 'Register Business Entity Now →'
-                        : 'Register Service Profile Now →'}
-                    </span>
+                    <span>Register Now →</span>
                   </>
                 )}
               </button>
