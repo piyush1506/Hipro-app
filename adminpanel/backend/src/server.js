@@ -175,6 +175,8 @@ app.use('/api/v1/leads', require('./routes/leads'));
 app.use('/api/v1/requirements', require('./routes/requirements'));
 app.use('/api/v1/rfq', require('./routes/rfq'));
 app.use('/api/v1/projects', require('./routes/projects'));
+app.use('/api/v1/platform', require('./routes/platform'));
+app.use('/api/platform', require('./routes/platform'));
 
 // AI Customer Support & Live Handoff System
 const { initializeChatSocket } = require('./sockets/chat.socket');

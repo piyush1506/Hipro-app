@@ -18,6 +18,7 @@ import RequirementBuilderView from './components/pipeline/RequirementBuilderView
 import ProcurementRFQView from './components/pipeline/ProcurementRFQView.jsx';
 import ProjectsExecutionView from './components/pipeline/ProjectsExecutionView.jsx';
 import StaffRoleManagerView from './components/pipeline/StaffRoleManagerView.jsx';
+import ApiIntegrationsView from './components/ApiIntegrationsView.jsx';
 import {
   clearLegacyRoleCache,
   clearStoredSession,
@@ -55,7 +56,8 @@ const INITIAL_TAB_PRIORITY = [
   'slides',
   'offers',
   'diagnostics',
-  'staff-roles'
+  'staff-roles',
+  'api-integrations'
 ];
 
 function hasRoleAccess(roleValue, permissionsValue, tabKey) {
@@ -351,7 +353,8 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
       'slides',
       'offers',
       'diagnostics',
-      'staff-roles'
+      'staff-roles',
+      'api-integrations'
     ];
 
     for (const tab of candidateTabs) {
@@ -4053,6 +4056,23 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
                 </span>
               </button>
             )}
+
+            <button
+              onClick={() => { setActiveTab('api-integrations'); setSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
+                activeTab === 'api-integrations'
+                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Server className={`w-4 h-4 ${activeTab === 'api-integrations' ? 'text-blue-400' : 'text-blue-600'}`} />
+                <span>API Gateway & Mappings</span>
+              </div>
+              <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200">
+                PROXIES
+              </span>
+            </button>
           </div>
         </nav>
 
@@ -4279,6 +4299,14 @@ export default function AdminApp({ currentUserRole: propUserRole, initialPermiss
           {/* STAFF & ROLES ACCESS CONTROL TAB */}
           {activeTab === 'staff-roles' && (
             <StaffRoleManagerView />
+          )}
+
+          {/* API GATEWAY & CATEGORY MAPPINGS */}
+          {activeTab === 'api-integrations' && (
+            <ApiIntegrationsView
+              apiBase={API_BASE}
+              token={localStorage.getItem('adminToken') || ''}
+            />
           )}
 
           {/* OVERVIEW TAB - HIPRO COMMAND & OPERATIONS */}

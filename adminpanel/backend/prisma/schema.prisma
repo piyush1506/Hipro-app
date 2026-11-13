@@ -794,3 +794,39 @@ model Project {
     @@index([managerId])
     @@index([status])
 }
+
+// ==========================================
+// Platform Gateway & API Registry Models
+// ==========================================
+model BusinessIntegration {
+    id           String               @id @default(uuid())
+    name         String               // e.g. "FreshInBasket Engine", "Hipro Core", "Fashion API"
+    connectorKey String               @unique // e.g. "freshinbasket", "hipro", "fashion_basket", "adventure"
+    baseUrl      String               // e.g. "https://fresh.hindustanprojects.in"
+    apiKey       String?              // Secret authentication token / key
+    authType     String               @default("NONE") // NONE, BEARER, API_KEY, BASIC
+    isActive     Boolean              @default(true)
+    description  String?
+    createdAt    DateTime             @default(now())
+    updatedAt    DateTime             @updatedAt
+    mappings     CategoryApiMapping[]
+}
+
+model CategoryApiMapping {
+    id            String              @id @default(uuid())
+    categorySlug  String              // "freshinbasket", "hipro", "fashion_basket", "adventure"
+    integrationId String
+    moduleType    String              // "ecommerce" | "service_booking" | "experience_booking"
+    resourceKey   String              // "feed", "products", "services", "cart", "checkout"
+    endpointPath  String              // e.g. "/api/v1/products", "/api/v1/services"
+    httpMethod    String              @default("GET")
+    config        Json?               // Headers, timeout, custom field transformations
+    createdAt     DateTime            @default(now())
+    updatedAt     DateTime            @updatedAt
+
+    integration   BusinessIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+    @@unique([categorySlug, resourceKey])
+    @@index([categorySlug])
+    @@index([integrationId])
+}
