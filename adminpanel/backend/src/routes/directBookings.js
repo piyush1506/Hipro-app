@@ -292,8 +292,9 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
-    // Verify payment status and capture state with Razorpay API
+    // Verify payment status, capture state, currency, ownership and mapping with Razorpay API
     const keyId = process.env.RAZORPAY_KEY_ID;
+    let paymentData = null;
     if (keyId && keySecret) {
       try {
         const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
@@ -309,17 +310,71 @@ router.post('/', authenticate, async (req, res) => {
         );
 
         if (paymentRes.data) {
-          const paymentStatus = paymentRes.data.status;
-          if (paymentStatus !== 'captured' && paymentStatus !== 'authorized') {
+          paymentData = paymentRes.data;
+
+          // Auto-capture if authorized
+          if (paymentData.status === 'authorized') {
+            try {
+              const capRes = await axios.post(
+                `https://api.razorpay.com/v1/payments/${razorpayPaymentId}/capture`,
+                {
+                  amount: paymentData.amount,
+                  currency: paymentData.currency || 'INR'
+                },
+                {
+                  headers: {
+                    Authorization: `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                  },
+                  timeout: 8000
+                }
+              );
+              if (capRes.data) {
+                paymentData = capRes.data;
+              }
+            } catch (capErr) {
+              console.error('Razorpay auto-capture error in direct-bookings:', capErr.response?.data || capErr.message);
+            }
+          }
+
+          // Point 5: Captured Payment Status
+          if (paymentData.status !== 'captured') {
             return res.status(400).json({
               success: false,
-              message: `Payment not confirmed by Razorpay. Current payment status: ${paymentStatus}`
+              message: `Payment not confirmed by Razorpay. Current payment status: ${paymentData.status}`
             });
           }
-          if (paymentRes.data.order_id && paymentRes.data.order_id !== razorpayOrderId) {
+
+          // Point 4: Currency Verification
+          if (!paymentData.currency || paymentData.currency.toUpperCase() !== 'INR') {
+            return res.status(400).json({
+              success: false,
+              message: `Invalid payment currency "${paymentData.currency}". Only INR payments are accepted.`
+            });
+          }
+
+          // Point 2: Order-to-Record Mapping
+          if (paymentData.order_id && paymentData.order_id !== razorpayOrderId) {
             return res.status(400).json({
               success: false,
               message: 'Security Alert: Payment does not match the booking order ID'
+            });
+          }
+
+          if (paymentData.notes?.quotationId) {
+            return res.status(400).json({
+              success: false,
+              message: 'Security Alert: Payment created for a quotation cannot be used for direct booking.'
+            });
+          }
+
+          // Point 1: Order Ownership Verification
+          const validUserId = req.user.id;
+          const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+          if (paymentData.notes?.userId && !isAdmin && paymentData.notes.userId !== validUserId) {
+            return res.status(403).json({
+              success: false,
+              message: 'Security Alert: Payment user ownership mismatch with current session.'
             });
           }
         }
@@ -332,8 +387,54 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
 
-    // Process each target sub-service (supports single booking or multi-item cart)
+    // Point 3: Authoritative Database Amount Verification
     const validUserId = req.user.id;
+    const dbSubServices = await prisma.subService.findMany({
+      where: {
+        id: { in: targetSubServiceIds },
+        isActive: true
+      }
+    });
+
+    if (dbSubServices.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active services found matching your booking request.'
+      });
+    }
+
+    let expectedTotalPayable = 0;
+    for (const sub of dbSubServices) {
+      const visiting = sub.visitingCharge || 199.0;
+      let additional = 0;
+      if (sub.requiredFields) {
+        try {
+          const rf = typeof sub.requiredFields === 'string' ? JSON.parse(sub.requiredFields) : sub.requiredFields;
+          const charges = rf.charges || rf.additionalCharges || (Array.isArray(rf) ? rf.filter(f => f.fieldType === 'charge' || f.fieldType === 'fee' || f.isCharge === true) : []);
+          if (Array.isArray(charges)) {
+            for (const c of charges) {
+              const amt = parseFloat(c.amount || 0);
+              if (!isNaN(amt) && !c.isFree) additional += amt;
+            }
+          }
+        } catch (_) {}
+      }
+      expectedTotalPayable += (visiting + additional);
+    }
+
+    // Deduct validated coupon discount if applied
+    const appliedDiscount = parseFloat(paymentData?.notes?.discountAmount || 0);
+    const expectedPayableAfterDiscount = Math.max(1, expectedTotalPayable - appliedDiscount);
+    const expectedPaise = Math.round(expectedPayableAfterDiscount * 100);
+
+    if (paymentData && paymentData.amount) {
+      if (Math.abs(paymentData.amount - expectedPaise) > 100) {
+        return res.status(400).json({
+          success: false,
+          message: `Payment amount mismatch: Gateway received ₹${(paymentData.amount / 100).toFixed(2)}, expected ₹${expectedPayableAfterDiscount.toFixed(2)}.`
+        });
+      }
+    }
     const bookingCity = (city || '').trim();
     const createdBookings = [];
 

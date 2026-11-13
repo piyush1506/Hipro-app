@@ -278,8 +278,10 @@ router.post('/create-order', authenticate, async (req, res) => {
             currency: 'INR',
             receipt: receipt,
             notes: {
-              customerName: customerName || quote?.request?.user?.name || 'Hipro Customer',
-              customerPhone: customerPhone || quote?.request?.user?.phoneNumber || '',
+              userId: req.user?.id || req.body?.userId || quote?.request?.userId || '',
+              customerName: customerName || quote?.request?.user?.name || req.user?.name || 'Hipro Customer',
+              customerPhone: customerPhone || quote?.request?.user?.phoneNumber || req.user?.phoneNumber || '',
+              customerEmail: req.user?.email || quote?.request?.user?.email || '',
               quotationId: quote?.id || quotationId || '',
               quoteNumber: quote?.quoteNumber || '',
               paymentOption: selectedOption,
@@ -401,7 +403,7 @@ router.post('/verify', authenticate, async (req, res) => {
       });
     }
 
-    // 2. Authoritative Verification with Razorpay API (Check capture status and order binding)
+    // 2. Authoritative Verification with Razorpay API (Check capture status, currency, and order binding)
     let rzPaymentData = null;
     if (keyId && keySecret) {
       try {
@@ -419,12 +421,48 @@ router.post('/verify', authenticate, async (req, res) => {
         rzPaymentData = rzRes.data;
 
         if (rzPaymentData) {
-          if (rzPaymentData.status !== 'captured' && rzPaymentData.status !== 'authorized') {
+          // If status is 'authorized', attempt server-side auto-capture
+          if (rzPaymentData.status === 'authorized') {
+            try {
+              const capRes = await axios.post(
+                `https://api.razorpay.com/v1/payments/${razorpay_payment_id}/capture`,
+                {
+                  amount: rzPaymentData.amount,
+                  currency: rzPaymentData.currency || 'INR'
+                },
+                {
+                  headers: {
+                    Authorization: `Basic ${auth}`,
+                    'Content-Type': 'application/json'
+                  },
+                  timeout: 8000
+                }
+              );
+              if (capRes.data) {
+                rzPaymentData = capRes.data;
+              }
+            } catch (capErr) {
+              console.error('Razorpay auto-capture error in payments/verify:', capErr.response?.data || capErr.message);
+            }
+          }
+
+          // Point 5: Captured Payment Status
+          if (rzPaymentData.status !== 'captured') {
             return res.status(400).json({
               success: false,
               message: `Payment not completed. Current Razorpay status: ${rzPaymentData.status}`
             });
           }
+
+          // Point 4: Currency Verification
+          if (!rzPaymentData.currency || rzPaymentData.currency.toUpperCase() !== 'INR') {
+            return res.status(400).json({
+              success: false,
+              message: `Invalid payment currency "${rzPaymentData.currency}". Only INR transactions are accepted.`
+            });
+          }
+
+          // Point 2: Order-to-Record Mapping (Order ID binding)
           if (rzPaymentData.order_id && rzPaymentData.order_id !== razorpay_order_id) {
             return res.status(400).json({
               success: false,
@@ -456,12 +494,69 @@ router.post('/verify', authenticate, async (req, res) => {
           return res.status(404).json({ success: false, message: 'Quotation not found' });
         }
 
-        const isOwner = existingQuote.request && (existingQuote.request.userId === req.user.id);
+        // Point 1: Order Ownership Verification
+        const isOwner = existingQuote.request && (
+          existingQuote.request.userId === req.user.id ||
+          existingQuote.request.customerPhone === req.user.phoneNumber ||
+          existingQuote.request.customerPhone === req.user.phone
+        );
         if (!isAdmin && !isOwner) {
           return res.status(403).json({
             success: false,
             message: 'Forbidden: You do not have permission to verify payment for this quotation'
           });
+        }
+
+        // Order Ownership Check via Razorpay Notes (if present)
+        if (rzPaymentData?.notes?.userId && !isAdmin) {
+          if (rzPaymentData.notes.userId !== req.user.id) {
+            return res.status(403).json({
+              success: false,
+              message: 'Security Alert: Payment ownership mismatch with current account.'
+            });
+          }
+        }
+
+        // Point 2: Order-to-Record Mapping Verification
+        if (rzPaymentData?.notes) {
+          const noteQuoteId = rzPaymentData.notes.quotationId;
+          const noteQuoteNo = rzPaymentData.notes.quoteNumber;
+          if (noteQuoteId && noteQuoteId !== existingQuote.id && noteQuoteId !== existingQuote.quoteNumber) {
+            return res.status(400).json({
+              success: false,
+              message: 'Security Alert: Payment order does not map to this quotation.'
+            });
+          }
+          if (noteQuoteNo && noteQuoteNo !== existingQuote.quoteNumber) {
+            return res.status(400).json({
+              success: false,
+              message: 'Security Alert: Payment order quote number mismatch.'
+            });
+          }
+          if (rzPaymentData.notes.bookingNumber && !noteQuoteId) {
+            return res.status(400).json({
+              success: false,
+              message: 'Security Alert: Direct booking payment order cannot be applied to a quotation.'
+            });
+          }
+        }
+
+        // Point 3: Amount Verification against Database Quotation
+        if (rzPaymentData && rzPaymentData.amount) {
+          const discount = parseFloat(rzPaymentData.notes?.discountAmount || 0);
+          const isAdvance = paymentOption === 'advance' || rzPaymentData.notes?.paymentOption === 'advance';
+          let expectedBase = isAdvance && existingQuote.advanceAmount
+            ? existingQuote.advanceAmount
+            : existingQuote.grandtotal;
+          let expectedPayable = Math.max(1, expectedBase - discount);
+          const expectedPaise = Math.round(expectedPayable * 100);
+
+          if (Math.abs(rzPaymentData.amount - expectedPaise) > 100) {
+            return res.status(400).json({
+              success: false,
+              message: `Payment amount mismatch: Gateway charged ₹${(rzPaymentData.amount / 100).toFixed(2)}, expected ₹${expectedPayable.toFixed(2)}.`
+            });
+          }
         }
 
         if (existingQuote.status === 'ACCEPTED') {
@@ -522,12 +617,45 @@ router.post('/verify', authenticate, async (req, res) => {
           return res.status(404).json({ success: false, message: 'Direct booking not found' });
         }
 
-        const isOwner = existingBooking.userId === req.user.id;
+        // Point 1: Order Ownership Verification
+        const isOwner = existingBooking.userId === req.user.id ||
+          existingBooking.customerPhone === req.user.phoneNumber ||
+          existingBooking.customerPhone === req.user.phone;
         if (!isAdmin && !isOwner) {
           return res.status(403).json({
             success: false,
             message: 'Forbidden: You do not have permission to verify payment for this booking'
           });
+        }
+
+        if (rzPaymentData?.notes?.userId && !isAdmin) {
+          if (rzPaymentData.notes.userId !== req.user.id) {
+            return res.status(403).json({
+              success: false,
+              message: 'Security Alert: Payment ownership mismatch with current account.'
+            });
+          }
+        }
+
+        // Point 2: Order-to-Record Mapping Verification
+        if (rzPaymentData?.notes?.bookingNumber) {
+          if (rzPaymentData.notes.bookingNumber !== existingBooking.bookingNumber) {
+            return res.status(400).json({
+              success: false,
+              message: 'Security Alert: Payment order does not map to this booking number.'
+            });
+          }
+        }
+
+        // Point 3: Amount Verification
+        if (rzPaymentData && rzPaymentData.amount) {
+          const expectedPaise = Math.round(Number(existingBooking.totalAmount || 0) * 100);
+          if (expectedPaise > 0 && Math.abs(rzPaymentData.amount - expectedPaise) > 100) {
+            return res.status(400).json({
+              success: false,
+              message: `Payment amount mismatch: Gateway charged ₹${(rzPaymentData.amount / 100).toFixed(2)}, expected ₹${Number(existingBooking.totalAmount).toFixed(2)}.`
+            });
+          }
         }
 
         if (existingBooking.paymentStatus === 'PAID') {
