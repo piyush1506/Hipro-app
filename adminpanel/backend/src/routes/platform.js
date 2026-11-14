@@ -557,6 +557,103 @@ router.get('/search', async (req, res) => {
   }
 });
 
+// Persistence for Platform Orders (e.g. FreshInBasket, Fashion Basket)
+const fs = require('fs');
+const path = require('path');
+const ordersDir = path.join(__dirname, '../data');
+if (!fs.existsSync(ordersDir)) fs.mkdirSync(ordersDir, { recursive: true });
+const PLATFORM_ORDERS_FILE = path.join(ordersDir, 'platform_orders.json');
+
+function loadPlatformOrders() {
+  try {
+    if (fs.existsSync(PLATFORM_ORDERS_FILE)) {
+      return JSON.parse(fs.readFileSync(PLATFORM_ORDERS_FILE, 'utf8'));
+    }
+  } catch (_) {}
+  return [];
+}
+
+function savePlatformOrders(orders) {
+  try {
+    fs.writeFileSync(PLATFORM_ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf8');
+  } catch (_) {}
+}
+
+/**
+ * POST /api/v1/platform/orders
+ * Creates a new express order for FreshInBasket (or other platform categories)
+ */
+router.post('/orders', async (req, res) => {
+  try {
+    const {
+      categorySlug,
+      categoryTitle,
+      customerName,
+      customerPhone,
+      deliveryAddress,
+      city,
+      items,
+      totalAmount,
+      paymentMethod
+    } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Basket items are required' });
+    }
+
+    const prefix = (categorySlug === 'freshinbasket' ? 'FIB' : 'ORD');
+    const orderNumber = `${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const newOrder = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      orderNumber,
+      categorySlug: categorySlug || 'freshinbasket',
+      categoryTitle: categoryTitle || 'FreshInBasket',
+      customerName: customerName || 'Valued Customer',
+      customerPhone: customerPhone || '',
+      deliveryAddress: deliveryAddress || 'Selected Location',
+      city: city || 'Bhilwara',
+      items,
+      totalAmount: totalAmount || 0,
+      paymentMethod: paymentMethod || 'COD',
+      paymentStatus: paymentMethod === 'ONLINE' ? 'PAID' : 'PENDING_ON_DELIVERY',
+      status: 'CONFIRMED',
+      estimatedDelivery: '25 - 30 minutes',
+      deliveryHero: 'Rajesh Sen • Express Rider',
+      createdAt: new Date().toISOString()
+    };
+
+    const existingOrders = loadPlatformOrders();
+    existingOrders.unshift(newOrder);
+    savePlatformOrders(existingOrders);
+
+    return res.json({
+      success: true,
+      message: 'Order placed successfully!',
+      order: newOrder
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/platform/orders
+ * Retrieves past platform orders
+ */
+router.get('/orders', async (req, res) => {
+  try {
+    const phone = req.query.phone;
+    let orders = loadPlatformOrders();
+    if (phone) {
+      orders = orders.filter((o) => o.customerPhone && o.customerPhone.includes(phone));
+    }
+    return res.json({ success: true, count: orders.length, orders });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // =========================================================================
 // 2. ADMIN API: INTEGRATION & MAPPING MANAGEMENT
 // =========================================================================
