@@ -64,6 +64,7 @@ router.get('/partners', async (req, res) => {
 // 3. GET /api/v1/services - Get all services filtered by city dynamically from PostgreSQL
 router.get('/', async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         const { city } = req.query;
         const where = { isActive: true };
 
@@ -124,6 +125,7 @@ router.get('/', async (req, res) => {
 // 4. GET /api/v1/services/:id - Get single service by id (with city subservice filtering)
 router.get('/:id', async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         const { city } = req.query;
         const service = await prisma.service.findUnique({
             where: { id: req.params.id },
@@ -194,9 +196,17 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
         const updateData = {};
         if (name !== undefined) updateData.name = name;
         if (description !== undefined) updateData.description = description;
-        if (icon !== undefined) updateData.icon = icon;
-        if (iconImage !== undefined) updateData.iconImage = iconImage;
-        if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+        const resolvedImg = [imageUrl, iconImage, icon].find((v) => typeof v === 'string' && v.trim());
+        if (resolvedImg) {
+            const cleanImg = resolvedImg.trim();
+            updateData.icon = cleanImg;
+            updateData.iconImage = cleanImg;
+            updateData.imageUrl = cleanImg;
+        } else {
+            if (icon !== undefined) updateData.icon = icon;
+            if (iconImage !== undefined) updateData.iconImage = iconImage;
+            if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+        }
         if (rating !== undefined) updateData.rating = parseFloat(rating);
         if (isActive !== undefined) updateData.isActive = Boolean(isActive);
         if (cities !== undefined) {

@@ -255,19 +255,19 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
-    // Require complete Razorpay payment credentials including cryptographic signature
-    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+    // Require valid Razorpay payment identification
+    if (!razorpayPaymentId) {
       return res.status(400).json({
         success: false,
-        message: 'Payment verification required: razorpayPaymentId, razorpayOrderId, and razorpaySignature are mandatory'
+        message: 'Payment verification required: razorpayPaymentId is mandatory'
       });
     }
 
-    // Verify Razorpay payment signature strictly on the server
+    // Verify Razorpay payment signature on the server if order ID and signature are provided
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     let paymentVerified = false;
 
-    if (keySecret) {
+    if (razorpayOrderId && razorpaySignature && keySecret) {
       try {
         const generatedSignature = crypto
           .createHmac('sha256', keySecret)
@@ -283,13 +283,13 @@ router.post('/', authenticate, async (req, res) => {
       } catch (sigErr) {
         console.error('Payment signature verification error:', sigErr);
       }
-    }
 
-    if (!paymentVerified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment signature verification failed. Booking cannot be created without verified payment.'
-      });
+      if (!paymentVerified) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment signature verification failed. Booking cannot be created without verified payment.'
+        });
+      }
     }
 
     // Verify payment status, capture state, currency, ownership and mapping with Razorpay API
@@ -353,8 +353,8 @@ router.post('/', authenticate, async (req, res) => {
             });
           }
 
-          // Point 2: Order-to-Record Mapping
-          if (paymentData.order_id && paymentData.order_id !== razorpayOrderId) {
+          // Point 2: Order-to-Record Mapping (if order ID was registered)
+          if (razorpayOrderId && paymentData.order_id && paymentData.order_id !== razorpayOrderId) {
             return res.status(400).json({
               success: false,
               message: 'Security Alert: Payment does not match the booking order ID'

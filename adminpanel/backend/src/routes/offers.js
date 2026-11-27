@@ -311,9 +311,6 @@ router.get('/', optionalAuth, (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to retrieve offers', error: err.message });
   }
 });
-    return res.status(500).json({ success: false, message: 'Failed to retrieve offers', error: err.message });
-  }
-});
 
 // GET /api/v1/offers/admin - Admin endpoint for all offers
 router.get('/admin', authenticate, requireAdmin, (req, res) => {

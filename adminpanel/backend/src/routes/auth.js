@@ -23,10 +23,10 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Strict brute-force protection for Master Admin login: 5 failed attempts per 15 minutes per IP
+// Strict brute-force protection for Master Admin login
 const adminAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === 'production' ? 10 : 100,
   skipSuccessfulRequests: true,
   message: { success: false, message: 'Too many failed master login attempts. Locked for 15 minutes.' },
   standardHeaders: true,

@@ -189,6 +189,56 @@ const MOCK_FASHION_PRODUCTS = [
   }
 ];
 
+const FIB_BASE_URL = 'https://freshinbasket.com';
+
+// Normalises a proxied upstream payload into the flat shape the Flutter
+// platform feed expects. Upstreams differ: FIB returns a bare product list,
+// older integrations return { products }, while this gateway wraps responses
+// in { data }.
+function normaliseFeedPayload(payload, moduleType) {
+  let body = payload;
+  if (
+    body &&
+    !Array.isArray(body) &&
+    typeof body === 'object' &&
+    body.data !== undefined
+  ) {
+    body = body.data;
+  }
+
+  const result = { products: [], services: [], tags: [], banner: null };
+
+  if (Array.isArray(body)) {
+    if (moduleType === 'ecommerce') result.products = body;
+    else result.services = body;
+    return result;
+  }
+
+  if (!body || typeof body !== 'object') return result;
+
+  if (Array.isArray(body.products)) {
+    result.products = body.products;
+  } else if (Array.isArray(body.results)) {
+    if (moduleType === 'ecommerce') result.products = body.results;
+    else result.services = body.results;
+  }
+
+  if (Array.isArray(body.services)) result.services = body.services;
+  if (Array.isArray(body.tags)) result.tags = body.tags;
+  if (body.banner && typeof body.banner === 'object') {
+    result.banner = body.banner;
+  }
+
+  // Some home-feed payloads nest products inside sections.
+  if (result.products.length === 0 && Array.isArray(body.sections)) {
+    result.products = body.sections.flatMap((section) =>
+      Array.isArray(section?.products) ? section.products : []
+    );
+  }
+
+  return result;
+}
+
 // Helper: Ensure default database records exist
 async function ensureSeedData() {
   try {
@@ -210,8 +260,8 @@ async function ensureSeedData() {
         data: {
           name: 'FreshInBasket Grocery Engine',
           connectorKey: 'freshinbasket_django',
-          baseUrl: 'https://app.hindustanprojects.in',
-          authType: 'API_KEY',
+          baseUrl: FIB_BASE_URL,
+          authType: 'NONE',
           description: 'Hyperlocal e-commerce engine for fresh fruits, vegetables and dairy'
         }
       });
@@ -252,7 +302,7 @@ async function ensureSeedData() {
             integrationId: freshInteg.id,
             moduleType: 'ecommerce',
             resourceKey: 'feed',
-            endpointPath: '/api/v1/platform/mock/freshinbasket/products',
+            endpointPath: '/api/v1/products/',
             httpMethod: 'GET'
           },
           {
@@ -362,6 +412,7 @@ router.get('/categories/:slug/feed', async (req, res) => {
             success: true,
             source: mapping.integration.name,
             moduleType: mapping.moduleType,
+            ...normaliseFeedPayload(response.data, mapping.moduleType),
             data: response.data
           });
         } catch (apiErr) {
@@ -372,17 +423,16 @@ router.get('/categories/:slug/feed', async (req, res) => {
 
     // 2. High-performance Internal Resolver
     if (slug === 'freshinbasket') {
-      return res.json({
-        success: true,
+      // Never serve mock groceries as live FIB products. Mock ids are not
+      // valid FIB product ids, so a customer could browse a catalogue that
+      // can never be added to a real FIB cart or ordered.
+      return res.status(503).json({
+        success: false,
         source: 'FreshInBasket Engine',
         moduleType: 'ecommerce',
-        banner: {
-          title: 'Farm Fresh Harvest',
-          subtitle: 'Organic & Hand-Picked Daily',
-          imageUrl: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=800&q=80'
-        },
-        tags: ['All', 'Fruits', 'Vegetables', 'Exotics'],
-        products: MOCK_GROCERY_PRODUCTS
+        products: [],
+        message:
+          'Live FreshInBasket catalog is unavailable. Please retry shortly.'
       });
     }
 
@@ -500,27 +550,56 @@ router.get('/search', async (req, res) => {
       }
     } catch (_) {}
 
-    // 2. Search FreshInBasket Grocery
-    const matchingGrocery = MOCK_GROCERY_PRODUCTS.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.category.toLowerCase().includes(query) ||
-        p.description.toLowerCase().includes(query)
-    );
-    for (const p of matchingGrocery) {
-      results.push({
-        id: `fresh_${p.id}`,
-        title: p.name,
-        subtitle: `₹${p.price} / ${p.unit} • ${p.category}`,
-        categorySlug: 'freshinbasket',
-        categoryName: 'FreshInBasket',
-        moduleType: 'ecommerce',
-        badge: p.tag || 'Fresh',
-        imageUrl: p.imageUrl,
-        price: p.price,
-        actionLabel: 'Add to Cart',
-        payload: { productId: p.id, product: p }
-      });
+    // 2. Search the live FreshInBasket catalogue. Mock groceries are never
+    // injected here: their ids cannot be ordered on FIB and would mislead
+    // customers.
+    try {
+      const fibResponse = await axios.get(
+        `${FIB_BASE_URL}/api/v1/products/search/`,
+        {
+          params: { q: query },
+          timeout: 7000,
+          headers: { Accept: 'application/json' }
+        }
+      );
+      const raw = fibResponse.data;
+      const fibProducts = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.results)
+          ? raw.results
+          : [];
+
+      for (const p of fibProducts.slice(0, 5)) {
+        const price = Number.parseFloat(p.price ?? p.mrp ?? 0) || 0;
+        const unit =
+          p.unit && typeof p.unit === 'object'
+            ? p.unit.name || 'unit'
+            : p.unit || 'unit';
+        const imageUrl = p.image_url || p.image || '';
+
+        results.push({
+          id: `fresh_${p.id}`,
+          title: p.name || 'Fresh produce',
+          subtitle: `₹${price} / ${unit} • FreshInBasket`,
+          categorySlug: 'freshinbasket',
+          categoryName: 'FreshInBasket',
+          moduleType: 'ecommerce',
+          badge: p.section_product_label || 'Fresh',
+          imageUrl,
+          price,
+          actionLabel: 'Add to Cart',
+          payload: {
+            productId: p.id,
+            name: p.name,
+            price,
+            unit,
+            imageUrl
+          }
+        });
+      }
+    } catch (_) {
+      // The mobile app queries FIB directly as a second source, so a search
+      // outage must not take down the other platform results.
     }
 
     // 3. Search Fashion Basket
@@ -599,6 +678,16 @@ router.post('/orders', async (req, res) => {
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Basket items are required' });
+    }
+
+    const slug = (categorySlug || '').toLowerCase();
+    if (slug === 'freshinbasket' || slug === 'fresh_in_basket' || slug === 'grocery') {
+      return res.status(400).json({
+        success: false,
+        message:
+          'FreshInBasket orders must be placed through the FreshInBasket payment API. ' +
+          'This gateway does not create FIB orders.'
+      });
     }
 
     const prefix = (categorySlug === 'freshinbasket' ? 'FIB' : 'ORD');

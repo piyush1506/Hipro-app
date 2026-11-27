@@ -36,6 +36,7 @@ function writeSlides(slides) {
 // GET /api/v1/slides - Public endpoint for mobile app (Active slides only)
 router.get('/', (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store');
     const { section } = req.query;
     const slides = readSlides();
     let activeSlides = slides
@@ -91,7 +92,7 @@ router.get('/admin', authenticate, requireAdmin, (req, res) => {
 // POST /api/v1/slides/admin - Create a new slide
 router.post('/admin', authenticate, requireAdmin, (req, res) => {
   try {
-    const { title, subtitle, imageUrl, targetRoute, badgeText, order, isActive } = req.body;
+    const { title, subtitle, imageUrl, targetRoute, badgeText, section, order, isActive } = req.body;
 
     if (!title || !imageUrl) {
       return res.status(400).json({
@@ -108,6 +109,7 @@ router.post('/admin', authenticate, requireAdmin, (req, res) => {
       imageUrl: imageUrl.trim(),
       targetRoute: (targetRoute || '').trim(),
       badgeText: (badgeText || '').trim().toUpperCase(),
+      section: (section || '').trim(),
       isActive: isActive !== false,
       order: typeof order === 'number' ? order : slides.length + 1,
       createdAt: new Date().toISOString()
@@ -152,6 +154,7 @@ router.put('/admin/:id', authenticate, requireAdmin, (req, res) => {
       imageUrl: req.body.imageUrl !== undefined ? req.body.imageUrl.trim() : existing.imageUrl,
       targetRoute: req.body.targetRoute !== undefined ? req.body.targetRoute.trim() : existing.targetRoute,
       badgeText: req.body.badgeText !== undefined ? req.body.badgeText.trim().toUpperCase() : existing.badgeText,
+      section: req.body.section !== undefined ? req.body.section.trim() : (existing.section || ''),
       isActive: req.body.isActive !== undefined ? Boolean(req.body.isActive) : existing.isActive,
       order: req.body.order !== undefined ? Number(req.body.order) : existing.order,
       updatedAt: new Date().toISOString()

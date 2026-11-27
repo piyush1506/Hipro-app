@@ -439,6 +439,7 @@ router.post('/bookings', authenticate, async (req, res) => {
       timeSlot,
       guestsCount = 1,
       notes,
+      couponCode,
       razorpayPaymentId,
       razorpayOrderId,
       razorpaySignature,
@@ -466,7 +467,33 @@ router.post('/bookings', authenticate, async (req, res) => {
     const guests = Math.max(1, parseInt(guestsCount, 10) || 1);
     const baseAmount = ent.startingPrice * guests;
     const taxes = Math.round(baseAmount * 0.05); // 5% GST
-    const totalAmount = baseAmount + taxes;
+    const preDiscountTotal = baseAmount + taxes;
+
+    // Validate optional coupon discount
+    let discountAmount = 0;
+    let appliedCouponCode = null;
+    if (couponCode && typeof couponCode === 'string' && couponCode.trim()) {
+      try {
+        const offersRouter = require('./offers');
+        if (offersRouter && typeof offersRouter.readOffers === 'function') {
+          const offers = offersRouter.readOffers();
+          const cleanCode = couponCode.trim().toUpperCase();
+          const matchingOffer = offers.find((o) => (o.code || '').trim().toUpperCase() === cleanCode);
+          if (matchingOffer && matchingOffer.isActive !== false) {
+            const minAmt = parseFloat(matchingOffer.minAmount || 0);
+            if (minAmt <= 0 || preDiscountTotal >= minAmt) {
+              discountAmount = offersRouter.calculateDiscount(matchingOffer.discount, preDiscountTotal);
+              discountAmount = Math.min(preDiscountTotal, discountAmount);
+              appliedCouponCode = cleanCode;
+            }
+          }
+        }
+      } catch (cErr) {
+        console.warn('ENT coupon check notice:', cErr.message);
+      }
+    }
+
+    const totalAmount = Math.max(0, preDiscountTotal - discountAmount);
 
     // Mandatory payment verification for ENT bookings
     const rzKey = process.env.RAZORPAY_KEY_ID;
@@ -494,7 +521,7 @@ router.post('/bookings', authenticate, async (req, res) => {
     if (rzKey && rzSecret) {
       try {
         const auth = Buffer.from(`${rzKey}:${rzSecret}`).toString('base64');
-        const paymentRes = await axios.get(
+        let paymentRes = await axios.get(
           `https://api.razorpay.com/v1/payments/${razorpayPaymentId}`,
           {
             headers: {
@@ -504,7 +531,30 @@ router.post('/bookings', authenticate, async (req, res) => {
             timeout: 10000,
           }
         );
-        const paymentData = paymentRes.data;
+        let paymentData = paymentRes.data;
+        if (paymentData.status === 'authorized') {
+          try {
+            const capRes = await axios.post(
+              `https://api.razorpay.com/v1/payments/${razorpayPaymentId}/capture`,
+              {
+                amount: paymentData.amount,
+                currency: paymentData.currency || 'INR',
+              },
+              {
+                headers: {
+                  Authorization: `Basic ${auth}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: 10000,
+              }
+            );
+            if (capRes.data) {
+              paymentData = capRes.data;
+            }
+          } catch (capErr) {
+            console.error('ENT auto-capture error:', capErr.response?.data || capErr.message);
+          }
+        }
         if (paymentData.status !== 'captured') {
           return res.status(400).json({
             success: false,
@@ -531,6 +581,21 @@ router.post('/bookings', authenticate, async (req, res) => {
           message: 'Unable to verify payment with payment gateway. Booking creation rejected.',
         });
       }
+    }
+
+    if (appliedCouponCode) {
+      try {
+        const offersRouter = require('./offers');
+        if (offersRouter && typeof offersRouter.recordCouponRedemption === 'function') {
+          offersRouter.recordCouponRedemption({
+            couponCode: appliedCouponCode,
+            userId,
+            phone: travelerPhone,
+            email: req.user?.email || '',
+            orderId: razorpayOrderId,
+          });
+        }
+      } catch (_) {}
     }
 
     // Generate unique ENT booking reference
@@ -894,6 +959,17 @@ router.get('/admin/stats', authenticate, requireAdmin, (req, res) => {
   }
 });
 
+function normalizeGalleryUrls(gallery, galleryImages) {
+  const raw = gallery !== undefined ? gallery : galleryImages;
+  if (Array.isArray(raw)) {
+    return [...new Set(raw.map((u) => String(u || '').trim()).filter(Boolean))];
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return [...new Set(raw.split(/[\n,]+/).map((u) => u.trim()).filter(Boolean))];
+  }
+  return [];
+}
+
 // -------------------------------------------------------------
 // 5. Create new ENT item: POST / , /items , /experiences
 // -------------------------------------------------------------
@@ -911,6 +987,7 @@ const createEntHandler = (req, res) => {
       duration,
       imageUrl,
       gallery,
+      galleryImages,
       inclusions,
       safetyGuidelines,
       slots,
@@ -956,6 +1033,9 @@ const createEntHandler = (req, res) => {
     const prefix = city.substring(0, 3).toLowerCase();
     const newId = `ent_${prefix}_${Date.now().toString(36)}`;
 
+    const normalizedGallery = normalizeGalleryUrls(gallery, galleryImages);
+    const primaryImageUrl = (imageUrl && String(imageUrl).trim()) || normalizedGallery[0] || '';
+
     const newEnt = {
       id: newId,
       title: title.trim(),
@@ -973,8 +1053,8 @@ const createEntHandler = (req, res) => {
       groupSize: groupSize || '',
       minAge: minAge ? Number(minAge) : null,
       difficulty: difficulty || '',
-      imageUrl: imageUrl || '',
-      gallery: Array.isArray(gallery) ? gallery : [],
+      imageUrl: primaryImageUrl,
+      gallery: normalizedGallery,
       inclusions: Array.isArray(inclusions) ? inclusions : [],
       safetyGuidelines: Array.isArray(safetyGuidelines) ? safetyGuidelines : [],
       slots: Array.isArray(slots) ? slots : [],
@@ -1078,10 +1158,20 @@ const updateEntHandler = (req, res) => {
       }
     }
 
+    const hasGalleryUpdate = req.body.gallery !== undefined || req.body.galleryImages !== undefined;
+    const normalizedGallery = hasGalleryUpdate
+      ? normalizeGalleryUrls(req.body.gallery, req.body.galleryImages)
+      : (Array.isArray(items[idx].gallery) ? items[idx].gallery : []);
+    const nextImageUrl = req.body.imageUrl !== undefined
+      ? (String(req.body.imageUrl || '').trim() || normalizedGallery[0] || '')
+      : (items[idx].imageUrl || normalizedGallery[0] || '');
+
     const updated = {
       ...items[idx],
       ...req.body,
       id: items[idx].id,
+      imageUrl: nextImageUrl,
+      gallery: normalizedGallery,
       categoryId: finalCategoryId,
       category: finalCategoryName,
       updatedAt: new Date().toISOString(),

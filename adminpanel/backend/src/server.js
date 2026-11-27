@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 app.set('trust proxy', 1); // Trust Render/Vercel reverse proxy so rate limiters use real client IP
@@ -177,6 +177,7 @@ app.use('/api/v1/rfq', require('./routes/rfq'));
 app.use('/api/v1/projects', require('./routes/projects'));
 app.use('/api/v1/platform', require('./routes/platform'));
 app.use('/api/platform', require('./routes/platform'));
+app.use('/api/v1/gst', require('./routes/gst'));
 
 // AI Customer Support & Live Handoff System
 const { initializeChatSocket } = require('./sockets/chat.socket');
@@ -215,7 +216,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('CRITICAL: Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`=========================================`);
   console.log(`🚀 Hipro Backend API running on port ${PORT}`);
   console.log(`💬 Socket.io Real-Time Chat Engine: Active`);

@@ -16,6 +16,8 @@ router.get('/stats', async (req, res) => {
       quotes,
       servicesCount,
       usersCount,
+      directBookingsStats,
+      directBookingsList,
       recentRequests,
       recentQuotes
     ] = await Promise.all([
@@ -27,12 +29,45 @@ router.get('/stats', async (req, res) => {
       prisma.quotation.count(),
       prisma.quotation.findMany({
         select: {
+          id: true,
+          quoteNumber: true,
           grandtotal: true,
-          status: true
+          advanceAmount: true,
+          advancePercentage: true,
+          status: true,
+          request: {
+            select: {
+              id: true,
+              requestNumber: true,
+              status: true,
+              location: true
+            }
+          }
         }
       }),
       prisma.service.count(),
       prisma.user.count(),
+      prisma.directBooking.aggregate({
+        _sum: {
+          onlinePaidAmount: true,
+          totalAmount: true,
+          refundAmount: true
+        },
+        _count: true
+      }),
+      prisma.directBooking.findMany({
+        select: {
+          id: true,
+          bookingNumber: true,
+          onlinePaidAmount: true,
+          totalAmount: true,
+          refundAmount: true,
+          paymentStatus: true,
+          status: true,
+          city: true,
+          created_at: true
+        }
+      }),
       prisma.serviceRequest.findMany({
         take: 6,
         orderBy: { created_at: 'desc' },
@@ -62,6 +97,7 @@ router.get('/stats', async (req, res) => {
       ESTIMATING: 0,
       QUOTED: 0,
       ACCEPTED: 0,
+      PAID: 0,
       IN_PROGRESS: 0,
       COMPLETED: 0,
       REJECTED: 0
@@ -73,18 +109,54 @@ router.get('/stats', async (req, res) => {
       }
     });
 
+    // 1. Quotations & Projects Revenue
     let totalQuotedValue = 0;
     let acceptedValue = 0;
     let acceptedQuotesCount = 0;
+    let inspectionQuotationAdvanceReceived = 0;
 
     quotes.forEach(q => {
-      const val = parseFloat(q.grandtotal || 0);
-      totalQuotedValue += val;
-      if (q.status === 'ACCEPTED' || q.status === 'COMPLETED') {
-        acceptedValue += val;
+      const grand = parseFloat(q.grandtotal || 0);
+      totalQuotedValue += grand;
+      const isAcceptedOrPaid = q.status === 'ACCEPTED' || q.status === 'PAID' || q.status === 'COMPLETED';
+      if (isAcceptedOrPaid) {
+        acceptedValue += grand;
         acceptedQuotesCount += 1;
+        // Authoritative deposit received (advance deposit to mobilize materials & start work)
+        const advPct = q.advancePercentage ? parseFloat(q.advancePercentage) : 50.0;
+        const adv = q.advanceAmount ? parseFloat(q.advanceAmount) : Math.round(grand * (advPct / 100));
+        inspectionQuotationAdvanceReceived += (adv > 0 ? adv : grand);
       }
     });
+
+    // 2. Inspection Bookings Visiting Fee Payments
+    // Count requests with explicit PAID or ACCEPTED status (e.g. ₹199 inspection fee)
+    const paidInspectionRequestsCount = (statusCounts.PAID || 0) + (statusCounts.ACCEPTED || 0);
+    const inspectionVisitingFeesReceived = paidInspectionRequestsCount * 199.0;
+    const totalInspectionBookingsReceived = inspectionQuotationAdvanceReceived + inspectionVisitingFeesReceived;
+
+    // 3. Instant Maintenance Bookings Payments
+    let instantBookingsReceived = 0;
+    let instantBookingsRefunded = 0;
+    let paidInstantBookingsCount = 0;
+
+    directBookingsList.forEach(b => {
+      const isPaid = (b.paymentStatus || '').toUpperCase() === 'PAID' ||
+        ['CONFIRMED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes((b.status || '').toUpperCase());
+      const paidAmt = parseFloat(b.onlinePaidAmount || b.totalAmount || 0);
+      const refAmt = parseFloat(b.refundAmount || 0);
+
+      if (isPaid && paidAmt > 0) {
+        instantBookingsReceived += paidAmt;
+        paidInstantBookingsCount += 1;
+      }
+      instantBookingsRefunded += refAmt;
+    });
+
+    const netInstantBookingsRevenue = Math.max(0, instantBookingsReceived - instantBookingsRefunded);
+
+    // 4. Combined Grand Total Received Payment
+    const totalReceivedPayment = netInstantBookingsRevenue + totalInspectionBookingsReceived;
 
     res.json({
       success: true,
@@ -98,7 +170,20 @@ router.get('/stats', async (req, res) => {
         servicesCount,
         usersCount,
         recentRequests,
-        recentQuotes
+        recentQuotes,
+        // Authoritative Payment Aggregations for Executive Console
+        payments: {
+          totalReceived: totalReceivedPayment,
+          fromInstantBookings: netInstantBookingsRevenue,
+          instantBookingsGross: instantBookingsReceived,
+          instantBookingsRefunded,
+          paidInstantBookingsCount,
+          totalInstantBookings: directBookingsStats?._count || directBookingsList.length,
+          fromInspectionBookings: totalInspectionBookingsReceived,
+          quotationAdvanceReceived: inspectionQuotationAdvanceReceived,
+          inspectionVisitingFeesReceived,
+          paidInspectionCount: paidInspectionRequestsCount
+        }
       }
     });
   } catch (error) {
@@ -229,7 +314,7 @@ router.put('/services/:id', async (req, res) => {
     if (code) updateData.code = code.toUpperCase().trim();
     if (name) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    const finalImage = imageUrl || iconImage || image || icon;
+    const finalImage = [imageUrl, iconImage, image, icon].find((v) => typeof v === 'string' && v.trim())?.trim();
     if (finalImage) {
       updateData.icon = finalImage;
       updateData.iconImage = finalImage;
